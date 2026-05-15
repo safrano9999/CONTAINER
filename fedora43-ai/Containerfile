@@ -68,11 +68,10 @@ EOS
 
 COPY safrano9999/CODEANALYST /safrano/CODEANALYST
 COPY safrano9999/JUGO /safrano/JUGO
+COPY requirements.txt /requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install \
-    -r /safrano/CODEANALYST/requirements.txt \
-    -r /safrano/JUGO/requirements.txt
+    pip install -r /requirements.txt
 
 EXPOSE 11000 11001
 

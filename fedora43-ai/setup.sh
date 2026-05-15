@@ -24,11 +24,16 @@ mkdir -p "$SAFRANO_DIR"
 echo "  Merging env.examples..."
 bash "$SCRIPT_DIR/merge.sh"
 
-# ── config.sh lokal ausführen → .env erzeugen ────────────────────────
+# ── config.sh in Temp-Dir ausführen → nur .env zurückkopieren ─────────
 CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
-cp "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
+TMPDIR="$(mktemp -d)"
+cp "$CONFIG_SH" "$TMPDIR/config.sh"
+cp "$SCRIPT_DIR/.env.example" "$TMPDIR/env.example"
+[ -f "$SCRIPT_DIR/.env" ] && cp "$SCRIPT_DIR/.env" "$TMPDIR/.env"
 echo ""
-bash "$SCRIPT_DIR/config.sh"
+(cd "$TMPDIR" && bash config.sh)
+cp "$TMPDIR/.env" "$SCRIPT_DIR/.env"
+rm -rf "$TMPDIR"
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 

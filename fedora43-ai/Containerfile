@@ -66,9 +66,8 @@ RUN cat >>/etc/bashrc <<'EOS'
 [ -f /etc/profile.d/gui-container.sh ] && . /etc/profile.d/gui-container.sh
 EOS
 
-RUN mkdir -p /safrano && \
-    git clone --depth 1 https://github.com/safrano9999/CODEANALYST /safrano/CODEANALYST && \
-    git clone --depth 1 https://github.com/safrano9999/JUGO /safrano/JUGO
+COPY safrano9999/CODEANALYST /safrano/CODEANALYST
+COPY safrano9999/JUGO /safrano/JUGO
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \

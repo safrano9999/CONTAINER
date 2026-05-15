@@ -2,11 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CA_DIR="$SCRIPT_DIR/safrano9999/CODEANALYST"
-JUGO_DIR="$SCRIPT_DIR/safrano9999/JUGO"
-ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
+SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 ENV_FILE="$SCRIPT_DIR/.env"
-CONFIG_SH="$JUGO_DIR/config.sh"
 
 CONFIG_ONLY=false
 INSTANCE="fedora43-ai"
@@ -18,16 +15,17 @@ for arg in "$@"; do
     esac
 done
 
-# ── Repos prüfen ─────────────────────────────────────────────────────
-mkdir -p "$SCRIPT_DIR/safrano9999"
-[ ! -d "$CA_DIR" ]   && git clone --depth 1 https://github.com/safrano9999/CODEANALYST "$CA_DIR"
-[ ! -d "$JUGO_DIR" ] && git clone --depth 1 https://github.com/safrano9999/JUGO "$JUGO_DIR"
+# ── Repos klonen ──────────────────────────────────────────────────────
+mkdir -p "$SAFRANO_DIR"
+[ ! -d "$SAFRANO_DIR/CODEANALYST" ] && git clone --depth 1 https://github.com/safrano9999/CODEANALYST "$SAFRANO_DIR/CODEANALYST"
+[ ! -d "$SAFRANO_DIR/JUGO" ]        && git clone --depth 1 https://github.com/safrano9999/JUGO "$SAFRANO_DIR/JUGO"
 
-# ── env.example zusammenführen ────────────────────────────────────────
-echo "  Merging env.example..."
-cat "$CA_DIR/env.example" "$JUGO_DIR/env.example" > "$ENV_EXAMPLE"
+# ── env.examples dedupliziert zusammenführen ──────────────────────────
+echo "  Merging env.examples..."
+bash "$SCRIPT_DIR/merge.sh"
 
 # ── config.sh interaktiv ausführen → .env erzeugen ───────────────────
+CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
 echo ""
 ENV="$ENV_FILE" bash "$CONFIG_SH"
 

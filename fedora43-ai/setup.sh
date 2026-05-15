@@ -20,8 +20,8 @@ mkdir -p "$SAFRANO_DIR"
 [ ! -d "$SAFRANO_DIR/CODEANALYST" ] && git clone --depth 1 https://github.com/safrano9999/CODEANALYST "$SAFRANO_DIR/CODEANALYST"
 [ ! -d "$SAFRANO_DIR/JUGO" ]        && git clone --depth 1 https://github.com/safrano9999/JUGO "$SAFRANO_DIR/JUGO"
 
-# ── env.examples dedupliziert zusammenführen ──────────────────────────
-echo "  Merging env.examples..."
+# ── env.examples + requirements.txt dedupliziert zusammenführen ──────
+echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
 # ── config.sh direkt im fedora43-ai-Verzeichnis ausführen ────────────

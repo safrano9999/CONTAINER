@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
-OUTPUT="$SCRIPT_DIR/.env.example"
+OUTPUT="$SCRIPT_DIR/env.example"
 
 declare -A seen_keys=()
 > "$OUTPUT"

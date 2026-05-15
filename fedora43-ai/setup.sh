@@ -26,7 +26,8 @@ bash "$SCRIPT_DIR/merge.sh"
 
 # ── config.sh in Temp-Dir ausführen → nur .env zurückkopieren ─────────
 CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
-TMPDIR="$(mktemp -d)"
+TMPDIR="/tmp/$INSTANCE"
+mkdir -p "$TMPDIR"
 cp "$CONFIG_SH" "$TMPDIR/config.sh"
 cp "$SCRIPT_DIR/.env.example" "$TMPDIR/env.example"
 [ -f "$SCRIPT_DIR/.env" ] && cp "$SCRIPT_DIR/.env" "$TMPDIR/.env"

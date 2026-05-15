@@ -1,0 +1,15 @@
+[Unit]
+Description=CITADEL
+After=network.target citadel-setup.service
+Requires=citadel-setup.service
+
+[Service]
+Type=simple
+WorkingDirectory=/safrano/CITADEL
+EnvironmentFile=-/safrano/.env
+Environment=CITADEL_WEBUI_PORT=10999
+ExecStart=uvicorn webui:app --host 0.0.0.0 --port ${CITADEL_WEBUI_PORT}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

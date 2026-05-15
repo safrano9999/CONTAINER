@@ -1,0 +1,15 @@
+[Unit]
+Description=CITADEL initial scan
+After=citadel.service
+Requires=citadel.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/safrano/CITADEL
+EnvironmentFile=-/safrano/.env
+Environment=CITADEL_SCAN_DELAY=5
+ExecStartPre=/bin/sleep ${CITADEL_SCAN_DELAY}
+ExecStart=/bin/bash scan.sh
+
+[Install]
+WantedBy=multi-user.target

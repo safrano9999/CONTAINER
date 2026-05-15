@@ -1,0 +1,14 @@
+[Unit]
+Description=BIP39
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/local/share/bip39
+EnvironmentFile=-/safrano/.env
+Environment=BIP39_PORT=11002
+ExecStart=python3 -m http.server ${BIP39_PORT} --bind 0.0.0.0
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

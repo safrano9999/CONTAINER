@@ -2,6 +2,11 @@ FROM quay.io/fedora/fedora:43
 
 ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
 ENV UV_CACHE_DIR=/usr/local/share/uv/cache
+ENV PATH=/root/.local/share/solana/install/active_release/bin:${PATH}
+ENV ELECTRUM_VERSION=4.7.2
+ENV LND_VERSION=v0.20.1-beta
+ENV GETH_VERSION=1.17.2
+ENV GETH_COMMIT=be4dc0c4
 
 # DNF Cache Mount: Behält heruntergeladene RPMs über Builds hinweg,
 # falls der Layer neu gebaut werden muss.
@@ -10,7 +15,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     bash bash-completion shadow-utils sudo \
     git gh tmux \
     nano vim-minimal less \
-    curl wget ca-certificates \
+    curl wget ca-certificates gnupg2 fuse-libs \
     nodejs npm \
     python3 python3-pip \
     make gcc gcc-c++ \
@@ -19,10 +24,21 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     findutils grep sed gawk diffutils \
     hostname bind-utils net-tools traceroute \
     lsof strace tcpdump nmap-ncat \
-    v4l-utils zbar ffmpeg mpv libv4l \
+    v4l-utils zbar qrencode ffmpeg mpv libv4l \
     dbus-x11 xauth mesa-dri-drivers \
     tailscale \
  && dnf clean all
+
+# systemd für Container-Betrieb: unnötige Units entfernen
+RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
+    && for i in *; do [ "$i" = "systemd-tmpfiles-setup.service" ] || rm -f "$i"; done || true \
+ && rm -f /usr/lib/systemd/system/multi-user.target.wants/* \
+ && rm -f /etc/systemd/system/*.wants/* \
+ && rm -f /usr/lib/systemd/system/local-fs.target.wants/* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*udev* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*initctl* \
+ && rm -f /usr/lib/systemd/system/basic.target.wants/* \
+ && rm -f /usr/lib/systemd/system/anaconda.target.wants/*
 
 RUN curl -fL \
     https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
@@ -40,8 +56,61 @@ RUN --mount=type=cache,target=/root/.npm \
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /usr/local/lib/hermes-agent
+
 RUN curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh \
       | bash -s -- --skip-setup
+
+RUN curl -sSfL https://release.anza.xyz/stable/install | sh \
+ && solana --version
+
+RUN mkdir -p /usr/local/share/bip39 \
+ && curl -fsSL \
+    https://github.com/iancoleman/bip39/releases/download/0.5.6/bip39-standalone.html \
+    -o /usr/local/share/bip39/index.html \
+ && echo "129b03505824879b8a4429576e3de6951c8599644c1afcaae80840f79237695a  /usr/local/share/bip39/index.html" \
+    | sha256sum -c -
+
+RUN mkdir -p /opt/electrum \
+ && cd /opt/electrum \
+ && curl -fsSLO "https://download.electrum.org/${ELECTRUM_VERSION}/electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && curl -fsSLO "https://download.electrum.org/${ELECTRUM_VERSION}/electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" \
+ && curl -fsSL https://raw.githubusercontent.com/spesmilo/electrum/master/pubkeys/ThomasV.asc | gpg --batch --import \
+ && curl -fsSL https://raw.githubusercontent.com/spesmilo/electrum/master/pubkeys/sombernight_releasekey.asc | gpg --batch --import \
+ && curl -fsSL https://raw.githubusercontent.com/spesmilo/electrum/master/pubkeys/Emzy.asc | gpg --batch --import \
+ && curl -fsSL https://raw.githubusercontent.com/spesmilo/electrum/master/pubkeys/felixb_f321x.asc | gpg --batch --import \
+ && gpg --batch --verify "electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && chmod +x "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && "./electrum-${ELECTRUM_VERSION}-x86_64.AppImage" --appimage-extract >/dev/null \
+ && rm -f "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" "electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" \
+ && printf '%s\n' '#!/usr/bin/env bash' 'cd /opt/electrum/squashfs-root' 'exec ./AppRun "$@"' > /usr/local/bin/electrum \
+ && chmod +x /usr/local/bin/electrum
+
+RUN mkdir -p /tmp/lnd \
+ && curl -fsSL \
+    "https://github.com/lightningnetwork/lnd/releases/download/${LND_VERSION}/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+    -o "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+ && echo "e01f755ba18e45a7b20f9fd645a328a250aae241e23b8c1eca06efeb2974570a  /tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+    | sha256sum -c - \
+ && tar -xzf "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" -C /tmp/lnd \
+ && install -m 0755 "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}/lnd" /usr/local/bin/lnd \
+ && install -m 0755 "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}/lncli" /usr/local/bin/lncli \
+ && rm -rf /tmp/lnd \
+ && lnd --version \
+ && lncli --version
+
+RUN gpgconf --kill all && rm -rf /root/.gnupg \
+ && mkdir -p /tmp/geth \
+ && cd /tmp/geth \
+ && curl -fsSLO "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && curl -fsSLO "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc" \
+ && echo "56d2b4772c63b02e7487c76a56b7afd5  geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" | md5sum -c - \
+ && gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys A61A13569BA28146 \
+ && gpg --batch --verify "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc" "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && tar -xzf "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && install -m 0755 "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}/geth" /usr/local/bin/geth \
+ && rm -rf /tmp/geth \
+ && geth version
 
 RUN useradd -m -s /bin/bash appuser || true
 
@@ -68,20 +137,31 @@ EOS
 
 COPY safrano9999/CODEANALYST /safrano/CODEANALYST
 COPY safrano9999/JUGO /safrano/JUGO
+COPY safrano9999/CITADEL /safrano/CITADEL
 COPY requirements.txt /requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /requirements.txt
 
-EXPOSE 11000 11001
+RUN mkdir -p /safrano/CITADEL/extensions/enabled \
+ && if [ -d /safrano/CITADEL/extensions/disabled/subnet ]; then \
+      mv /safrano/CITADEL/extensions/disabled/subnet /safrano/CITADEL/extensions/enabled/subnet; \
+    fi \
+ && if [ -d /safrano/CITADEL/extensions/disabled/tailscale ]; then \
+      mv /safrano/CITADEL/extensions/disabled/tailscale /safrano/CITADEL/extensions/enabled/tailscale; \
+    fi \
+ && chmod +x /safrano/CITADEL/scan.sh
 
-RUN cat >/start.sh <<'EOS'
-#!/bin/bash
-set -e
-(cd /safrano/CODEANALYST && uvicorn webui:app --host 0.0.0.0 --port 11000) &
-(cd /safrano/JUGO && uvicorn webui:app --host 0.0.0.0 --port 11001) &
-wait
-EOS
-RUN chmod +x /start.sh
+ARG CODEANALYST_PORT=11000
+ARG JUGO_PORT=11001
+ARG CITADEL_WEBUI_PORT=10999
+ARG BIP39_PORT=11002
+EXPOSE ${CODEANALYST_PORT} ${JUGO_PORT} ${CITADEL_WEBUI_PORT} ${BIP39_PORT}
 
-CMD ["/start.sh"]
+COPY services/*.service /etc/systemd/system/
+
+RUN systemctl enable codeanalyst.service jugo.service citadel.service \
+    citadel-setup.service citadel-scan.service bip39.service
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

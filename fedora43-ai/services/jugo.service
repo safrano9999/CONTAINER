@@ -1,0 +1,14 @@
+[Unit]
+Description=JUGO
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/safrano/JUGO
+EnvironmentFile=-/safrano/.env
+Environment=JUGO_PORT=11001
+ExecStart=uvicorn webui:app --host 0.0.0.0 --port ${JUGO_PORT}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

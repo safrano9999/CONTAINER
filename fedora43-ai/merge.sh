@@ -53,7 +53,7 @@ merge_dedup_from_repos() {
       if (!(key in seen)) { seen[key] = 1; print }
     }' "${files[@]}" > "$output"
 
-    echo "  Merged $filename (${#files[@]} Quellen) → ${output#$SCRIPT_DIR/}"
+    echo "  Merged $filename (${#files[@]} Quellen) → ${output#"$SCRIPT_DIR"/}"
 }
 
 merge_dedup_from_repos "env.example"      "$SCRIPT_DIR/env.example"      "env"

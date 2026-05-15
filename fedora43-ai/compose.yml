@@ -5,7 +5,6 @@ services:
       dockerfile: Containerfile
     image: localhost/fedora43-ai:latest
     container_name: ${INSTANCE:-fedora43-ai}
-    command: sleep infinity
 
     cap_add:
       - NET_ADMIN
@@ -13,15 +12,20 @@ services:
 
     devices:
       - /dev/net/tun
-      - /dev/video0:/dev/video0
-      - /dev/video1:/dev/video1
 
     security_opt:
       - label=disable
 
+    tmpfs:
+      - /tmp
+      - /run
+      - /run/lock
+
     ports:
-      - "11000:11000"
-      - "11001:11001"
+      - "127.0.0.1:11000:11000"
+      - "127.0.0.1:11001:11001"
+      - "127.0.0.1:10999:10999"
+      - "127.0.0.1:11002:11002"
 
     env_file:
       - path: .env
@@ -36,12 +40,13 @@ services:
       - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent
 
     volumes:
-      - home:/home
+      - ${HOST_HOME_DIR:-home}:/home
       - ${HOST_SRV_DIR}:/srv
-      - root:/root
-      - /opt/${INSTANCE:-fedora43-ai}:/opt
-      - tailscale:/var/lib/tailscale
+      - ${HOST_ROOT_DIR:-root}:/root
+      - ${HOST_OPT_DIR:-/opt/fedora43-ai}:/opt
+      - ${HOST_TAILSCALE_DIR:-tailscale}:/var/lib/tailscale
       - /tmp/.X11-unix:/tmp/.X11-unix
+      - /home/openclaw/safcontainer/CONTAINER/fedora43-ai/.env:/safrano/.env:ro
 
 volumes:
   home:

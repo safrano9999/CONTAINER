@@ -1,0 +1,19 @@
+[Unit]
+Description=CITADEL runtime setup
+Before=citadel.service
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/safrano/.env
+Environment=CITADEL_DATA_DIR=/opt/CITADEL CITADEL_ENABLE_TAILSCALE=false
+ExecStart=/bin/bash -c '\
+    mkdir -p "${CITADEL_DATA_DIR}" \
+             /safrano/CITADEL/cache \
+             /safrano/CITADEL/CADDYFILES \
+             /safrano/CITADEL/extensions/enabled \
+             /safrano/CITADEL/icons'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

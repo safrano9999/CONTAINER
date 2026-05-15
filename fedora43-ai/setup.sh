@@ -4,10 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CA_DIR="$SCRIPT_DIR/safrano9999/CODEANALYST"
 JUGO_DIR="$SCRIPT_DIR/safrano9999/JUGO"
-SCRIPTS_DIR="$SCRIPT_DIR/safrano9999/SCRIPTS"
 ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
 ENV_FILE="$SCRIPT_DIR/.env"
-CONFIG_SH="$SCRIPTS_DIR/INSTALL/config_template.sh"
+CONFIG_SH="$JUGO_DIR/config.sh"
 
 CONFIG_ONLY=false
 INSTANCE="fedora43-ai"
@@ -21,9 +20,8 @@ done
 
 # ── Repos prüfen ─────────────────────────────────────────────────────
 mkdir -p "$SCRIPT_DIR/safrano9999"
-[ ! -d "$CA_DIR" ]      && git clone --depth 1 https://github.com/safrano9999/CODEANALYST "$CA_DIR"
-[ ! -d "$JUGO_DIR" ]    && git clone --depth 1 https://github.com/safrano9999/JUGO "$JUGO_DIR"
-[ ! -d "$SCRIPTS_DIR" ] && git clone --depth 1 https://github.com/safrano9999/SCRIPTS "$SCRIPTS_DIR"
+[ ! -d "$CA_DIR" ]   && git clone --depth 1 https://github.com/safrano9999/CODEANALYST "$CA_DIR"
+[ ! -d "$JUGO_DIR" ] && git clone --depth 1 https://github.com/safrano9999/JUGO "$JUGO_DIR"
 
 # ── env.example zusammenführen ────────────────────────────────────────
 echo "  Merging env.example..."

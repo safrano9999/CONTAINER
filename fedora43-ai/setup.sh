@@ -26,7 +26,7 @@ bash "$SCRIPT_DIR/merge.sh"
 
 # ── config.sh direkt im fedora43-ai-Verzeichnis ausführen ────────────
 CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
-cp "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
+ln -sf "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
 echo ""
 (cd "$SCRIPT_DIR" && bash config.sh)
 

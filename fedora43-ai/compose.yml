@@ -19,6 +19,10 @@ services:
     security_opt:
       - label=disable
 
+    ports:
+      - "11000:11000"
+      - "11001:11001"
+
     env_file:
       - path: .env
         required: false

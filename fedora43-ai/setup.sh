@@ -24,10 +24,11 @@ mkdir -p "$SAFRANO_DIR"
 echo "  Merging env.examples..."
 bash "$SCRIPT_DIR/merge.sh"
 
-# ── config.sh interaktiv ausführen → .env erzeugen ───────────────────
+# ── config.sh lokal ausführen → .env erzeugen ────────────────────────
 CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
+cp "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
 echo ""
-ENV="$ENV_FILE" bash "$CONFIG_SH"
+bash "$SCRIPT_DIR/config.sh"
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 

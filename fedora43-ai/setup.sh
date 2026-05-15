@@ -24,17 +24,10 @@ mkdir -p "$SAFRANO_DIR"
 echo "  Merging env.examples..."
 bash "$SCRIPT_DIR/merge.sh"
 
-# ── config.sh in Temp-Dir ausführen → nur .env zurückkopieren ─────────
+# ── config.sh direkt im fedora43-ai-Verzeichnis ausführen ────────────
 CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
-TMPDIR="/tmp/$INSTANCE"
-mkdir -p "$TMPDIR"
-cp "$CONFIG_SH" "$TMPDIR/config.sh"
-cp "$SCRIPT_DIR/.env.example" "$TMPDIR/env.example"
-[ -f "$SCRIPT_DIR/.env" ] && cp "$SCRIPT_DIR/.env" "$TMPDIR/.env"
 echo ""
-(cd "$TMPDIR" && bash config.sh)
-cp "$TMPDIR/.env" "$SCRIPT_DIR/.env"
-rm -rf "$TMPDIR"
+(cd "$SCRIPT_DIR" && bash "$CONFIG_SH")
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 

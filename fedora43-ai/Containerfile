@@ -70,11 +70,6 @@ RUN mkdir -p /safrano && \
     git clone --depth 1 https://github.com/safrano9999/CODEANALYST /safrano/CODEANALYST && \
     git clone --depth 1 https://github.com/safrano9999/JUGO /safrano/JUGO
 
-RUN cat /safrano/CODEANALYST/env.example /safrano/JUGO/env.example > /safrano/env.example && \
-    cp /safrano/JUGO/config.sh /safrano/config.sh
-
-RUN cd /safrano && bash config.sh </dev/null || true
-
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     -r /safrano/CODEANALYST/requirements.txt \
@@ -85,8 +80,6 @@ EXPOSE 11000 11001
 RUN cat >/start.sh <<'EOS'
 #!/bin/bash
 set -e
-ln -sf /safrano/.env /safrano/CODEANALYST/.env 2>/dev/null || true
-ln -sf /safrano/.env /safrano/JUGO/.env 2>/dev/null || true
 (cd /safrano/CODEANALYST && uvicorn webui:app --host 0.0.0.0 --port 11000) &
 (cd /safrano/JUGO && uvicorn webui:app --host 0.0.0.0 --port 11001) &
 wait

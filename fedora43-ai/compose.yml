@@ -19,6 +19,10 @@ services:
     security_opt:
       - label=disable
 
+    env_file:
+      - path: .env
+        required: false
+
     environment:
       - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - DISPLAY=${DISPLAY:-:0}

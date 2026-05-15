@@ -1,0 +1,41 @@
+services:
+  fedora43-ai:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: localhost/fedora43-ai:latest
+    container_name: ${INSTANCE:-fedora43-ai}
+    command: sleep infinity
+
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    devices:
+      - /dev/net/tun
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+
+    security_opt:
+      - label=disable
+
+    environment:
+      - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - DISPLAY=${DISPLAY:-:0}
+      - NO_AT_BRIDGE=1
+      - XDG_RUNTIME_DIR=/tmp/runtime-root
+      - HERMES_HOME=/root/hermes-home
+      - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent
+
+    volumes:
+      - home:/home
+      - ${HOST_SRV_DIR}:/srv
+      - root:/root
+      - /opt/${INSTANCE:-fedora43-ai}:/opt
+      - tailscale:/var/lib/tailscale
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
+volumes:
+  home:
+  root:
+  tailscale:

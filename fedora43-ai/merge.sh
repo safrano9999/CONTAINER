@@ -58,3 +58,4 @@ merge_dedup_from_repos() {
 
 merge_dedup_from_repos "env.example"      "$SCRIPT_DIR/env.example"      "env"
 merge_dedup_from_repos "requirements.txt" "$SCRIPT_DIR/requirements.txt" "requirements"
+cat "$SCRIPT_DIR/env.fedora43-ai.example" >> "$SCRIPT_DIR/env.example"

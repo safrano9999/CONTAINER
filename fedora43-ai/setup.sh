@@ -16,11 +16,20 @@ for arg in "$@"; do
     esac
 done
 
-# ── Repos klonen ──────────────────────────────────────────────────────
+sync_repo() {
+    local repo="$1"
+    if [ -d "$SAFRANO_DIR/$repo" ]; then
+        git -C "$SAFRANO_DIR/$repo" pull --ff-only
+    else
+        git clone --depth 1 "https://github.com/safrano9999/$repo" "$SAFRANO_DIR/$repo"
+    fi
+}
+
+# ── Repos klonen oder aktualisieren ──────────────────────────────────
+REPOS=(CODEANALYST JUGO CITADEL)
+
 mkdir -p "$SAFRANO_DIR"
-[ ! -d "$SAFRANO_DIR/CODEANALYST" ] && git clone --depth 1 https://github.com/safrano9999/CODEANALYST "$SAFRANO_DIR/CODEANALYST"
-[ ! -d "$SAFRANO_DIR/JUGO" ]        && git clone --depth 1 https://github.com/safrano9999/JUGO "$SAFRANO_DIR/JUGO"
-[ ! -d "$SAFRANO_DIR/CITADEL" ]     && git clone --depth 1 https://github.com/safrano9999/CITADEL "$SAFRANO_DIR/CITADEL"
+for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
 
 # ── env.examples + requirements.txt dedupliziert zusammenführen ──────
 echo "  Merging env.examples + requirements.txt..."
@@ -42,7 +51,7 @@ HOST="$(env_val HOST)"
 CODEANALYST_PORT="$(env_val CODEANALYST_PORT)"
 JUGO_PORT="$(env_val JUGO_PORT)"
 CITADEL_WEBUI_PORT="$(env_val CITADEL_WEBUI_PORT)"
-BIP39_PORT="$(grep "^ARG BIP39_PORT=" "$SCRIPT_DIR/Containerfile" | head -1 | cut -d= -f2-)"
+BIP39_PORT="$(env_val BIP39_PORT)"
 
 # ── compose.yml generieren ───────────────────────────────────────────
 echo "  Generating compose.yml..."

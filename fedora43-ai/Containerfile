@@ -163,5 +163,7 @@ COPY services/*.service /etc/systemd/system/
 RUN systemctl enable codeanalyst.service jugo.service citadel.service \
     citadel-setup.service citadel-scan.service bip39.service
 
+RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
+
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

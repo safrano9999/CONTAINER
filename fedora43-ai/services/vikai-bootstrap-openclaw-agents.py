@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ CONFIG_PATH = Path(
 )
 STATE_DIR = Path(os.environ.get("OPENCLAW_STATE_DIR", str(CONFIG_PATH.parent)))
 VIKAI_DIR = Path(os.environ.get("VIKAI_DIR", "/opt/safrano9999/VikAI"))
+TEMPLATE_DIR = VIKAI_DIR / "openclaw-workspace"
 SKILLS_DIR = VIKAI_DIR / "SKILLS"
 VIKUNJA_CLIENT = VIKAI_DIR / "vikunja_client.py"
 HEARTBEAT_EVERY = os.environ.get("VIKAI_HEARTBEAT_EVERY", "360m").strip() or "360m"
@@ -27,43 +29,25 @@ AGENTS = [
         "id": "worker",
         "role": "worker",
         "token_env": "TOKEN_WORKER",
+        "template": "worker",
         "skill_dir": "vikunja_worker",
         "role_skills": ["VikAI_Worker.md"],
-        "heartbeat_title": "Vikunja Task Check",
-        "heartbeat_steps": [
-            "Load token from `.vikunjaenv` and read `SKILLS/vikunja_worker/TOKEN_INFO.md`.",
-            "Query all projects and tasks assigned to me.",
-            "Always report project and task counts, including open, in_progress, review, and done.",
-            "If tasks are open or in progress, pick them up per `SKILLS/vikunja_worker/`.",
-        ],
     },
     {
         "id": "architect",
         "role": "architect",
         "token_env": "TOKEN_ARCHITECT",
+        "template": "architect",
         "skill_dir": "vikunja_architect",
         "role_skills": ["VikAI_Architect.md", "VikAI_Architect_Briefing.md"],
-        "heartbeat_title": "Vikunja Architect Check",
-        "heartbeat_steps": [
-            "Load token from `.vikunjaenv` and read `SKILLS/vikunja_architect/TOKEN_INFO.md`.",
-            "Query all projects and tasks.",
-            "Always report project and task counts, including open, in_progress, review, and done.",
-            "If planning or assignment work is needed, execute per `SKILLS/vikunja_architect/`.",
-        ],
     },
     {
         "id": "qc",
         "role": "qc",
         "token_env": "TOKEN_QC",
+        "template": "qc",
         "skill_dir": "vikunja_qc",
         "role_skills": ["VikAI_QA.md"],
-        "heartbeat_title": "Vikunja QC Check",
-        "heartbeat_steps": [
-            "Load token from `.vikunjaenv` and read `SKILLS/vikunja_qc/TOKEN_INFO.md`.",
-            "Query tasks in review status.",
-            "Always report how many tasks are in review and list their titles and IDs.",
-            "If tasks are in review, pick the oldest and review it per `SKILLS/vikunja_qc/`.",
-        ],
     },
 ]
 
@@ -142,24 +126,22 @@ def replace_symlink(link: Path, target: Path) -> None:
     link.symlink_to(target)
 
 
-def heartbeat_content(agent: dict) -> str:
-    lines = [f"## {agent['heartbeat_title']} (every heartbeat)", ""]
-    for idx, step in enumerate(agent["heartbeat_steps"], start=1):
-        lines.append(f"{idx}. {step}")
-    lines.append(f"{len(agent['heartbeat_steps']) + 1}. Never just say HEARTBEAT_OK.")
-    lines.append("")
-    return "\n".join(lines)
+def copy_workspace_template(agent: dict, workspace: Path) -> None:
+    template = TEMPLATE_DIR / agent["template"]
+    if not template.is_dir():
+        raise SystemExit(f"VikAI workspace template not found: {template}")
+    shutil.copytree(template, workspace, dirs_exist_ok=True, symlinks=True)
 
 
 def write_workspace(agent: dict, token: str, workspace: Path, target: str) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
+    copy_workspace_template(agent, workspace)
     (workspace / "memory").mkdir(exist_ok=True)
     (workspace / "SKILLS").mkdir(exist_ok=True)
     (workspace / "BOOTSTRAP.md").unlink(missing_ok=True)
 
     (workspace / ".vikai_role").write_text(agent["role"] + "\n", encoding="utf-8")
     write_secret(workspace / ".vikunjaenv", token)
-    (workspace / "HEARTBEAT.md").write_text(heartbeat_content(agent), encoding="utf-8")
 
     state_file = workspace / ".openclaw" / "workspace-state.json"
     state_file.parent.mkdir(parents=True, exist_ok=True)

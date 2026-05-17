@@ -1,0 +1,13 @@
+[Unit]
+Description=Codex CLI OAuth token bootstrap
+
+[Service]
+Type=oneshot
+PassEnvironment=CODEX_ACCESS_TOKEN CODEX_HOME
+ExecCondition=/bin/bash -c '[ -n "$$CODEX_ACCESS_TOKEN" ]'
+ExecStart=/bin/bash -c 'export CODEX_HOME="$${CODEX_HOME:-/root/.codex}"; mkdir -p "$$CODEX_HOME"; chmod 700 "$$CODEX_HOME"; if printf "%%s\n" "$$CODEX_ACCESS_TOKEN" | /usr/local/bin/codex login --with-access-token; then echo "Codex token accepted"; else echo "Codex token rejected by codex login --with-access-token; expected official Codex access token/agent identity. Continuing without Codex login."; fi'
+RemainAfterExit=yes
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

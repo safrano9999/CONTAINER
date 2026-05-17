@@ -1,0 +1,18 @@
+[Unit]
+Description=Hermes Agent gateway
+After=tailscale-up.service
+Wants=tailscale-up.service
+
+[Service]
+Type=simple
+PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL HERMES_LITELLM_MODEL HERMES_HOME HERMES_START TELEGRAMTOKEN_HERMES
+Environment=HERMES_HOME=/root/hermes-home
+ExecCondition=/bin/bash -c '[ "$${HERMES_START:-1}" = "1" ] && [ -n "$$LITELLM_API_KEY" ] && [ -n "$$LITELLM_URL" ] && [ -n "$$LITELLM_PORT" ]'
+ExecStartPre=/usr/local/bin/hermes-configure-litellm
+ExecStart=/bin/bash -lc 'set -e; model="$${HERMES_LITELLM_MODEL:-$${OPENCLAW_LITELLM_MODEL:-deepseek-v4-flash}}"; model="$${model#litellm/}"; base="$${LITELLM_URL%/}"; base="$${base%/v1}"; export OPENAI_API_KEY="$$LITELLM_API_KEY"; export OPENAI_BASE_URL="$${base}:$${LITELLM_PORT}/v1"; export HERMES_INFERENCE_PROVIDER=custom; export HERMES_INFERENCE_MODEL="$$model"; export GATEWAY_ALLOW_ALL_USERS=true; export TELEGRAM_ALLOW_ALL_USERS=true; export HERMES_ALLOW_ROOT_GATEWAY=1; export HERMES_ACCEPT_HOOKS=1; if [ -n "$$TELEGRAMTOKEN_HERMES" ] && [ "$$TELEGRAMTOKEN_HERMES" != "Hermes-Agent" ]; then export TELEGRAM_BOT_TOKEN="$$TELEGRAMTOKEN_HERMES"; fi; exec /usr/local/bin/hermes gateway run --replace'
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

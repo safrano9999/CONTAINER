@@ -13,13 +13,13 @@ services:
     devices:
       - /dev/net/tun
 
-    security_opt:
-      - label=disable
+    #security_opt:
+    #  - label=disable
 
-    tmpfs:
-      - /tmp
-      - /run
-      - /run/lock
+    #tmpfs:
+    #  - /tmp
+    #  - /run
+    #  - /run/lock
 
     ports:
       - "127.0.0.1:11000:11000"
@@ -28,8 +28,7 @@ services:
       - "127.0.0.1:11002:11002"
 
     env_file:
-      - path: .env
-        required: false
+      - .env
 
     environment:
       - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -38,15 +37,15 @@ services:
       - XDG_RUNTIME_DIR=/tmp/runtime-root
       - HERMES_HOME=/root/hermes-home
       - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent
+      - OPENCLAW_START=1
+      - HERMES_START=1
 
     volumes:
       - ${HOST_HOME_DIR:-home}:/home
       - ${HOST_SRV_DIR}:/srv
       - ${HOST_ROOT_DIR:-root}:/root
-      - ${HOST_OPT_DIR:-/opt/fedora43-ai}:/opt
       - ${HOST_TAILSCALE_DIR:-tailscale}:/var/lib/tailscale
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - /home/openclaw/safcontainer/CONTAINER/fedora43-ai/.env:/safrano/.env:ro
 
 volumes:
   home:

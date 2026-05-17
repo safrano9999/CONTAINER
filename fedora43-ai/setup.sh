@@ -35,10 +35,10 @@ for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
-# ── config.sh direkt im fedora43-ai-Verzeichnis ausführen ────────────
+# ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
-    CONFIG_SH="$(find "$SAFRANO_DIR" -maxdepth 2 -name "config.sh" | head -1)"
-    ln -sf "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
+    CONFIG_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/config_template.sh"
+    ln -f "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
     echo ""
     (cd "$SCRIPT_DIR" && bash config.sh)
     CONTAINER_NAME="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]')"
@@ -71,13 +71,13 @@ services:
     devices:
       - /dev/net/tun
 
-    security_opt:
-      - label=disable
+    #security_opt:
+    #  - label=disable
 
-    tmpfs:
-      - /tmp
-      - /run
-      - /run/lock
+    #tmpfs:
+    #  - /tmp
+    #  - /run
+    #  - /run/lock
 
     ports:
       - "$HOST:$CODEANALYST_PORT:$CODEANALYST_PORT"
@@ -86,8 +86,7 @@ services:
       - "$HOST:$BIP39_PORT:$BIP39_PORT"
 
     env_file:
-      - path: .env
-        required: false
+      - .env
 
     environment:
       - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -96,15 +95,15 @@ services:
       - XDG_RUNTIME_DIR=/tmp/runtime-root
       - HERMES_HOME=/root/hermes-home
       - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent
+      - OPENCLAW_START=1
+      - HERMES_START=1
 
     volumes:
       - \${HOST_HOME_DIR:-home}:/home
       - \${HOST_SRV_DIR}:/srv
       - \${HOST_ROOT_DIR:-root}:/root
-      - \${HOST_OPT_DIR:-/opt/fedora43-ai}:/opt
       - \${HOST_TAILSCALE_DIR:-tailscale}:/var/lib/tailscale
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - $SCRIPT_DIR/.env:/safrano/.env:ro
 
 volumes:
   home:
@@ -112,13 +111,65 @@ volumes:
   tailscale:
 EOF
 
+# ── Quadlet .container generieren ────────────────────────────────────
+echo "  Generating fedora43-ai.container..."
+cat > "$SCRIPT_DIR/fedora43-ai.container" <<EOF
+[Container]
+ContainerName=fedora43-ai
+Image=localhost/fedora43-ai:latest
+EnvironmentFile=$SCRIPT_DIR/.env
+Environment=OPENCLAW_START=1
+Environment=HERMES_START=1
+PublishPort=$HOST:$CODEANALYST_PORT:$CODEANALYST_PORT
+PublishPort=$HOST:$JUGO_PORT:$JUGO_PORT
+PublishPort=$HOST:$CITADEL_WEBUI_PORT:$CITADEL_WEBUI_PORT
+PublishPort=$HOST:$BIP39_PORT:$BIP39_PORT
+AddCapability=NET_ADMIN NET_RAW
+AddDevice=/dev/net/tun
+Volume=$HOME/fedora43-ai/srv:/srv
+
+[Service]
+Restart=always
+TimeoutStartSec=60
+
+[Install]
+WantedBy=default.target
+EOF
+
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 
-# ── Build ─────────────────────────────────────────────────────────────
+# ── Image-Quelle wählen ──────────────────────────────────────────────
+DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
+LOCAL_IMAGE="localhost/fedora43-ai:latest"
+
 echo ""
-echo "  Starte Build..."
-HOST_SRV_DIR="/srv/$INSTANCE"
-export INSTANCE HOST_SRV_DIR
-podman-compose \
-    -f "$SCRIPT_DIR/compose.yml" \
-    build
+echo "  Image source:"
+echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
+echo "    (2) Build locally"
+echo ""
+read -rp "  Choose [1/2] (default: 1): " IMG_CHOICE
+IMG_CHOICE="${IMG_CHOICE:-1}"
+
+case "$IMG_CHOICE" in
+    1)
+        echo ""
+        echo "  Pulling $DOCKER_IO_IMAGE ..."
+        podman pull "$DOCKER_IO_IMAGE"
+        IMAGE_REF="$DOCKER_IO_IMAGE"
+        # Update compose.yml to use pulled image (no build)
+        sed -i '/^\s*build:/,/^\s*dockerfile:/d' "$SCRIPT_DIR/compose.yml"
+        sed -i "s|image: .*|image: $DOCKER_IO_IMAGE|" "$SCRIPT_DIR/compose.yml"
+        # Update quadlet .container
+        sed -i "s|^Image=.*|Image=$DOCKER_IO_IMAGE|" "$SCRIPT_DIR/fedora43-ai.container"
+        echo "  Done. Image ready: $DOCKER_IO_IMAGE"
+        ;;
+    2)
+        echo ""
+        echo "  Starte Build..."
+        HOST_SRV_DIR="/srv/$INSTANCE"
+        export INSTANCE HOST_SRV_DIR
+        podman-compose \
+            -f "$SCRIPT_DIR/compose.yml" \
+            build
+        ;;
+esac

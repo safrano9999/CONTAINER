@@ -3,6 +3,7 @@ FROM quay.io/fedora/fedora:43
 ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
 ENV UV_CACHE_DIR=/usr/local/share/uv/cache
 ENV PATH=/root/.local/share/solana/install/active_release/bin:${PATH}
+ENV OPENCLAW_LITELLM_MODEL=deepseek-v4-flash
 ENV ELECTRUM_VERSION=4.7.2
 ENV LND_VERSION=v0.20.1-beta
 ENV GETH_VERSION=1.17.2
@@ -26,19 +27,14 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     lsof strace tcpdump nmap-ncat \
     v4l-utils zbar qrencode ffmpeg mpv libv4l \
     dbus-x11 xauth mesa-dri-drivers \
-    tailscale \
- && dnf clean all
+    tailscale
 
-# systemd für Container-Betrieb: unnötige Units entfernen
-RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
-    && for i in *; do [ "$i" = "systemd-tmpfiles-setup.service" ] || rm -f "$i"; done || true \
- && rm -f /usr/lib/systemd/system/multi-user.target.wants/* \
- && rm -f /etc/systemd/system/*.wants/* \
- && rm -f /usr/lib/systemd/system/local-fs.target.wants/* \
- && rm -f /usr/lib/systemd/system/sockets.target.wants/*udev* \
- && rm -f /usr/lib/systemd/system/sockets.target.wants/*initctl* \
- && rm -f /usr/lib/systemd/system/basic.target.wants/* \
- && rm -f /usr/lib/systemd/system/anaconda.target.wants/*
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /usr/local/lib/hermes-agent
+
+RUN curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh \
+      | bash -s -- --skip-setup
 
 RUN curl -fL \
     https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
@@ -54,12 +50,19 @@ RUN --mount=type=cache,target=/root/.npm \
     @anthropic-ai/claude-code@latest \
     openclaw@latest
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN --mount=type=cache,target=/root/.npm \
+    openclaw plugins install @openclaw/brave-plugin
 
-RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /usr/local/lib/hermes-agent
-
-RUN curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh \
-      | bash -s -- --skip-setup
+# systemd für Container-Betrieb: unnötige Units entfernen
+RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
+    && for i in *; do [ "$i" = "systemd-tmpfiles-setup.service" ] || rm -f "$i"; done || true \
+ && rm -f /usr/lib/systemd/system/multi-user.target.wants/* \
+ && rm -f /etc/systemd/system/*.wants/* \
+ && rm -f /usr/lib/systemd/system/local-fs.target.wants/* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*udev* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*initctl* \
+ && rm -f /usr/lib/systemd/system/basic.target.wants/* \
+ && rm -f /usr/lib/systemd/system/anaconda.target.wants/*
 
 RUN curl -sSfL https://release.anza.xyz/stable/install | sh \
  && solana --version
@@ -135,22 +138,23 @@ RUN cat >>/etc/bashrc <<'EOS'
 [ -f /etc/profile.d/gui-container.sh ] && . /etc/profile.d/gui-container.sh
 EOS
 
-COPY safrano9999/CODEANALYST /safrano/CODEANALYST
-COPY safrano9999/JUGO /safrano/JUGO
-COPY safrano9999/CITADEL /safrano/CITADEL
 COPY requirements.txt /requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /requirements.txt
 
-RUN mkdir -p /safrano/CITADEL/extensions/enabled \
- && if [ -d /safrano/CITADEL/extensions/disabled/subnet ]; then \
-      mv /safrano/CITADEL/extensions/disabled/subnet /safrano/CITADEL/extensions/enabled/subnet; \
+COPY safrano9999/CODEANALYST /opt/safrano9999/CODEANALYST
+COPY safrano9999/JUGO /opt/safrano9999/JUGO
+COPY safrano9999/CITADEL /opt/safrano9999/CITADEL
+
+RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
+ && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
+      mv /opt/safrano9999/CITADEL/extensions/disabled/subnet /opt/safrano9999/CITADEL/extensions/enabled/subnet; \
     fi \
- && if [ -d /safrano/CITADEL/extensions/disabled/tailscale ]; then \
-      mv /safrano/CITADEL/extensions/disabled/tailscale /safrano/CITADEL/extensions/enabled/tailscale; \
+ && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/tailscale ]; then \
+      mv /opt/safrano9999/CITADEL/extensions/disabled/tailscale /opt/safrano9999/CITADEL/extensions/enabled/tailscale; \
     fi \
- && chmod +x /safrano/CITADEL/scan.sh
+ && chmod +x /opt/safrano9999/CITADEL/scan.sh
 
 ARG CODEANALYST_PORT=11000
 ARG JUGO_PORT=11001
@@ -158,10 +162,15 @@ ARG CITADEL_WEBUI_PORT=10999
 ARG BIP39_PORT=11002
 EXPOSE ${CODEANALYST_PORT} ${JUGO_PORT} ${CITADEL_WEBUI_PORT} ${BIP39_PORT}
 
+COPY services/openclaw-configure-litellm.py /usr/local/bin/openclaw-configure-litellm
+COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
 COPY services/*.service /etc/systemd/system/
 
+RUN chmod +x /usr/local/bin/openclaw-configure-litellm /usr/local/bin/hermes-configure-litellm
+
 RUN systemctl enable codeanalyst.service jugo.service citadel.service \
-    citadel-setup.service citadel-scan.service bip39.service
+    citadel-setup.service citadel-scan.service bip39.service codex-auth.service \
+    tailscaled.service tailscale-up.service openclaw.service hermes.service
 
 RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
 

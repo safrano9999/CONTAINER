@@ -1,1 +1,8 @@
 fedora43-ai/services/__pycache__/
+env.example
+requirements.txt
+.agents/
+.codex/
+.claude/
+fedora43-ai.container
+compose.yml

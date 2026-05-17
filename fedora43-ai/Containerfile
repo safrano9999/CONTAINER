@@ -146,6 +146,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY safrano9999/CODEANALYST /opt/safrano9999/CODEANALYST
 COPY safrano9999/JUGO /opt/safrano9999/JUGO
 COPY safrano9999/CITADEL /opt/safrano9999/CITADEL
+COPY safrano9999/VikAI /opt/safrano9999/VikAI
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
@@ -164,9 +165,11 @@ EXPOSE ${CODEANALYST_PORT} ${JUGO_PORT} ${CITADEL_WEBUI_PORT} ${BIP39_PORT}
 
 COPY services/openclaw-configure-litellm.py /usr/local/bin/openclaw-configure-litellm
 COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
+COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
 COPY services/*.service /etc/systemd/system/
 
-RUN chmod +x /usr/local/bin/openclaw-configure-litellm /usr/local/bin/hermes-configure-litellm
+RUN chmod +x /usr/local/bin/openclaw-configure-litellm /usr/local/bin/hermes-configure-litellm \
+    /usr/local/bin/vikai-bootstrap-openclaw-agents
 
 RUN systemctl enable codeanalyst.service jugo.service citadel.service \
     citadel-setup.service citadel-scan.service bip39.service codex-auth.service \

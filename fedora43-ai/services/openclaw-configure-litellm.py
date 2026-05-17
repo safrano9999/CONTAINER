@@ -3,6 +3,7 @@
 
 import json
 import os
+import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -11,6 +12,8 @@ from pathlib import Path
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
 DEFAULT_MODEL = "deepseek-v4-flash"
 DISCOVERY_TIMEOUT_SECONDS = 5
+VIKAI_BOOTSTRAP_SCRIPT = Path("/usr/local/bin/vikai-bootstrap-openclaw-agents")
+VIKAI_TOKEN_ENV = ("TOKEN_WORKER", "TOKEN_ARCHITECT", "TOKEN_QC")
 
 
 def _int_env(name: str, default: int) -> int:
@@ -68,6 +71,20 @@ def _discover_litellm_models(fallback_model: str) -> tuple[list[str], bool]:
         if model_id not in models:
             models.append(model_id)
     return models, bool(discovered)
+
+
+def _maybe_bootstrap_vikai_agents() -> bool:
+    present = [name for name in VIKAI_TOKEN_ENV if os.environ.get(name, "").strip()]
+    if not present:
+        return False
+    missing = [name for name in VIKAI_TOKEN_ENV if name not in present]
+    if missing:
+        raise SystemExit(
+            "VikAI agent bootstrap requires TOKEN_WORKER, TOKEN_ARCHITECT, "
+            f"and TOKEN_QC; missing: {', '.join(missing)}"
+        )
+    subprocess.run([str(VIKAI_BOOTSTRAP_SCRIPT)], check=True)
+    return True
 
 
 def main() -> None:
@@ -184,6 +201,7 @@ def main() -> None:
         }
 
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
+    vikai_bootstrapped = _maybe_bootstrap_vikai_agents()
     print(f"OpenClaw LiteLLM model configured: {full_model}")
     if discovery_ok:
         print(f"OpenClaw LiteLLM models discovered: {len(discovered_models)}")
@@ -191,6 +209,8 @@ def main() -> None:
         print("OpenClaw Telegram configured for default account -> main agent")
     if brave_api_key:
         print("OpenClaw Brave web search configured from BRAVE_API_KEY")
+    if vikai_bootstrapped:
+        print("OpenClaw VikAI agents configured from TOKEN_WORKER/TOKEN_ARCHITECT/TOKEN_QC")
 
 
 if __name__ == "__main__":

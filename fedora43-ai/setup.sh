@@ -26,7 +26,7 @@ sync_repo() {
 }
 
 # ── Repos klonen oder aktualisieren ──────────────────────────────────
-REPOS=(CODEANALYST JUGO CITADEL)
+REPOS=(CODEANALYST JUGO CITADEL VikAI)
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done

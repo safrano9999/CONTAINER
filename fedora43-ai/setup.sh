@@ -136,11 +136,18 @@ render_compose_from_yaml() {
         next
     }
     service != "" && $0 ~ /^    webui:/ { section = "webui"; list_key = ""; next }
+    service != "" && $0 ~ /^    env:/ { section = "env"; list_key = ""; next }
     service != "" && $0 ~ /^    container:/ { section = "container"; list_key = ""; next }
     section == "webui" && $0 ~ /^      port:/ { port = val($0); next }
     section == "webui" && $0 ~ /^      publish_port:/ { publish_port = val($0); next }
     section == "webui" && $0 ~ /^      publish_host:/ { publish_host = val($0); next }
     section == "webui" && $0 ~ /^      env_port:/ { env_port = val($0); next }
+    section == "env" && $0 ~ /^      [A-Za-z_][A-Za-z0-9_]*:/ {
+        env_key = trim($1)
+        sub(/:$/, "", env_key)
+        add_env(env_key, val($0))
+        next
+    }
     section == "container" && $0 ~ /^      capabilities:/ { list_key = "capabilities"; next }
     section == "container" && $0 ~ /^      devices:/ { list_key = "devices"; next }
     section == "container" && $0 ~ /^      volumes:/ { list_key = "volumes"; next }

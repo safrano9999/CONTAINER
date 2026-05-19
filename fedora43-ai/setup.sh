@@ -35,9 +35,14 @@ for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
-CONFIG_YAML_PY="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/config_yaml.py"
-ln -f "$CONFIG_YAML_PY" "$SCRIPT_DIR/config_yaml.py"
-python3 "$SCRIPT_DIR/config_yaml.py" merge "$SCRIPT_DIR"
+MERGE_YAML_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/merge_yaml.sh"
+ln -f "$MERGE_YAML_SH" "$SCRIPT_DIR/merge_yaml.sh"
+bash "$SCRIPT_DIR/merge_yaml.sh" \
+    "$SCRIPT_DIR" \
+    "$SCRIPT_DIR/merge.yaml" \
+    "$SCRIPT_DIR/config.fedora43-ai.yaml" \
+    "$SCRIPT_DIR/safrano9999" \
+    "config.yaml"
 
 # ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
@@ -45,17 +50,191 @@ if ! $NO_CONFIG; then
     ln -f "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
     echo ""
     (cd "$SCRIPT_DIR" && bash config.sh)
-    python3 "$SCRIPT_DIR/config_yaml.py" configure "$SCRIPT_DIR"
     CONTAINER_NAME="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]')"
     rm -f "$SCRIPT_DIR/$CONTAINER_NAME.container" "$SCRIPT_DIR/docker-compose.yml"
-elif [ ! -f "$SCRIPT_DIR/config.local.yaml" ]; then
-    python3 "$SCRIPT_DIR/config_yaml.py" configure "$SCRIPT_DIR" --defaults
 fi
 
-# ── compose.yml + Quadlet aus YAML-Config generieren ─────────────────
+render_compose_from_yaml() {
+    local input="$SCRIPT_DIR/merge.yaml"
+    [ -f "$input" ] || { echo "No merge.yaml" >&2; exit 1; }
+
+    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" '
+    function trim(s) {
+        sub(/^[[:space:]]+/, "", s)
+        sub(/[[:space:]]+$/, "", s)
+        return s
+    }
+    function val(line) {
+        sub(/^[^:]+:[[:space:]]*/, "", line)
+        return trim(line)
+    }
+    function add_env(key, value) {
+        if (key == "" || value == "") return
+        if (!(key in env_seen)) env_order[++env_count] = key
+        env_seen[key] = 1
+        env[key] = value
+    }
+    function add_port(value) {
+        if (value == "" || value in port_seen) return
+        port_seen[value] = 1
+        ports[++port_count] = value
+    }
+    function add_named_volume(name) {
+        if (name == "" || name in named_seen) return
+        named_seen[name] = 1
+        named_volumes[++named_count] = name
+    }
+    function add_volume(value, source) {
+        if (value == "" || value in volume_seen) return
+        volume_seen[value] = 1
+        volumes[++volume_count] = value
+        if (source !~ /^[/.$~]/ && source !~ /\//) add_named_volume(source)
+    }
+    function add_cap(value) {
+        if (value == "" || value in cap_seen) return
+        cap_seen[value] = 1
+        caps[++cap_count] = value
+    }
+    function add_device(value) {
+        if (value == "" || value in device_seen) return
+        device_seen[value] = 1
+        devices[++device_count] = value
+    }
+    function flush_service() {
+        if (service == "") return
+        if (port != "") {
+            host = publish_host
+            if (host == "") host = default_publish_host
+            published = publish_port
+            if (published == "") published = port
+            add_port(host ":" published ":" port)
+            add_env(env_port, port)
+            if (service == "openclaw_gateway") {
+                add_env("OPENCLAW_GATEWAY_PUBLISH_HOST", host)
+                add_env("OPENCLAW_GATEWAY_PUBLISH_PORT", published)
+            }
+        }
+        service = ""
+        section = ""
+        list_key = ""
+        port = ""
+        publish_port = ""
+        publish_host = ""
+        env_port = ""
+        volume_source = ""
+    }
+    /^defaults:/ { flush_service(); scope = "defaults"; next }
+    /^services:/ { flush_service(); scope = "services"; next }
+    scope == "defaults" && $0 ~ /^  publish_host:/ {
+        default_publish_host = val($0)
+        next
+    }
+    scope == "services" && $0 ~ /^  [A-Za-z0-9_-]+:/ {
+        flush_service()
+        service = trim($0)
+        sub(/:$/, "", service)
+        next
+    }
+    service != "" && $0 ~ /^    webui:/ { section = "webui"; list_key = ""; next }
+    service != "" && $0 ~ /^    container:/ { section = "container"; list_key = ""; next }
+    section == "webui" && $0 ~ /^      port:/ { port = val($0); next }
+    section == "webui" && $0 ~ /^      publish_port:/ { publish_port = val($0); next }
+    section == "webui" && $0 ~ /^      publish_host:/ { publish_host = val($0); next }
+    section == "webui" && $0 ~ /^      env_port:/ { env_port = val($0); next }
+    section == "container" && $0 ~ /^      capabilities:/ { list_key = "capabilities"; next }
+    section == "container" && $0 ~ /^      devices:/ { list_key = "devices"; next }
+    section == "container" && $0 ~ /^      volumes:/ { list_key = "volumes"; next }
+    section == "container" && list_key == "capabilities" && $0 ~ /^        - / {
+        item = trim($0); sub(/^- /, "", item); add_cap(item); next
+    }
+    section == "container" && list_key == "devices" && $0 ~ /^        - / {
+        item = trim($0); sub(/^- /, "", item); add_device(item); next
+    }
+    section == "container" && list_key == "volumes" && $0 ~ /^        - source:/ {
+        volume_source = val($0)
+        next
+    }
+    section == "container" && list_key == "volumes" && volume_source != "" && $0 ~ /^          target:/ {
+        add_volume(volume_source ":" val($0), volume_source)
+        volume_source = ""
+        next
+    }
+    section == "container" && list_key == "volumes" && $0 ~ /^        - / {
+        item = trim($0); sub(/^- /, "", item)
+        split(item, parts, ":")
+        add_volume(item, parts[1])
+        next
+    }
+    END {
+        flush_service()
+
+        print "services:" > "compose.yml"
+        print "  fedora43-ai:" >> "compose.yml"
+        print "    build:" >> "compose.yml"
+        print "      context: ." >> "compose.yml"
+        print "      dockerfile: Containerfile" >> "compose.yml"
+        print "    image: localhost/fedora43-ai:latest" >> "compose.yml"
+        print "    container_name: ${INSTANCE:-fedora43-ai}" >> "compose.yml"
+        print "    ports:" >> "compose.yml"
+        for (i = 1; i <= port_count; i++) print "      - " ports[i] >> "compose.yml"
+        print "    env_file:" >> "compose.yml"
+        print "      - .env" >> "compose.yml"
+        print "    environment:" >> "compose.yml"
+        print "      - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> "compose.yml"
+        print "      - DISPLAY=${DISPLAY:-:0}" >> "compose.yml"
+        print "      - NO_AT_BRIDGE=1" >> "compose.yml"
+        print "      - XDG_RUNTIME_DIR=/tmp/runtime-root" >> "compose.yml"
+        print "      - HERMES_HOME=/root/hermes-home" >> "compose.yml"
+        print "      - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent" >> "compose.yml"
+        print "      - OPENCLAW_START=1" >> "compose.yml"
+        print "      - HERMES_START=1" >> "compose.yml"
+        for (i = 1; i <= env_count; i++) print "      - " env_order[i] "=" env[env_order[i]] >> "compose.yml"
+        print "    volumes:" >> "compose.yml"
+        print "      - ${HOST_HOME_DIR:-home}:/home" >> "compose.yml"
+        print "      - ${HOST_SRV_DIR}:/srv" >> "compose.yml"
+        print "      - ${HOST_ROOT_DIR:-root}:/root" >> "compose.yml"
+        print "      - /tmp/.X11-unix:/tmp/.X11-unix" >> "compose.yml"
+        for (i = 1; i <= volume_count; i++) print "      - " volumes[i] >> "compose.yml"
+        if (cap_count > 0) {
+            print "    cap_add:" >> "compose.yml"
+            for (i = 1; i <= cap_count; i++) print "      - " caps[i] >> "compose.yml"
+        }
+        if (device_count > 0) {
+            print "    devices:" >> "compose.yml"
+            for (i = 1; i <= device_count; i++) print "      - " devices[i] >> "compose.yml"
+        }
+        print "volumes:" >> "compose.yml"
+        print "  home: {}" >> "compose.yml"
+        print "  root: {}" >> "compose.yml"
+        for (i = 1; i <= named_count; i++) print "  " named_volumes[i] ": {}" >> "compose.yml"
+
+        print "[Container]" > "fedora43-ai.container"
+        print "ContainerName=fedora43-ai" >> "fedora43-ai.container"
+        print "Image=localhost/fedora43-ai:latest" >> "fedora43-ai.container"
+        print "EnvironmentFile=" cwd "/.env" >> "fedora43-ai.container"
+        print "Environment=OPENCLAW_START=1" >> "fedora43-ai.container"
+        print "Environment=HERMES_START=1" >> "fedora43-ai.container"
+        for (i = 1; i <= env_count; i++) print "Environment=" env_order[i] "=" env[env_order[i]] >> "fedora43-ai.container"
+        for (i = 1; i <= port_count; i++) print "PublishPort=" ports[i] >> "fedora43-ai.container"
+        print "Volume=" home "/fedora43-ai/srv:/srv" >> "fedora43-ai.container"
+        for (i = 1; i <= volume_count; i++) print "Volume=" volumes[i] >> "fedora43-ai.container"
+        for (i = 1; i <= cap_count; i++) print "AddCapability=" caps[i] >> "fedora43-ai.container"
+        for (i = 1; i <= device_count; i++) print "AddDevice=" devices[i] >> "fedora43-ai.container"
+        print "" >> "fedora43-ai.container"
+        print "[Service]" >> "fedora43-ai.container"
+        print "Restart=always" >> "fedora43-ai.container"
+        print "TimeoutStartSec=60" >> "fedora43-ai.container"
+        print "" >> "fedora43-ai.container"
+        print "[Install]" >> "fedora43-ai.container"
+        print "WantedBy=default.target" >> "fedora43-ai.container"
+    }
+    ' "$input"
+}
+
+# ── compose.yml + Quadlet aus merge.yaml generieren ──────────────────
 echo "  Generating compose.yml..."
 echo "  Generating fedora43-ai.container..."
-python3 "$SCRIPT_DIR/config_yaml.py" render "$SCRIPT_DIR"
+render_compose_from_yaml
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 

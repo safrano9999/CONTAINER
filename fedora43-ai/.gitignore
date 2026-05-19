@@ -5,8 +5,8 @@ compose.example
 compose.conf
 config_compose.sh
 merge_compose.sh
-merge.yaml
-merge_yaml.sh
+merge.conf
+merge_conf.sh
 .agents/
 .codex/
 .claude/

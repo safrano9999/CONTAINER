@@ -35,14 +35,14 @@ for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
-MERGE_YAML_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/merge_yaml.sh"
-ln -f "$MERGE_YAML_SH" "$SCRIPT_DIR/merge_yaml.sh"
-bash "$SCRIPT_DIR/merge_yaml.sh" \
+MERGE_CONF_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/merge_conf.sh"
+ln -f "$MERGE_CONF_SH" "$SCRIPT_DIR/merge_conf.sh"
+bash "$SCRIPT_DIR/merge_conf.sh" \
     "$SCRIPT_DIR" \
-    "$SCRIPT_DIR/merge.yaml" \
-    "$SCRIPT_DIR/config.fedora43-ai.yaml" \
+    "$SCRIPT_DIR/merge.conf" \
+    "$SCRIPT_DIR/config.fedora43-ai.conf" \
     "$SCRIPT_DIR/safrano9999" \
-    "config.yaml"
+    "config.conf"
 
 # ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
@@ -54,9 +54,9 @@ if ! $NO_CONFIG; then
     rm -f "$SCRIPT_DIR/$CONTAINER_NAME.container" "$SCRIPT_DIR/docker-compose.yml"
 fi
 
-render_compose_from_yaml() {
-    local input="$SCRIPT_DIR/merge.yaml"
-    [ -f "$input" ] || { echo "No merge.yaml" >&2; exit 1; }
+render_compose_from_conf() {
+    local input="$SCRIPT_DIR/merge.conf"
+    [ -f "$input" ] || { echo "No merge.conf" >&2; exit 1; }
 
     awk -v cwd="$SCRIPT_DIR" -v home="$HOME" '
     function trim(s) {
@@ -67,6 +67,11 @@ render_compose_from_yaml() {
     function val(line) {
         sub(/^[^:]+:[[:space:]]*/, "", line)
         return trim(line)
+    }
+    function clean_value(s) {
+        s = trim(s)
+        if ((s ~ /^".*"$/) || (s ~ /^\047.*\047$/)) s = substr(s, 2, length(s) - 2)
+        return s
     }
     function add_env(key, value) {
         if (key == "" || value == "") return
@@ -100,80 +105,72 @@ render_compose_from_yaml() {
         device_seen[value] = 1
         devices[++device_count] = value
     }
-    function flush_service() {
-        if (service == "") return
-        if (port != "") {
-            host = publish_host
-            if (host == "") host = default_publish_host
-            published = publish_port
-            if (published == "") published = port
-            add_port(host ":" published ":" port)
-            add_env(env_port, port)
-            if (service == "openclaw_gateway") {
-                add_env("OPENCLAW_GATEWAY_PUBLISH_HOST", host)
-                add_env("OPENCLAW_GATEWAY_PUBLISH_PORT", published)
-            }
-        }
-        service = ""
-        section = ""
-        list_key = ""
-        port = ""
-        publish_port = ""
-        publish_host = ""
-        env_port = ""
-        volume_source = ""
+    function split_csv(value, out,    n, i, part) {
+        n = split(value, out, ",")
+        for (i = 1; i <= n; i++) out[i] = trim(out[i])
+        return n
     }
-    /^defaults:/ { flush_service(); scope = "defaults"; next }
-    /^services:/ { flush_service(); scope = "services"; next }
-    scope == "defaults" && $0 ~ /^  publish_host:/ {
-        default_publish_host = val($0)
-        next
+    function skip_env_key(key) {
+        return key == "INJECT_OVERWRITE" || \
+            key ~ /_PUBLISH_HOST$/ || key ~ /_PUBLISH_PORT$/ || \
+            key ~ /_CAPABILITIES$/ || key ~ /_DEVICES$/ || key ~ /_VOLUMES$/
     }
-    scope == "services" && $0 ~ /^  [A-Za-z0-9_-]+:/ {
-        flush_service()
-        service = trim($0)
-        sub(/:$/, "", service)
-        next
-    }
-    service != "" && $0 ~ /^    webui:/ { section = "webui"; list_key = ""; next }
-    service != "" && $0 ~ /^    env:/ { section = "env"; list_key = ""; next }
-    service != "" && $0 ~ /^    container:/ { section = "container"; list_key = ""; next }
-    section == "webui" && $0 ~ /^      port:/ { port = val($0); next }
-    section == "webui" && $0 ~ /^      publish_port:/ { publish_port = val($0); next }
-    section == "webui" && $0 ~ /^      publish_host:/ { publish_host = val($0); next }
-    section == "webui" && $0 ~ /^      env_port:/ { env_port = val($0); next }
-    section == "env" && $0 ~ /^      [A-Za-z_][A-Za-z0-9_]*:/ {
-        env_key = trim($1)
-        sub(/:$/, "", env_key)
-        add_env(env_key, val($0))
-        next
-    }
-    section == "container" && $0 ~ /^      capabilities:/ { list_key = "capabilities"; next }
-    section == "container" && $0 ~ /^      devices:/ { list_key = "devices"; next }
-    section == "container" && $0 ~ /^      volumes:/ { list_key = "volumes"; next }
-    section == "container" && list_key == "capabilities" && $0 ~ /^        - / {
-        item = trim($0); sub(/^- /, "", item); add_cap(item); next
-    }
-    section == "container" && list_key == "devices" && $0 ~ /^        - / {
-        item = trim($0); sub(/^- /, "", item); add_device(item); next
-    }
-    section == "container" && list_key == "volumes" && $0 ~ /^        - source:/ {
-        volume_source = val($0)
-        next
-    }
-    section == "container" && list_key == "volumes" && volume_source != "" && $0 ~ /^          target:/ {
-        add_volume(volume_source ":" val($0), volume_source)
-        volume_source = ""
-        next
-    }
-    section == "container" && list_key == "volumes" && $0 ~ /^        - / {
-        item = trim($0); sub(/^- /, "", item)
-        split(item, parts, ":")
-        add_volume(item, parts[1])
+    /^[[:space:]]*($|#)/ { next }
+    {
+        line = $0
+        sub(/\r$/, "", line)
+        sub(/^[[:space:]]*export[[:space:]]+/, "", line)
+        if (line !~ /^[A-Za-z_][A-Za-z0-9_]*=/) next
+        key = line
+        sub(/=.*/, "", key)
+        value = line
+        sub(/^[^=]*=/, "", value)
+        value = clean_value(value)
+        if (!(key in values)) order[++value_count] = key
+        values[key] = value
         next
     }
     END {
-        flush_service()
+        default_publish_host = values["HOST"]
+        if (default_publish_host == "") default_publish_host = "127.0.0.1"
+
+        for (i = 1; i <= value_count; i++) {
+            key = order[i]
+            value = values[key]
+            if (!skip_env_key(key)) add_env(key, value)
+        }
+
+        for (i = 1; i <= value_count; i++) {
+            key = order[i]
+            if (key !~ /_PUBLISH_PORT$/) continue
+            prefix = key
+            sub(/_PUBLISH_PORT$/, "", prefix)
+            port = values[prefix "_PORT"]
+            if (port == "") port = values[key]
+            host = values[prefix "_PUBLISH_HOST"]
+            if (host == "") host = default_publish_host
+            add_port(host ":" values[key] ":" port)
+            add_env(prefix "_PUBLISH_HOST", host)
+            add_env(prefix "_PUBLISH_PORT", values[key])
+        }
+
+        for (i = 1; i <= value_count; i++) {
+            key = order[i]
+            value = values[key]
+            if (key ~ /_CAPABILITIES$/) {
+                n = split_csv(value, items)
+                for (j = 1; j <= n; j++) add_cap(items[j])
+            } else if (key ~ /_DEVICES$/) {
+                n = split_csv(value, items)
+                for (j = 1; j <= n; j++) add_device(items[j])
+            } else if (key ~ /_VOLUMES$/) {
+                n = split_csv(value, items)
+                for (j = 1; j <= n; j++) {
+                    split(items[j], parts, ":")
+                    add_volume(items[j], parts[1])
+                }
+            }
+        }
 
         print "services:" > "compose.yml"
         print "  fedora43-ai:" >> "compose.yml"
@@ -238,10 +235,10 @@ render_compose_from_yaml() {
     ' "$input"
 }
 
-# ── compose.yml + Quadlet aus merge.yaml generieren ──────────────────
+# ── compose.yml + Quadlet aus merge.conf generieren ──────────────────
 echo "  Generating compose.yml..."
 echo "  Generating fedora43-ai.container..."
-render_compose_from_yaml
+render_compose_from_conf
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 

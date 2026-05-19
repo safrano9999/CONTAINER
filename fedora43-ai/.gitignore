@@ -5,6 +5,10 @@ compose.example
 compose.conf
 config_compose.sh
 merge_compose.sh
+merged_config.yaml
+config.local.yaml
+merged_compose.yaml
+config_yaml.py
 .agents/
 .codex/
 .claude/

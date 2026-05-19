@@ -1,0 +1,28 @@
+defaults:
+  publish_host: 127.0.0.1
+
+services:
+  bip39:
+    title: BIP39 web UI
+    webui:
+      port: 11002
+      publish_port: 11002
+      env_port: BIP39_PORT
+
+  openclaw_gateway:
+    title: OpenClaw Gateway
+    webui:
+      port: 18789
+      publish_port: 20789
+
+  hermes_dashboard:
+    title: Hermes dashboard
+    webui:
+      port: 9119
+      publish_port: 19119
+
+  hermes_api:
+    title: Hermes OpenAI compatible API
+    webui:
+      port: 8642
+      publish_port: 18642

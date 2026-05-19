@@ -5,18 +5,16 @@ services:
       dockerfile: Containerfile
     image: localhost/fedora43-ai:latest
     container_name: ${INSTANCE:-fedora43-ai}
-
     ports:
-      - "127.0.0.1:11002:11002"
-      - "127.0.0.1:20789:18789"
-      - "127.0.0.1:19119:9119"
-      - "127.0.0.1:18642:8642"
-      - "127.0.0.1:10999:10999"
-      - "127.0.0.1:11000:11000"
-      - "127.0.0.1:11001:11001"
+      - 127.0.0.1:11002:11002
+      - 127.0.0.1:20789:18789
+      - 127.0.0.1:19119:9119
+      - 127.0.0.1:18642:8642
+      - 127.0.0.1:10999:10999
+      - 127.0.0.1:11000:11000
+      - 127.0.0.1:11001:11001
     env_file:
       - .env
-
     environment:
       - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - DISPLAY=${DISPLAY:-:0}
@@ -26,7 +24,12 @@ services:
       - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent
       - OPENCLAW_START=1
       - HERMES_START=1
-
+      - BIP39_PORT=11002
+      - OPENCLAW_GATEWAY_PUBLISH_HOST=127.0.0.1
+      - OPENCLAW_GATEWAY_PUBLISH_PORT=20789
+      - CITADEL_WEBUI_PORT=10999
+      - CODEANALYST_PORT=11000
+      - JUGO_PORT=11001
     volumes:
       - ${HOST_HOME_DIR:-home}:/home
       - ${HOST_SRV_DIR}:/srv

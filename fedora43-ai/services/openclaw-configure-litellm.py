@@ -12,6 +12,8 @@ from pathlib import Path
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
 DEFAULT_MODEL = "deepseek-v4-flash"
 DISCOVERY_TIMEOUT_SECONDS = 5
+OPENCLAW_GATEWAY_INTERNAL_PORT = 18789
+OPENCLAW_GATEWAY_HOST_PORT = 20789
 VIKAI_BOOTSTRAP_SCRIPT = Path("/usr/local/bin/vikai-bootstrap-openclaw-agents")
 VIKAI_TOKEN_ENV = ("TOKEN_WORKER", "TOKEN_ARCHITECT", "TOKEN_QC")
 
@@ -36,6 +38,21 @@ def _litellm_base_url() -> str:
     if base.endswith("/v1"):
         base = base[:-3].rstrip("/")
     return f"{base}:{port}/v1"
+
+
+def _origin(host: str, port: int) -> str:
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{port}"
+
+
+def _control_ui_allowed_origins() -> list[str]:
+    host = os.environ.get("HOST", "127.0.0.1").strip() or "127.0.0.1"
+    origins = [
+        _origin(host, OPENCLAW_GATEWAY_INTERNAL_PORT),
+        _origin(host, OPENCLAW_GATEWAY_HOST_PORT),
+    ]
+    return list(dict.fromkeys(origins))
 
 
 def _discover_litellm_models(fallback_model: str) -> tuple[list[str], bool]:
@@ -101,6 +118,13 @@ def main() -> None:
     max_tokens = _int_env("OPENCLAW_LITELLM_MAX_TOKENS", 8192)
 
     config = json.loads(CONFIG_PATH.read_text())
+
+    gateway = config.setdefault("gateway", {})
+    gateway["bind"] = "lan"
+    gateway["port"] = OPENCLAW_GATEWAY_INTERNAL_PORT
+    control_ui = gateway.setdefault("controlUi", {})
+    control_ui["allowedOrigins"] = _control_ui_allowed_origins()
+    control_ui.pop("dangerouslyAllowHostHeaderOriginFallback", None)
 
     provider = (
         config.setdefault("models", {})
@@ -209,6 +233,10 @@ def main() -> None:
         print("OpenClaw Telegram configured for default account -> main agent")
     if brave_api_key:
         print("OpenClaw Brave web search configured from BRAVE_API_KEY")
+    print(
+        "OpenClaw Control UI origins configured: "
+        + ", ".join(control_ui["allowedOrigins"])
+    )
     if vikai_bootstrapped:
         print("OpenClaw VikAI agents configured from TOKEN_WORKER/TOKEN_ARCHITECT/TOKEN_QC")
 

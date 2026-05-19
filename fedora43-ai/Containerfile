@@ -161,22 +161,27 @@ ARG CODEANALYST_PORT=11000
 ARG JUGO_PORT=11001
 ARG CITADEL_WEBUI_PORT=10999
 ARG BIP39_PORT=11002
-EXPOSE ${CODEANALYST_PORT} ${JUGO_PORT} ${CITADEL_WEBUI_PORT} ${BIP39_PORT}
+EXPOSE ${CODEANALYST_PORT} ${JUGO_PORT} ${CITADEL_WEBUI_PORT} ${BIP39_PORT} 18789 9119 8642
 
 COPY services/*.service /etc/systemd/system/
 
 RUN systemctl enable codeanalyst.service jugo.service citadel.service \
     citadel-setup.service citadel-scan.service bip39.service codex-auth.service \
-    tailscaled.service tailscale-up.service openclaw.service hermes.service
+    tailscaled.service tailscale-up.service openclaw.service hermes.service \
+    hermes-dashboard.service
 
 RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
 
 COPY services/openclaw-configure-litellm.py /usr/local/bin/openclaw-configure-litellm
 COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
+COPY services/hermes-patch-ssl-verify.py /usr/local/bin/hermes-patch-ssl-verify
 COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
 
 RUN chmod +x /usr/local/bin/openclaw-configure-litellm /usr/local/bin/hermes-configure-litellm \
+    /usr/local/bin/hermes-patch-ssl-verify \
     /usr/local/bin/vikai-bootstrap-openclaw-agents
+
+RUN /usr/local/bin/hermes-patch-ssl-verify
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

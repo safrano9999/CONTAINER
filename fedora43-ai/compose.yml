@@ -5,31 +5,16 @@ services:
       dockerfile: Containerfile
     image: localhost/fedora43-ai:latest
     container_name: ${INSTANCE:-fedora43-ai}
-
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-
-    devices:
-      - /dev/net/tun
-
-    #security_opt:
-    #  - label=disable
-
-    #tmpfs:
-    #  - /tmp
-    #  - /run
-    #  - /run/lock
-
     ports:
-      - "127.0.0.1:11000:11000"
-      - "127.0.0.1:11001:11001"
-      - "127.0.0.1:10999:10999"
-      - "127.0.0.1:11002:11002"
-
+      - 127.0.0.1:11002:11002
+      - 127.0.0.1:20789:18789
+      - 127.0.0.1:19119:9119
+      - 127.0.0.1:18642:8642
+      - 127.0.0.1:11000:11000
+      - 127.0.0.1:11001:11001
+      - 127.0.0.1:10999:10999
     env_file:
       - .env
-
     environment:
       - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - DISPLAY=${DISPLAY:-:0}
@@ -39,15 +24,18 @@ services:
       - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent
       - OPENCLAW_START=1
       - HERMES_START=1
-
     volumes:
       - ${HOST_HOME_DIR:-home}:/home
       - ${HOST_SRV_DIR}:/srv
       - ${HOST_ROOT_DIR:-root}:/root
-      - ${HOST_TAILSCALE_DIR:-tailscale}:/var/lib/tailscale
       - /tmp/.X11-unix:/tmp/.X11-unix
-
+      - tailscale:/var/lib/tailscale
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun
 volumes:
-  home:
-  root:
-  tailscale:
+  home: {}
+  root: {}
+  tailscale: {}

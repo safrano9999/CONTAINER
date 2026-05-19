@@ -112,6 +112,7 @@ def ensure_agent_config(config: dict, agent: dict) -> Path:
         "target": "last",
         "directPolicy": "allow",
     }
+    agent_dir.mkdir(parents=True, exist_ok=True)
     return workspace
 
 

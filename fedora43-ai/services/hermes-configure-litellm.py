@@ -39,6 +39,8 @@ def _model_name() -> str:
     )
     if model.startswith("litellm/"):
         model = model.removeprefix("litellm/")
+    if model.startswith("custom/"):
+        model = model.removeprefix("custom/")
     if not model:
         raise SystemExit("HERMES_LITELLM_MODEL must not be empty")
     return model
@@ -106,8 +108,9 @@ def main() -> None:
         config["model"] = model_config
 
     model_config["provider"] = "custom"
-    model_config["default"] = model
+    model_config["default"] = f"custom/{model}"
     model_config["base_url"] = base_url
+    model_config["ssl_verify"] = False
     if discovered_models:
         model_config["available"] = discovered_models
     model_config.pop("api_key", None)

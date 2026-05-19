@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes Agent dashboard
+After=hermes.service
+Wants=hermes.service
+
+[Service]
+Type=simple
+PassEnvironment=HERMES_HOME HERMES_START HERMES_DASHBOARD_TUI
+Environment=HERMES_HOME=/root/hermes-home
+ExecCondition=/bin/bash -c '[ "$${HERMES_START:-1}" = "1" ]'
+ExecStart=/bin/bash -lc 'exec /usr/local/bin/hermes dashboard --host 0.0.0.0 --port 9119 --no-open --insecure'
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

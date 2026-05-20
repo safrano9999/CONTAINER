@@ -46,7 +46,7 @@ bash "$SCRIPT_DIR/merge_conf.sh" \
 
 # ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
-    CONFIG_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/config_template.sh"
+    CONFIG_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/config.sh"
     ln -f "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
     echo ""
     (cd "$SCRIPT_DIR" && bash config.sh)

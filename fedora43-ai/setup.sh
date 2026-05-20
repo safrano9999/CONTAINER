@@ -39,10 +39,10 @@ MERGE_CONF_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/merge_conf.sh"
 ln -f "$MERGE_CONF_SH" "$SCRIPT_DIR/merge_conf.sh"
 bash "$SCRIPT_DIR/merge_conf.sh" \
     "$SCRIPT_DIR" \
-    "$SCRIPT_DIR/merge.conf" \
-    "$SCRIPT_DIR/config.fedora43-ai.conf" \
+    "$SCRIPT_DIR/config.conf_example" \
+    "$SCRIPT_DIR/config.fedora43-ai.conf_example" \
     "$SCRIPT_DIR/safrano9999" \
-    "config.conf"
+    "config.conf_example"
 
 # ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
@@ -55,8 +55,11 @@ if ! $NO_CONFIG; then
 fi
 
 render_compose_from_conf() {
-    local input="$SCRIPT_DIR/merge.conf"
-    [ -f "$input" ] || { echo "No merge.conf" >&2; exit 1; }
+    local input="$SCRIPT_DIR/config.conf"
+    if [ ! -f "$input" ]; then
+        input="$SCRIPT_DIR/config.conf_example"
+    fi
+    [ -f "$input" ] || { echo "No config.conf or config.conf_example" >&2; exit 1; }
 
     awk -v cwd="$SCRIPT_DIR" -v home="$HOME" '
     function trim(s) {

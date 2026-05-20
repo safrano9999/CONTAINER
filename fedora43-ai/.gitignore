@@ -7,6 +7,8 @@ config_compose.sh
 merge_compose.sh
 merge.conf
 merge_conf.sh
+config.conf
+config.conf_example
 .agents/
 .codex/
 .claude/

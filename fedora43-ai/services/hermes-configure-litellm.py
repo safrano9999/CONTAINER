@@ -107,17 +107,30 @@ def main() -> None:
         model_config = {}
         config["model"] = model_config
 
-    model_config["provider"] = "custom"
-    model_config["default"] = f"custom/{model}"
+    model_config["provider"] = "litellm"
+    model_config["default"] = model
     model_config["base_url"] = base_url
     model_config["ssl_verify"] = False
     if discovered_models:
         model_config["available"] = discovered_models
     model_config.pop("api_key", None)
 
+    providers_config = config.setdefault("providers", {})
+    if not isinstance(providers_config, dict):
+        providers_config = {}
+        config["providers"] = providers_config
+    providers_config["litellm"] = {
+        "name": "LiteLLM",
+        "base_url": base_url,
+        "key_env": "LITELLM_API_KEY",
+        "default_model": model,
+        "api_mode": "chat_completions",
+        "models": {name: {} for name in (discovered_models or [model])},
+    }
+
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     os.chmod(config_path, 0o600)
-    print(f"Hermes LiteLLM model configured: custom/{model}")
+    print(f"Hermes LiteLLM model configured: {model}")
     print(f"Hermes LiteLLM base URL configured: {base_url}")
     if discovered_models:
         print(f"Hermes LiteLLM models discovered: {len(discovered_models)}")

@@ -161,17 +161,17 @@ COPY services/*.service /etc/systemd/system/
 
 RUN systemctl enable codeanalyst.service jugo.service citadel.service \
     citadel-setup.service citadel-scan.service bip39.service codex-auth.service \
-    tailscaled.service tailscale-up.service openclaw.service hermes.service \
+    tailscaled.service tailscale-up.service openclaw-config.service openclaw.service hermes.service \
     hermes-dashboard.service
 
 RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
 
-COPY services/openclaw-configure-litellm.py /usr/local/bin/openclaw-configure-litellm
+COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
 COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
 COPY services/hermes-patch-ssl-verify.py /usr/local/bin/hermes-patch-ssl-verify
 COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
 
-RUN chmod +x /usr/local/bin/openclaw-configure-litellm /usr/local/bin/hermes-configure-litellm \
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-litellm \
     /usr/local/bin/hermes-patch-ssl-verify \
     /usr/local/bin/vikai-bootstrap-openclaw-agents
 

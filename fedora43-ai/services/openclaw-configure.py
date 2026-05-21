@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure OpenClaw's LiteLLM model after `openclaw onboard` rewrites config."""
+"""Configure OpenClaw before starting the gateway."""
 
 import json
 import os
@@ -40,10 +40,74 @@ def _litellm_base_url() -> str:
     return f"{base}:{port}/v1"
 
 
+def _ensure_openclaw_config() -> None:
+    if CONFIG_PATH.exists() and CONFIG_PATH.stat().st_size > 0:
+        return
+
+    api_key = os.environ.get("LITELLM_API_KEY", "").strip()
+    base_url = _litellm_base_url()
+    if not api_key or not base_url:
+        raise SystemExit("OpenClaw onboarding needs LITELLM_API_KEY, LITELLM_URL, and LITELLM_PORT")
+
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "openclaw",
+            "onboard",
+            "--non-interactive",
+            "--accept-risk",
+            "--skip-health",
+            "--auth-choice",
+            "litellm-api-key",
+            "--litellm-api-key",
+            api_key,
+            "--custom-base-url",
+            base_url,
+        ],
+        check=True,
+    )
+
+
 def _origin(host: str, port: int) -> str:
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
     return f"http://{host}:{port}"
+
+
+def _tailscale_hosts() -> list[str]:
+    hosts: list[str] = []
+    try:
+        result = subprocess.run(
+            ["tailscale", "status", "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        payload = json.loads(result.stdout)
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+    ):
+        payload = {}
+
+    self_info = payload.get("Self") if isinstance(payload, dict) else {}
+    if isinstance(self_info, dict):
+        dns_name = str(self_info.get("DNSName") or "").strip().rstrip(".")
+        if dns_name:
+            hosts.append(dns_name)
+        for ip_addr in self_info.get("TailscaleIPs") or []:
+            ip_addr = str(ip_addr).strip()
+            if ip_addr:
+                hosts.append(ip_addr)
+
+    ts_hostname = os.environ.get("TS_HOSTNAME", "").strip().rstrip(".")
+    if "." in ts_hostname:
+        hosts.append(ts_hostname)
+
+    return list(dict.fromkeys(hosts))
 
 
 def _control_ui_allowed_origins() -> list[str]:
@@ -52,6 +116,13 @@ def _control_ui_allowed_origins() -> list[str]:
         _origin(host, OPENCLAW_GATEWAY_INTERNAL_PORT),
         _origin(host, OPENCLAW_GATEWAY_HOST_PORT),
     ]
+    for tailscale_host in _tailscale_hosts():
+        origins.extend(
+            [
+                _origin(tailscale_host, OPENCLAW_GATEWAY_INTERNAL_PORT),
+                _origin(tailscale_host, OPENCLAW_GATEWAY_HOST_PORT),
+            ]
+        )
     return list(dict.fromkeys(origins))
 
 
@@ -90,6 +161,94 @@ def _discover_litellm_models(fallback_model: str) -> tuple[list[str], bool]:
     return models, bool(discovered)
 
 
+def _openclaw_model_entry(
+    model_id: str,
+    primary_model: str,
+    primary_name: str,
+    context_window: int,
+    max_tokens: int,
+) -> dict:
+    return {
+        "id": model_id,
+        "name": primary_name if model_id == primary_model else model_id,
+        "reasoning": True,
+        "input": ["text"],
+        "contextWindow": context_window,
+        "maxTokens": max_tokens,
+    }
+
+
+def _ensure_main_agent(config: dict) -> None:
+    agents = config.setdefault("agents", {})
+    defaults = agents.setdefault("defaults", {})
+    default_workspace = str(CONFIG_PATH.parent / "workspace")
+    defaults.setdefault("workspace", default_workspace)
+
+    agent_list = agents.setdefault("list", [])
+    main_entry = next(
+        (item for item in agent_list if isinstance(item, dict) and item.get("id") == "main"),
+        None,
+    )
+    if main_entry is None:
+        main_entry = {"id": "main", "name": "main"}
+    else:
+        agent_list.remove(main_entry)
+
+    main_entry["name"] = main_entry.get("name") or "main"
+    main_entry["workspace"] = main_entry.get("workspace") or default_workspace
+    main_entry["agentDir"] = main_entry.get("agentDir") or str(
+        CONFIG_PATH.parent / "agents" / "main" / "agent"
+    )
+    main_entry["default"] = True
+    main_entry.pop("models", None)
+    agent_list.insert(0, main_entry)
+
+    for entry in agent_list[1:]:
+        if isinstance(entry, dict):
+            entry.pop("default", None)
+
+    Path(main_entry["workspace"]).mkdir(parents=True, exist_ok=True)
+    Path(main_entry["agentDir"]).mkdir(parents=True, exist_ok=True)
+
+
+def _remove_model_allowlists(config: dict) -> None:
+    agents = config.setdefault("agents", {})
+    defaults = agents.setdefault("defaults", {})
+    defaults.pop("models", None)
+
+
+def _merge_litellm_models(
+    provider: dict,
+    discovered_models: list[str],
+    primary_model: str,
+    primary_name: str,
+    context_window: int,
+    max_tokens: int,
+) -> list[dict]:
+    merged: dict[str, dict] = {}
+    for item in provider.get("models", []):
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id")
+        if isinstance(model_id, str) and model_id:
+            merged[model_id] = item
+
+    for model_id in discovered_models:
+        existing = merged.get(model_id, {})
+        entry = _openclaw_model_entry(
+            model_id,
+            primary_model,
+            primary_name,
+            context_window,
+            max_tokens,
+        )
+        entry.update(existing)
+        entry["id"] = model_id
+        merged[model_id] = entry
+
+    return list(merged.values())
+
+
 def _maybe_bootstrap_vikai_agents() -> bool:
     present = [name for name in VIKAI_TOKEN_ENV if os.environ.get(name, "").strip()]
     if not present:
@@ -105,6 +264,8 @@ def _maybe_bootstrap_vikai_agents() -> bool:
 
 
 def main() -> None:
+    _ensure_openclaw_config()
+
     model = os.environ.get("OPENCLAW_LITELLM_MODEL", DEFAULT_MODEL).strip()
     if model.startswith("litellm/"):
         model = model.removeprefix("litellm/")
@@ -118,12 +279,14 @@ def main() -> None:
     max_tokens = _int_env("OPENCLAW_LITELLM_MAX_TOKENS", 8192)
 
     config = json.loads(CONFIG_PATH.read_text())
+    _ensure_main_agent(config)
 
     gateway = config.setdefault("gateway", {})
     gateway["bind"] = "lan"
     gateway["port"] = OPENCLAW_GATEWAY_INTERNAL_PORT
     control_ui = gateway.setdefault("controlUi", {})
     control_ui["allowedOrigins"] = _control_ui_allowed_origins()
+    control_ui["dangerouslyDisableDeviceAuth"] = True
     control_ui.pop("dangerouslyAllowHostHeaderOriginFallback", None)
 
     provider = (
@@ -133,35 +296,18 @@ def main() -> None:
     )
     provider["request"] = {"allowPrivateNetwork": True}
 
-    models = provider.setdefault("models", [])
-    existing_model_ids = {
-        item.get("id")
-        for item in models
-        if isinstance(item, dict) and isinstance(item.get("id"), str)
-    }
-    for discovered_model in discovered_models:
-        if discovered_model in existing_model_ids:
-            continue
-        models.append(
-            {
-                "id": discovered_model,
-                "name": model_name if discovered_model == model else discovered_model,
-                "reasoning": True,
-                "input": ["text"],
-                "contextWindow": context_window,
-                "maxTokens": max_tokens,
-            }
-        )
-        existing_model_ids.add(discovered_model)
+    provider["models"] = _merge_litellm_models(
+        provider,
+        discovered_models,
+        model,
+        model_name,
+        context_window,
+        max_tokens,
+    )
 
     defaults = config.setdefault("agents", {}).setdefault("defaults", {})
     defaults.setdefault("model", {})["primary"] = full_model
-    default_models = defaults.setdefault("models", {})
-    for discovered_model in discovered_models:
-        default_models.setdefault(
-            f"litellm/{discovered_model}",
-            {"alias": model_name if discovered_model == model else discovered_model},
-        )
+    _remove_model_allowlists(config)
 
     telegram_token = os.environ.get("TELEGRAMTOKEN_OPENCLAW", "").strip()
     if telegram_token:
@@ -185,21 +331,15 @@ def main() -> None:
             "agentId": "main",
             "session": {"dmScope": "main"},
         }
-        existing_binding = next(
-            (
-                item
-                for item in bindings
-                if isinstance(item, dict)
+        bindings[:] = [
+            item
+            for item in bindings
+            if not (
+                isinstance(item, dict)
                 and item.get("match") == telegram_main_binding["match"]
-                and item.get("agentId") == "main"
-            ),
-            None,
-        )
-        if existing_binding is None:
-            bindings.append(telegram_main_binding)
-        else:
-            existing_binding["type"] = "route"
-            existing_binding.setdefault("session", {})["dmScope"] = "main"
+            )
+        ]
+        bindings.append(telegram_main_binding)
 
     brave_api_key = os.environ.get("BRAVE_API_KEY", "").strip()
     if brave_api_key:
@@ -228,7 +368,10 @@ def main() -> None:
     vikai_bootstrapped = _maybe_bootstrap_vikai_agents()
     print(f"OpenClaw LiteLLM model configured: {full_model}")
     if discovery_ok:
-        print(f"OpenClaw LiteLLM models discovered: {len(discovered_models)}")
+        print(
+            "OpenClaw LiteLLM models discovered: "
+            f"{len(discovered_models)}; models written: {len(provider['models'])}"
+        )
     if telegram_token:
         print("OpenClaw Telegram configured for default account -> main agent")
     if brave_api_key:

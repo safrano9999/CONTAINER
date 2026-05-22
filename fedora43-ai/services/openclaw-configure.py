@@ -282,6 +282,7 @@ def main() -> None:
     _ensure_main_agent(config)
 
     gateway = config.setdefault("gateway", {})
+    gateway["mode"] = "local"
     gateway["bind"] = "lan"
     gateway["port"] = OPENCLAW_GATEWAY_INTERNAL_PORT
     control_ui = gateway.setdefault("controlUi", {})
@@ -289,11 +290,20 @@ def main() -> None:
     control_ui["dangerouslyDisableDeviceAuth"] = True
     control_ui.pop("dangerouslyAllowHostHeaderOriginFallback", None)
 
+    models_config = config.setdefault("models", {})
+    models_config["mode"] = "merge"
     provider = (
-        config.setdefault("models", {})
+        models_config
         .setdefault("providers", {})
         .setdefault("litellm", {})
     )
+    provider["baseUrl"] = _litellm_base_url()
+    provider["api"] = "openai-completions"
+    provider["apiKey"] = {
+        "source": "env",
+        "provider": "default",
+        "id": "LITELLM_API_KEY",
+    }
     provider["request"] = {"allowPrivateNetwork": True}
 
     provider["models"] = _merge_litellm_models(

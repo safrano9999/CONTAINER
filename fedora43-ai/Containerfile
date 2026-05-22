@@ -169,13 +169,16 @@ RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
 COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
 COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
 COPY services/hermes-patch-ssl-verify.py /usr/local/bin/hermes-patch-ssl-verify
+COPY services/openclaw-patch-models-command.py /usr/local/bin/openclaw-patch-models-command
 COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
 
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-litellm \
     /usr/local/bin/hermes-patch-ssl-verify \
+    /usr/local/bin/openclaw-patch-models-command \
     /usr/local/bin/vikai-bootstrap-openclaw-agents
 
 RUN /usr/local/bin/hermes-patch-ssl-verify
+RUN /usr/local/bin/openclaw-patch-models-command
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

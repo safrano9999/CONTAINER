@@ -6,12 +6,14 @@ SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 
 CONFIG_ONLY=false
 NO_CONFIG=false
+FRESH=false
 INSTANCE="fedora43-ai"
 
 for arg in "$@"; do
     case "$arg" in
         --config)    CONFIG_ONLY=true ;;
         --no-config) NO_CONFIG=true ;;
+        --fresh)     FRESH=true; NO_CONFIG=true ;;
         *) INSTANCE="$arg" ;;
     esac
 done
@@ -198,7 +200,7 @@ render_compose_from_conf() {
         for (i = 1; i <= env_count; i++) print "      - " env_order[i] "=" env[env_order[i]] >> "compose.yml"
         print "    volumes:" >> "compose.yml"
         print "      - ${HOST_HOME_DIR:-home}:/home" >> "compose.yml"
-        print "      - ${HOST_SRV_DIR}:/srv" >> "compose.yml"
+        print "      - ${HOST_SRV_DIR:-" home "/fedora43-ai/srv}:/srv" >> "compose.yml"
         print "      - ${HOST_ROOT_DIR:-root}:/root" >> "compose.yml"
         print "      - /tmp/.X11-unix:/tmp/.X11-unix" >> "compose.yml"
         for (i = 1; i <= volume_count; i++) print "      - " volumes[i] >> "compose.yml"
@@ -248,6 +250,14 @@ $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 # ── Image-Quelle wählen ──────────────────────────────────────────────
 DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
 LOCAL_IMAGE="localhost/fedora43-ai:latest"
+
+if $FRESH; then
+    echo ""
+    echo "  Fresh build..."
+    podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+    echo "  Done. Image ready: $LOCAL_IMAGE"
+    exit 0
+fi
 
 echo ""
 echo "  Image source:"

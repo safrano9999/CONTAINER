@@ -233,7 +233,7 @@ Important entries:
 | `OPENCLAW_GATEWAY_TOKEN` | OpenClaw | Gateway token for OpenClaw auth |
 | `OPENCLAW_LITELLM_MODEL` | OpenClaw | Default model, for example `deepseek-v4-flash` |
 | `HERMES_LITELLM_MODEL` | Hermes | Default Hermes model |
-| `API_SERVER_KEY` | Hermes | Optional key for Hermes OpenAI compatible API |
+| `HERMES_API_SERVER_KEY` | Hermes | Optional key for Hermes OpenAI compatible API |
 | `TELEGRAMTOKEN_OPENCLAW` | OpenClaw | Telegram bot token routed to `agent:main:main` |
 | `TELEGRAMTOKEN_HERMES` | Hermes | Telegram bot token for Hermes |
 | `BRAVE_API_KEY` | OpenClaw | Enables Brave search plugin config |
@@ -540,7 +540,7 @@ It exports:
 - `OPENAI_API_KEY=$LITELLM_API_KEY`
 - `OPENAI_BASE_URL=<normalized LiteLLM URL>/v1`
 - `TELEGRAM_BOT_TOKEN` from `TELEGRAMTOKEN_HERMES`, when a real token is set
-- `API_SERVER_*` variables when `API_SERVER_KEY` is set
+- `API_SERVER_*` variables when `HERMES_API_SERVER_KEY` is set
 
 The service intentionally does not force a custom provider/model through
 `HERMES_INFERENCE_PROVIDER` or `HERMES_INFERENCE_MODEL`; Hermes should use the
@@ -558,17 +558,11 @@ The default host mapping is `19119`.
 
 ### Hermes OpenAI Compatible API
 
-If `API_SERVER_KEY` is set, `hermes.service` enables the Hermes API server:
+If `HERMES_API_SERVER_KEY` is set, `hermes.service` enables the Hermes API server:
 
 - host: `0.0.0.0`
 - internal port: `8642`
 - default host port: `18642`
-
-The key is described in `env.example` as:
-
-```text
-hermes openai/v1 base key (can be left empty)
-```
 
 ### Hermes SSL Verify Patch
 
@@ -1110,4 +1104,3 @@ qc
 - Published ports are controlled outside the container by compose/Quadlet.
 - Internal services bind to `0.0.0.0` because access is controlled by published
   port mappings.
-

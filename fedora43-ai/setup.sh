@@ -28,7 +28,7 @@ sync_repo() {
 }
 
 # ── Repos klonen oder aktualisieren ──────────────────────────────────
-REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH)
+REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH NAPOLEON_HILLS_AI_MASTERMIND_CLASSES)
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
@@ -77,6 +77,12 @@ render_compose_from_conf() {
         s = trim(s)
         if ((s ~ /^".*"$/) || (s ~ /^\047.*\047$/)) s = substr(s, 2, length(s) - 2)
         return s
+    }
+    function yaml_dq(s,    t) {
+        t = s
+        gsub(/\\/, "\\\\", t)
+        gsub(/"/, "\\\"", t)
+        return "\"" t "\""
     }
     function add_env(key, value) {
         if (key == "" || value == "") return
@@ -185,25 +191,17 @@ render_compose_from_conf() {
         print "    image: localhost/fedora43-ai:latest" >> "compose.yml"
         print "    container_name: ${INSTANCE:-fedora43-ai}" >> "compose.yml"
         print "    ports:" >> "compose.yml"
-        for (i = 1; i <= port_count; i++) print "      - " ports[i] >> "compose.yml"
+        for (i = 1; i <= port_count; i++) print "      - " yaml_dq(ports[i]) >> "compose.yml"
         print "    env_file:" >> "compose.yml"
         print "      - .env" >> "compose.yml"
         print "    environment:" >> "compose.yml"
-        print "      - PATH=/usr/local/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> "compose.yml"
-        print "      - DISPLAY=${DISPLAY:-:0}" >> "compose.yml"
-        print "      - NO_AT_BRIDGE=1" >> "compose.yml"
-        print "      - XDG_RUNTIME_DIR=/tmp/runtime-root" >> "compose.yml"
-        print "      - HERMES_HOME=/root/hermes-home" >> "compose.yml"
-        print "      - HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent" >> "compose.yml"
-        print "      - OPENCLAW_START=1" >> "compose.yml"
-        print "      - HERMES_START=1" >> "compose.yml"
-        for (i = 1; i <= env_count; i++) print "      - " env_order[i] "=" env[env_order[i]] >> "compose.yml"
+        for (i = 1; i <= env_count; i++) print "      - " yaml_dq(env_order[i] "=" env[env_order[i]]) >> "compose.yml"
         print "    volumes:" >> "compose.yml"
-        print "      - ${HOST_HOME_DIR:-home}:/home" >> "compose.yml"
-        print "      - ${HOST_SRV_DIR:-" home "/fedora43-ai/srv}:/srv" >> "compose.yml"
-        print "      - ${HOST_ROOT_DIR:-root}:/root" >> "compose.yml"
-        print "      - /tmp/.X11-unix:/tmp/.X11-unix" >> "compose.yml"
-        for (i = 1; i <= volume_count; i++) print "      - " volumes[i] >> "compose.yml"
+        print "      - " yaml_dq("${HOST_HOME_DIR:-home}:/home") >> "compose.yml"
+        print "      - " yaml_dq("${HOST_SRV_DIR:-" home "/fedora43-ai/srv}:/srv") >> "compose.yml"
+        print "      - " yaml_dq("${HOST_ROOT_DIR:-root}:/root") >> "compose.yml"
+        print "      - " yaml_dq("/tmp/.X11-unix:/tmp/.X11-unix") >> "compose.yml"
+        for (i = 1; i <= volume_count; i++) print "      - " yaml_dq(volumes[i]) >> "compose.yml"
         if (cap_count > 0) {
             print "    cap_add:" >> "compose.yml"
             for (i = 1; i <= cap_count; i++) print "      - " caps[i] >> "compose.yml"
@@ -221,8 +219,6 @@ render_compose_from_conf() {
         print "ContainerName=fedora43-ai" >> "fedora43-ai.container"
         print "Image=localhost/fedora43-ai:latest" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/.env" >> "fedora43-ai.container"
-        print "Environment=OPENCLAW_START=1" >> "fedora43-ai.container"
-        print "Environment=HERMES_START=1" >> "fedora43-ai.container"
         for (i = 1; i <= env_count; i++) print "Environment=" env_order[i] "=" env[env_order[i]] >> "fedora43-ai.container"
         for (i = 1; i <= port_count; i++) print "PublishPort=" ports[i] >> "fedora43-ai.container"
         print "Volume=" home "/fedora43-ai/srv:/srv" >> "fedora43-ai.container"

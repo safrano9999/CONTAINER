@@ -1,13 +1,9 @@
 FROM quay.io/fedora/fedora:43
 
-ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
-ENV UV_CACHE_DIR=/usr/local/share/uv/cache
-ENV PATH=/root/.local/share/solana/install/active_release/bin:${PATH}
-ENV OPENCLAW_LITELLM_MODEL=deepseek-v4-flash
-ENV ELECTRUM_VERSION=4.7.2
-ENV LND_VERSION=v0.20.1-beta
-ENV GETH_VERSION=1.17.2
-ENV GETH_COMMIT=be4dc0c4
+ARG ELECTRUM_VERSION=4.7.2
+ARG LND_VERSION=v0.20.1-beta
+ARG GETH_VERSION=1.17.2
+ARG GETH_COMMIT=be4dc0c4
 
 # DNF Cache Mount: Behält heruntergeladene RPMs über Builds hinweg,
 # falls der Layer neu gebaut werden muss.
@@ -30,9 +26,13 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     tailscale
 
 RUN curl -sSfL https://release.anza.xyz/stable/install | sh \
+ && find /root/.local/share/solana/install/active_release/bin -maxdepth 1 -type f -executable \
+      -exec ln -sf {} /usr/local/bin/ \; \
  && solana --version
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && ln -sf /root/.local/bin/uv /usr/local/bin/uv \
+ && ln -sf /root/.local/bin/uvx /usr/local/bin/uvx
 
 RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /usr/local/lib/hermes-agent
 
@@ -117,26 +117,8 @@ RUN gpgconf --kill all && rm -rf /root/.gnupg \
 
 RUN useradd -m -s /bin/bash appuser || true
 
-RUN cat >/etc/profile.d/gui-container.sh <<'EOS'
-export DISPLAY="${DISPLAY:-:0}"
-export NO_AT_BRIDGE="${NO_AT_BRIDGE:-1}"
-export HERMES_HOME="${HERMES_HOME:-/root/hermes-home}"
-export HERMES_INSTALL_DIR="${HERMES_INSTALL_DIR:-/usr/local/lib/hermes-agent}"
-export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/usr/local/share/uv/python}"
-export UV_CACHE_DIR="${UV_CACHE_DIR:-/usr/local/share/uv/cache}"
-
-if [ -z "$XDG_RUNTIME_DIR" ] || [ "$XDG_RUNTIME_DIR" = "/tmp" ]; then
-  export XDG_RUNTIME_DIR="/tmp/runtime-${USER:-container}"
-fi
-
-mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
-chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
-EOS
-
-RUN cat >>/etc/bashrc <<'EOS'
-
-[ -f /etc/profile.d/gui-container.sh ] && . /etc/profile.d/gui-container.sh
-EOS
+RUN mkdir -p /tmp/runtime-root \
+ && chmod 700 /tmp/runtime-root
 
 COPY requirements.txt /requirements.txt
 
@@ -148,6 +130,7 @@ COPY safrano9999/JUGO /opt/safrano9999/JUGO
 COPY safrano9999/CITADEL /opt/safrano9999/CITADEL
 COPY safrano9999/VikAI /opt/safrano9999/VikAI
 COPY safrano9999/PV_D-A-CH /opt/safrano9999/PV_D-A-CH
+COPY safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES /opt/safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
@@ -160,7 +143,7 @@ RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
 
 COPY services/*.service /etc/systemd/system/
 
-RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service \
+RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service napoleon.service \
     citadel-setup.service citadel-scan.service bip39.service codex-auth.service \
     tailscaled.service tailscale-up.service openclaw-config.service openclaw.service hermes.service \
     hermes-dashboard.service

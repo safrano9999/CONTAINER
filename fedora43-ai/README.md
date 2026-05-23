@@ -292,10 +292,7 @@ Generated compose always includes:
 
 - `.env` as `env_file`
 - `/tmp/.X11-unix:/tmp/.X11-unix`
-- `HERMES_HOME=/root/hermes-home`
-- `HERMES_INSTALL_DIR=/usr/local/lib/hermes-agent`
-- `OPENCLAW_START=1`
-- `HERMES_START=1`
+- environment values rendered from `config.conf`
 
 Generated Quadlet always includes:
 

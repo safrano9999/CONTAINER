@@ -21,3 +21,6 @@ HERMES_API_SERVER_PORT=8642
 
 # Hermes OpenAI compatible API host port
 HERMES_API_SERVER_PUBLISH_PORT=18642
+
+# PV_D-A-CH database host from inside the Fedora container
+PV_DACH_DB_HOST=host.containers.internal

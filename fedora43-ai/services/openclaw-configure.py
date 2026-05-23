@@ -351,6 +351,10 @@ def main() -> None:
         ]
         bindings.append(telegram_main_binding)
 
+    if telegram_token:
+        commands = config.setdefault("commands", {})
+        commands["ownerAllowFrom"] = ["*"]
+
     brave_api_key = os.environ.get("BRAVE_API_KEY", "").strip()
     if brave_api_key:
         web_search = (
@@ -384,6 +388,8 @@ def main() -> None:
         )
     if telegram_token:
         print("OpenClaw Telegram configured for default account -> main agent")
+    if telegram_token:
+        print("OpenClaw Telegram command owners allowed for all Telegram senders")
     if brave_api_key:
         print("OpenClaw Brave web search configured from BRAVE_API_KEY")
     print(

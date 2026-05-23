@@ -1,4 +1,5 @@
 fedora43-ai/.env
+fedora43-ai/.env2
 fedora43-ai/docker-compose.yml
 fedora43-ai/env.example
 fedora43-ai/fedora43-ai.container

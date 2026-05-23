@@ -25,6 +25,9 @@ At a high level the image includes:
   - `JUGO`
   - `CITADEL`
   - `VikAI`
+  - `PV_D-A-CH`
+  - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
+  - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
 - Tailscale support inside the container.
 - Crypto tools:
   - BIP39 offline web page
@@ -121,6 +124,9 @@ Run:
    - `JUGO`
    - `CITADEL`
    - `VikAI`
+   - `PV_D-A-CH`
+   - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
+   - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
 3. Runs `merge.sh`.
 4. Merges all `env.example` files into the local generated `env.example`.
 5. Merges all `requirements.txt` files into the local generated
@@ -884,6 +890,25 @@ The image verifies installation with:
 
 ```bash
 solana --version
+```
+
+### Solana Air-Gapped Workflow
+
+The `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW` repo is copied into the image at:
+
+```text
+/opt/safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
+```
+
+It is included as a lightweight shell workflow, not as a systemd web service.
+The Fedora image provides the runtime tools used by the scripts:
+
+```bash
+solana
+solana-keygen
+qrencode
+zbarcam
+bc
 ```
 
 ## Auth And Tokens

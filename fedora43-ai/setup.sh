@@ -28,7 +28,7 @@ sync_repo() {
 }
 
 # ── Repos klonen oder aktualisieren ──────────────────────────────────
-REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH NAPOLEON_HILLS_AI_MASTERMIND_CLASSES)
+REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH NAPOLEON_HILLS_AI_MASTERMIND_CLASSES SOLANA_AIRGAPPED_DEBIAN_WORKFLOW)
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done

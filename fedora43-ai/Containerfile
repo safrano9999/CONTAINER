@@ -147,6 +147,7 @@ COPY safrano9999/CODEANALYST /opt/safrano9999/CODEANALYST
 COPY safrano9999/JUGO /opt/safrano9999/JUGO
 COPY safrano9999/CITADEL /opt/safrano9999/CITADEL
 COPY safrano9999/VikAI /opt/safrano9999/VikAI
+COPY safrano9999/PV_D-A-CH /opt/safrano9999/PV_D-A-CH
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
@@ -159,7 +160,7 @@ RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
 
 COPY services/*.service /etc/systemd/system/
 
-RUN systemctl enable codeanalyst.service jugo.service citadel.service \
+RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service \
     citadel-setup.service citadel-scan.service bip39.service codex-auth.service \
     tailscaled.service tailscale-up.service openclaw-config.service openclaw.service hermes.service \
     hermes-dashboard.service

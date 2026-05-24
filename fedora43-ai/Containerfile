@@ -164,7 +164,7 @@ RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-l
     /usr/local/bin/vikai-bootstrap-openclaw-agents
 
 RUN /usr/local/bin/hermes-patch-ssl-verify
-RUN /usr/local/bin/openclaw-patch-models-command
+#RUN /usr/local/bin/openclaw-patch-models-command
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

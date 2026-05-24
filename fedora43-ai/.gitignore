@@ -15,3 +15,4 @@ config.conf_example
 .claude/
 fedora43-ai.container
 compose.yml
+VIDEOS/

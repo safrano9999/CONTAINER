@@ -7,6 +7,7 @@ Wants=tailscale-up.service
 Type=simple
 PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL HERMES_LITELLM_MODEL HERMES_HOME HERMES_START TELEGRAMTOKEN_HERMES HERMES_API_SERVER_KEY HERMES_API_SERVER_PORT HERMES_API_SERVER_HOST API_SERVER_KEY API_SERVER_CORS_ORIGINS API_SERVER_MODEL_NAME
 Environment=HERMES_HOME=/root/hermes-home
+Environment=HOME=/root
 ExecCondition=/bin/bash -c '[ "$${HERMES_START:-1}" = "1" ] && [ -n "$$LITELLM_API_KEY" ] && [ -n "$$LITELLM_URL" ] && [ -n "$$LITELLM_PORT" ]'
 ExecStartPre=/usr/local/bin/hermes-patch-ssl-verify
 ExecStartPre=/usr/local/bin/hermes-configure-litellm
@@ -14,6 +15,7 @@ ExecStart=/bin/bash -lc 'set -e; base="$${LITELLM_URL%/}"; base="$${base%/v1}"; 
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=60
+TimeoutStopSec=240
 
 [Install]
 WantedBy=multi-user.target

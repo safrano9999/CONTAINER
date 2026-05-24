@@ -19,16 +19,38 @@ for arg in "$@"; do
 done
 
 sync_repo() {
-    local repo="$1"
+    local spec="$1"
+    local repo="$spec"
+    local branch=""
+
+    if [[ "$spec" == *@* ]]; then
+        repo="${spec%@*}"
+        branch="${spec#*@}"
+    fi
+
     if [ -d "$SAFRANO_DIR/$repo" ]; then
-        git -C "$SAFRANO_DIR/$repo" pull --ff-only
+        if [ -n "$branch" ]; then
+            git -C "$SAFRANO_DIR/$repo" fetch --depth 1 origin "$branch"
+            if git -C "$SAFRANO_DIR/$repo" rev-parse --verify "$branch" >/dev/null 2>&1; then
+                git -C "$SAFRANO_DIR/$repo" checkout "$branch"
+            else
+                git -C "$SAFRANO_DIR/$repo" checkout -b "$branch" "origin/$branch"
+            fi
+            git -C "$SAFRANO_DIR/$repo" pull --ff-only origin "$branch"
+        else
+            git -C "$SAFRANO_DIR/$repo" pull --ff-only
+        fi
     else
-        git clone --depth 1 "https://github.com/safrano9999/$repo" "$SAFRANO_DIR/$repo"
+        if [ -n "$branch" ]; then
+            git clone --depth 1 --branch "$branch" "https://github.com/safrano9999/$repo" "$SAFRANO_DIR/$repo"
+        else
+            git clone --depth 1 "https://github.com/safrano9999/$repo" "$SAFRANO_DIR/$repo"
+        fi
     fi
 }
 
 # ── Repos klonen oder aktualisieren ──────────────────────────────────
-REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH NAPOLEON_HILLS_AI_MASTERMIND_CLASSES SOLANA_AIRGAPPED_DEBIAN_WORKFLOW)
+REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH NAPOLEON_HILLS_AI_MASTERMIND_CLASSES SOLANA_AIRGAPPED_DEBIAN_WORKFLOW NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual)
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done

@@ -28,6 +28,7 @@ At a high level the image includes:
   - `PV_D-A-CH`
   - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
   - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
+  - `NaturalGrounding-Tiktok-Ying-Video-Manager`
 - Tailscale support inside the container.
 - Crypto tools:
   - BIP39 offline web page
@@ -127,6 +128,7 @@ Run:
    - `PV_D-A-CH`
    - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
    - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
+   - `NaturalGrounding-Tiktok-Ying-Video-Manager` from `feature/webui-db-backend-dual`
 3. Runs `merge.sh`.
 4. Merges all `env.example` files into the local generated `env.example`.
 5. Merges all `requirements.txt` files into the local generated
@@ -217,6 +219,9 @@ The generated config maps published ports from `config.conf`.
 | CODEANALYST | `11000` | `11000` | Code dependency and tool usage UI |
 | JUGO | `11001` | `11001` | Language learning UI |
 | BIP39 | `11002` | `11002` | Offline BIP39 HTML page |
+| PV_D-A-CH | `11003` | `11003` | PV/QGIS workflow UI |
+| Napoleon | `11004` | `11004` | Napoleon Hill mastermind UI |
+| NaturalGrounding | `11005` | `11005` | TikTok video manager UI |
 | OpenClaw Gateway | `18789` | `20789` | OpenClaw gateway and Control UI |
 | Hermes Dashboard | `9119` | `19119` | Hermes dashboard |
 | Hermes API Server | `8642` | `18642` | Optional OpenAI compatible `/v1` API |
@@ -791,6 +796,43 @@ CITADEL_CAPABILITIES=NET_ADMIN,NET_RAW
 CITADEL_DEVICES=/dev/net/tun
 CITADEL_VOLUMES=tailscale:/var/lib/tailscale
 ```
+
+### NaturalGrounding
+
+NaturalGrounding runs from:
+
+```text
+/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
+```
+
+Service:
+
+```text
+naturalgrounding.service
+```
+
+Command:
+
+```bash
+uvicorn webui:app --host 0.0.0.0 --port ${NATURALGROUNDING_PORT}
+```
+
+Default port:
+
+```text
+11005
+```
+
+The app uses SQLAlchemy with Postgres or MariaDB/MySQL. DB credentials come
+from `NATURALGROUNDING_DB_*` settings. The video archive path is configured by:
+
+```env
+NATURALGROUNDING_VIDEOS_DIR=VIDEOS
+NATURALGROUNDING_VOLUMES=./VIDEOS:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS:Z
+```
+
+`NATURALGROUNDING_VOLUMES` is rendered into both generated compose and Quadlet
+container files by the existing `*_VOLUMES` config convention.
 
 ## Tailscale
 

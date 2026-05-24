@@ -1,0 +1,15 @@
+[Unit]
+Description=NaturalGrounding
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
+PassEnvironment=HOST NATURALGROUNDING_PORT NATURALGROUNDING_DB_BACKEND NATURALGROUNDING_DB_HOST NATURALGROUNDING_DB_PORT NATURALGROUNDING_DB_NAME NATURALGROUNDING_DB_USER NATURALGROUNDING_DB_PASSWORD NATURALGROUNDING_DATABASE_URL NATURALGROUNDING_VIDEOS_DIR
+Environment=NATURALGROUNDING_PORT=11005 NATURALGROUNDING_VIDEOS_DIR=VIDEOS
+ExecStart=uvicorn webui:app --host 0.0.0.0 --port ${NATURALGROUNDING_PORT}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

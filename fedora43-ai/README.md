@@ -252,7 +252,6 @@ Important entries:
 | `TOKEN_ARCHITECT` | VikAI/OpenClaw | Vikunja API token for architect agent |
 | `TOKEN_QC` | VikAI/OpenClaw | Vikunja API token for QC agent |
 | `TS_AUTHKEY` | Tailscale | Auth key for in-container Tailscale |
-| `CODEX_ACCESS_TOKEN` | Codex CLI | Optional Codex login bootstrap |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code | Optional Claude auth material |
 
 The default `OPENCLAW_GATEWAY_TOKEN` example is intentionally a command hint:
@@ -352,7 +351,7 @@ Inside the container, systemd manages the runtime.
 | `citadel.service` | simple | Runs CITADEL FastAPI UI |
 | `citadel-scan.service` | oneshot | Runs CITADEL `scan.sh` after a delay |
 | `bip39.service` | simple | Serves the offline BIP39 HTML page |
-| `codex-auth.service` | oneshot | Logs Codex CLI in from `CODEX_ACCESS_TOKEN` if present |
+| `fedora43-ai.service` | oneshot | Runs local init scripts from `/fedora/bin` |
 | `openclaw-config.service` | oneshot | Writes OpenClaw runtime config before gateway start |
 | `openclaw.service` | simple | Starts OpenClaw Gateway on internal port `18789` |
 | `hermes.service` | simple | Starts Hermes Agent gateway |
@@ -962,8 +961,8 @@ Token handling is deliberately environment-based:
   `BRAVE_API_KEY` as environment-backed references.
 - Hermes stores the LiteLLM key env name, not the key value.
 - VikAI writes each agent token into that agent's workspace `.vikunjaenv`.
-- Codex login is performed by `codex-auth.service` only when
-  `CODEX_ACCESS_TOKEN` is present.
+- Codex login is persisted by `/fedora/codex-auth/auth.json`; run
+  `codex-save-auth` after an interactive container login.
 
 Do not commit `.env`, `config.conf`, generated compose, or generated Quadlet
 files.

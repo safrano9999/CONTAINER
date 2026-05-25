@@ -147,7 +147,7 @@ COPY services/*.service /etc/systemd/system/
 COPY services/fedora-bin/* /usr/local/share/fedora43-ai/bin/
 
 RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service napoleon.service naturalgrounding.service \
-    citadel-setup.service citadel-scan.service bip39.service fedora43-ai.service codex-auth.service \
+    citadel-setup.service citadel-scan.service bip39.service fedora43-ai.service \
     tailscaled.service tailscale-up.service openclaw-config.service openclaw.service hermes.service \
     hermes-dashboard.service
 

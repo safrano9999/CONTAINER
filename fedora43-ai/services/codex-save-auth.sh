@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CODEX_HOME="${CODEX_HOME:-${HOME:-/root}/.codex}"
 CODEX_AUTH_DIR="${CODEX_AUTH_DIR:-/fedora/codex-auth}"
-AUTH_FILE="$CODEX_HOME/auth.json"
+AUTH_FILE="/root/.codex/auth.json"
 
 if [ ! -f "$AUTH_FILE" ]; then
     echo "No Codex auth file found at $AUTH_FILE" >&2

@@ -138,6 +138,11 @@ render_compose_from_conf() {
         device_seen[value] = 1
         devices[++device_count] = value
     }
+    function add_group(value) {
+        if (value == "" || value in group_seen) return
+        group_seen[value] = 1
+        groups[++group_count] = value
+    }
     function split_csv(value, out,    n, i, part) {
         n = split(value, out, ",")
         for (i = 1; i <= n; i++) out[i] = trim(out[i])
@@ -146,7 +151,8 @@ render_compose_from_conf() {
     function skip_env_key(key) {
         return key == "INJECT_OVERWRITE" || \
             key ~ /_PUBLISH_HOST$/ || key ~ /_PUBLISH_PORT$/ || \
-            key ~ /_CAPABILITIES$/ || key ~ /_DEVICES$/ || key ~ /_VOLUMES$/
+            key ~ /_CAPABILITIES$/ || key ~ /_DEVICES$/ || \
+            key ~ /_VOLUMES$/ || key ~ /_GROUP_ADD$/
     }
     /^[[:space:]]*($|#)/ { next }
     {
@@ -202,6 +208,9 @@ render_compose_from_conf() {
                     split(items[j], parts, ":")
                     add_volume(items[j], parts[1])
                 }
+            } else if (key ~ /_GROUP_ADD$/) {
+                n = split_csv(value, items)
+                for (j = 1; j <= n; j++) add_group(items[j])
             }
         }
 
@@ -224,6 +233,10 @@ render_compose_from_conf() {
         print "      - " yaml_dq("${HOST_ROOT_DIR:-root}:/root") >> "compose.yml"
         print "      - " yaml_dq("/tmp/.X11-unix:/tmp/.X11-unix") >> "compose.yml"
         for (i = 1; i <= volume_count; i++) print "      - " yaml_dq(volumes[i]) >> "compose.yml"
+        if (group_count > 0) {
+            print "    group_add:" >> "compose.yml"
+            for (i = 1; i <= group_count; i++) print "      - " groups[i] >> "compose.yml"
+        }
         if (cap_count > 0) {
             print "    cap_add:" >> "compose.yml"
             for (i = 1; i <= cap_count; i++) print "      - " caps[i] >> "compose.yml"
@@ -247,6 +260,7 @@ render_compose_from_conf() {
         for (i = 1; i <= volume_count; i++) print "Volume=" volumes[i] >> "fedora43-ai.container"
         for (i = 1; i <= cap_count; i++) print "AddCapability=" caps[i] >> "fedora43-ai.container"
         for (i = 1; i <= device_count; i++) print "AddDevice=" devices[i] >> "fedora43-ai.container"
+        for (i = 1; i <= group_count; i++) print "PodmanArgs=--group-add=" groups[i] >> "fedora43-ai.container"
         print "" >> "fedora43-ai.container"
         print "[Service]" >> "fedora43-ai.container"
         print "Restart=always" >> "fedora43-ai.container"

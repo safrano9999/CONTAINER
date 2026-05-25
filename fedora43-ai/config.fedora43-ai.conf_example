@@ -24,3 +24,12 @@ HERMES_API_SERVER_PUBLISH_PORT=18642
 
 # PV_D-A-CH database host from inside the Fedora container
 PV_DACH_DB_HOST=host.containers.internal
+
+# NaturalGrounding video storage path used by the app
+NATURALGROUNDING_VIDEOS_DIR=/vol/VIDEOS
+
+# Mount-bind Volume for NaturalGrounding videos
+NATURALGROUNDING_VOLUMES=/vol/VIDEOS:/vol/VIDEOS:Z
+
+# NaturalGrounding rootless Podman group passthrough for writable shared videos
+NATURALGROUNDING_GROUP_ADD=keep-groups

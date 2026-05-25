@@ -144,9 +144,10 @@ RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && chmod +x /opt/safrano9999/CITADEL/scan.sh
 
 COPY services/*.service /etc/systemd/system/
+COPY services/fedora-bin/* /usr/local/share/fedora43-ai/bin/
 
 RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service napoleon.service naturalgrounding.service \
-    citadel-setup.service citadel-scan.service bip39.service codex-auth.service \
+    citadel-setup.service citadel-scan.service bip39.service fedora43-ai.service codex-auth.service \
     tailscaled.service tailscale-up.service openclaw-config.service openclaw.service hermes.service \
     hermes-dashboard.service
 
@@ -157,11 +158,16 @@ COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litell
 COPY services/hermes-patch-ssl-verify.py /usr/local/bin/hermes-patch-ssl-verify
 COPY services/openclaw-patch-models-command.py /usr/local/bin/openclaw-patch-models-command
 COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
+COPY services/codex-save-auth.sh /usr/local/bin/codex-save-auth
+COPY services/fedora43-ai-init.sh /usr/local/bin/fedora43-ai-init
 
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-litellm \
     /usr/local/bin/hermes-patch-ssl-verify \
     /usr/local/bin/openclaw-patch-models-command \
-    /usr/local/bin/vikai-bootstrap-openclaw-agents
+    /usr/local/bin/vikai-bootstrap-openclaw-agents \
+    /usr/local/bin/codex-save-auth \
+    /usr/local/bin/fedora43-ai-init \
+ && chmod +x /usr/local/share/fedora43-ai/bin/*
 
 RUN /usr/local/bin/hermes-patch-ssl-verify
 #RUN /usr/local/bin/openclaw-patch-models-command

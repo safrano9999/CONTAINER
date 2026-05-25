@@ -1,0 +1,10 @@
+[Unit]
+Description=Fedora43 AI local state sync
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fedora43-ai-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

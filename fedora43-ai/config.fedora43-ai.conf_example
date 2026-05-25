@@ -39,3 +39,6 @@ NATURALGROUNDING_SQLITE_PATH=/var/lib/naturalgrounding/django.sqlite3
 
 # NaturalGrounding persistent Django identity and billing volume
 NATURALGROUNDING_STATE_VOLUMES=naturalgrounding-state:/var/lib/naturalgrounding:Z
+
+# Fedora43 AI local init/auth volume
+FEDORA43_AI_VOLUMES=fedora43-ai:/fedora:Z

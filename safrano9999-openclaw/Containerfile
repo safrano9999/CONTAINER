@@ -3,7 +3,9 @@
 # Bundles the four safcontainer OpenClaw plugins - DAILYNEWS, CALENDAR,
 # ZEROINBOX, KACHELMANN - into the official OpenClaw gateway image, with an
 # in-container Tailscale daemon so the gateway is reachable over the tailnet and
-# can in turn reach your tailnet services (Postgres, LiteLLM, ...).
+# can in turn reach your tailnet services such as Postgres. LLM environment
+# values are for standalone plugins only; OpenClaw itself is not configured with
+# a model provider in this image.
 #
 # Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
 # Boot:    tini -> services/entrypoint.sh    (tailscale up -> configure -> gateway)
@@ -63,12 +65,6 @@ RUN set -eux; \
         -r "${OPENCLAW_PLUGINS_DIR}/$d/requirements.txt" python-dotenv; \
     done
 
-# --- runtime config + entrypoint --------------------------------------------
-COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
-COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint \
- && mkdir -p /root/.openclaw /var/lib/tailscale
-
 # Gateway runs as root (so tailscaled can run); state lives under /root.
 ENV HOME=/root \
     OPENCLAW_CONFIG=/root/.openclaw/openclaw.json \
@@ -82,6 +78,14 @@ EXPOSE 18789
 # Liveness against the gateway's own health endpoint.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:${OPENCLAW_GATEWAY_PORT}/healthz" >/dev/null || exit 1
+
+# --- runtime config + entrypoint --------------------------------------------
+# Keep these final so service-only edits rebuild only the small tail layers.
+COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY services/telegram-menu-sync.py /usr/local/bin/telegram-menu-sync
+COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/telegram-menu-sync /usr/local/bin/safrano9999-openclaw-entrypoint \
+ && mkdir -p /root/.openclaw /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.
 ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]

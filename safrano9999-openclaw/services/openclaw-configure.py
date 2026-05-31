@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Configure OpenClaw before starting the gateway.
 
-Adapted from fedora43-ai/services/openclaw-configure.py: same gateway / LiteLLM
-/ Telegram-to-main logic, trimmed to this container and extended to register the
-four bundled plugins (DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN).
+Configure the deterministic OpenClaw gateway container.
+
+This container intentionally does not configure OpenClaw with any LLM provider.
+LITELLM_* may still be present in the injected process environment for
+ZEROINBOX; OpenClaw only uses it if a model provider is explicitly configured.
 """
 
 import json
@@ -56,20 +58,30 @@ def _litellm_base_url() -> str:
 def _ensure_openclaw_config() -> None:
     if CONFIG_PATH.exists() and CONFIG_PATH.stat().st_size > 0:
         return
-    api_key = os.environ.get("LITELLM_API_KEY", "").strip()
-    base_url = _litellm_base_url()
-    if not api_key or not base_url:
-        raise SystemExit("OpenClaw onboarding needs LITELLM_API_KEY, LITELLM_URL, and LITELLM_PORT")
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        _openclaw_cmd(
-            "onboard", "--non-interactive", "--accept-risk", "--skip-health",
-            "--auth-choice", "litellm-api-key",
-            "--litellm-api-key", api_key,
-            "--custom-base-url", base_url,
-        ),
-        check=True,
+    cmd = _openclaw_cmd(
+        "onboard",
+        "--non-interactive",
+        "--accept-risk",
+        "--skip-health",
+        "--auth-choice",
+        "skip",
+        "--skip-channels",
+        "--skip-daemon",
+        "--skip-skills",
+        "--skip-ui",
+        "--skip-search",
+        "--gateway-auth",
+        "token",
+        "--gateway-token-ref-env",
+        "OPENCLAW_GATEWAY_TOKEN",
+        "--gateway-bind",
+        "lan",
+        "--gateway-port",
+        str(GATEWAY_INTERNAL_PORT),
+        "--suppress-gateway-token-output",
     )
+    subprocess.run(cmd, check=True)
 
 
 def _origin(host: str, port: int) -> str:
@@ -186,6 +198,35 @@ def _merge_litellm_models(provider, discovered_models, primary_model, primary_na
     return list(merged.values())
 
 
+def _configure_litellm_provider(config: dict) -> tuple[str, bool, int]:
+    model = os.environ.get("OPENCLAW_LITELLM_MODEL", DEFAULT_MODEL).strip().removeprefix("litellm/")
+    if not model:
+        raise SystemExit("OPENCLAW_LITELLM_MODEL must not be empty")
+    full_model = f"litellm/{model}"
+    discovered_models, discovery_ok = _discover_litellm_models(model)
+    model_name = os.environ.get("OPENCLAW_LITELLM_MODEL_NAME", model).strip() or model
+    context_window = int(os.environ.get("OPENCLAW_LITELLM_CONTEXT_WINDOW", "") or 128000)
+    max_tokens = int(os.environ.get("OPENCLAW_LITELLM_MAX_TOKENS", "") or 8192)
+    base_url = _litellm_base_url()
+    if not base_url:
+        raise SystemExit("OpenClaw LiteLLM provider needs LITELLM_URL and LITELLM_PORT")
+    if not os.environ.get("LITELLM_API_KEY", "").strip():
+        raise SystemExit("OpenClaw LiteLLM provider needs LITELLM_API_KEY")
+
+    models_config = config.setdefault("models", {})
+    models_config["mode"] = "merge"
+    provider = models_config.setdefault("providers", {}).setdefault("litellm", {})
+    provider["baseUrl"] = base_url
+    provider["api"] = "openai-completions"
+    provider["apiKey"] = {"source": "env", "provider": "default", "id": "LITELLM_API_KEY"}
+    provider["request"] = {"allowPrivateNetwork": True}
+    provider["models"] = _merge_litellm_models(
+        provider, discovered_models, model, model_name, context_window, max_tokens
+    )
+    config.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})["primary"] = full_model
+    return full_model, discovery_ok, len(discovered_models)
+
+
 def _configure_telegram(config: dict) -> bool:
     token = os.environ.get("TELEGRAMTOKEN_OPENCLAW", "").strip()
     if not token:
@@ -193,22 +234,30 @@ def _configure_telegram(config: dict) -> bool:
     telegram = config.setdefault("channels", {}).setdefault("telegram", {})
     telegram["enabled"] = True
     telegram["botToken"] = {"source": "env", "provider": "default", "id": "TELEGRAMTOKEN_OPENCLAW"}
-    telegram["dmPolicy"] = "open"
-    telegram["allowFrom"] = ["*"]
-    telegram["groupPolicy"] = "open"
-    telegram["groupAllowFrom"] = ["*"]
-    telegram["groups"] = {"*": {"requireMention": False}}
+    telegram["dmPolicy"] = "disabled"
+    telegram.pop("allowFrom", None)
+    telegram["groupPolicy"] = "disabled"
+    telegram.pop("groupAllowFrom", None)
+    telegram.pop("groups", None)
+    telegram["commands"] = {"native": False, "nativeSkills": False}
+    telegram["configWrites"] = False
 
-    binding = {
-        "type": "route",
-        "match": {"channel": "telegram", "accountId": "default"},
-        "agentId": "main",
-        "session": {"dmScope": "main"},
-    }
     bindings = config.setdefault("bindings", [])
-    bindings[:] = [b for b in bindings if not (isinstance(b, dict) and b.get("match") == binding["match"])]
-    bindings.append(binding)
-    config.setdefault("commands", {})["ownerAllowFrom"] = ["*"]
+    bindings[:] = [
+        b for b in bindings
+        if not (isinstance(b, dict) and isinstance(b.get("match"), dict) and b["match"].get("channel") == "telegram")
+    ]
+    commands = config.setdefault("commands", {})
+    commands["native"] = False
+    commands["nativeSkills"] = False
+    commands["bash"] = False
+    commands["config"] = False
+    commands["debug"] = False
+    commands["mcp"] = False
+    commands["plugins"] = False
+    commands["restart"] = False
+    commands["allowFrom"] = {"telegram": ["*"]}
+    commands.pop("ownerAllowFrom", None)
     return True
 
 
@@ -236,17 +285,19 @@ def _register_plugins(config: dict) -> list[str]:
 def main() -> None:
     _ensure_openclaw_config()
 
-    model = os.environ.get("OPENCLAW_LITELLM_MODEL", DEFAULT_MODEL).strip().removeprefix("litellm/")
-    if not model:
-        raise SystemExit("OPENCLAW_LITELLM_MODEL must not be empty")
-    full_model = f"litellm/{model}"
-    discovered_models, discovery_ok = _discover_litellm_models(model)
-    model_name = os.environ.get("OPENCLAW_LITELLM_MODEL_NAME", model).strip() or model
-    context_window = int(os.environ.get("OPENCLAW_LITELLM_CONTEXT_WINDOW", "") or 128000)
-    max_tokens = int(os.environ.get("OPENCLAW_LITELLM_MAX_TOKENS", "") or 8192)
-
     config = json.loads(CONFIG_PATH.read_text())
     _ensure_main_agent(config)
+    config.pop("models", None)
+    config.pop("auth", None)
+    config.setdefault("agents", {}).setdefault("defaults", {}).pop("model", None)
+    litellm_model = ""
+    litellm_discovery_ok = False
+    litellm_model_count = 0
+
+    # Optional OpenClaw LiteLLM provider wiring.
+    # Keep this commented for the default deterministic gateway/plugin mode.
+    # Uncomment the next line to make OpenClaw itself use the injected LITELLM_* env.
+    # litellm_model, litellm_discovery_ok, litellm_model_count = _configure_litellm_provider(config)
 
     gateway = config.setdefault("gateway", {})
     gateway["mode"] = "local"
@@ -256,29 +307,19 @@ def main() -> None:
     control_ui["allowedOrigins"] = _control_ui_allowed_origins()
     control_ui["dangerouslyDisableDeviceAuth"] = True
 
-    if _litellm_base_url():
-        models_config = config.setdefault("models", {})
-        models_config["mode"] = "merge"
-        provider = models_config.setdefault("providers", {}).setdefault("litellm", {})
-        provider["baseUrl"] = _litellm_base_url()
-        provider["api"] = "openai-completions"
-        provider["apiKey"] = {"source": "env", "provider": "default", "id": "LITELLM_API_KEY"}
-        provider["request"] = {"allowPrivateNetwork": True}
-        provider["models"] = _merge_litellm_models(
-            provider, discovered_models, model, model_name, context_window, max_tokens
-        )
-        config.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})["primary"] = full_model
-
     telegram_ok = _configure_telegram(config)
     registered = _register_plugins(config)
 
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
 
-    print(f"OpenClaw model configured: {full_model}")
-    if discovery_ok:
-        print(f"OpenClaw LiteLLM models discovered: {len(discovered_models)}")
+    if litellm_model:
+        print(f"OpenClaw model configured: {litellm_model}")
+    else:
+        print("OpenClaw model provider intentionally not configured")
+    if litellm_discovery_ok:
+        print(f"OpenClaw LiteLLM models discovered: {litellm_model_count}")
     if telegram_ok:
-        print("OpenClaw Telegram configured: default account -> main agent")
+        print("OpenClaw Telegram configured: slash/plugin commands only")
     print(f"OpenClaw plugins registered: {', '.join(registered)}")
     print("OpenClaw Control UI origins: " + ", ".join(control_ui["allowedOrigins"]))
 

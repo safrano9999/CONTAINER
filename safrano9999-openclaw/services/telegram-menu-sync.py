@@ -9,8 +9,10 @@ import urllib.request
 
 COMMANDS = [
     {"command": "kachelmann", "description": "KACHELMANN Routinen"},
+    {"command": "routines", "description": "Alias fuer KACHELMANN"},
     {"command": "calendar", "description": "Kommende Termine"},
     {"command": "zeroinbox", "description": "Mails sortieren und PDF senden"},
+    {"command": "mails", "description": "Alias fuer ZEROINBOX"},
     {"command": "dailynews", "description": "Dailynews PDF erzeugen"},
 ]
 

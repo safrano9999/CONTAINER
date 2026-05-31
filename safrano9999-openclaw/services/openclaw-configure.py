@@ -32,6 +32,11 @@ PLUGIN_IDS = {
     "KACHELMANN": "kachelmann",
 }
 
+CONTAINER_ONLY_COMMAND_ALIASES = {
+    "ZEROINBOX": ("zeroinbox", "mails"),
+    "KACHELMANN": ("kachelmann", "routines"),
+}
+
 
 def _openclaw_cmd(*args: str) -> list[str]:
     raw = os.environ.get("OPENCLAW_BIN", "").strip()
@@ -282,8 +287,27 @@ def _register_plugins(config: dict) -> list[str]:
     return registered
 
 
+def _apply_container_only_command_aliases() -> None:
+    """Add short Telegram aliases in this container without changing plugin repos."""
+    for repo, (command_name, alias) in CONTAINER_ONLY_COMMAND_ALIASES.items():
+        plugin_file = PLUGINS_DIR / repo / "index.js"
+        if not plugin_file.exists():
+            continue
+        source = plugin_file.read_text(encoding="utf-8")
+        marker = f'nativeNames: {{ telegram: "{alias}" }},'
+        if marker in source:
+            continue
+        needle = f'      name: "{command_name}",\n'
+        if needle not in source:
+            print(f"OpenClaw container alias skipped: {repo} command {command_name} not found")
+            continue
+        plugin_file.write_text(source.replace(needle, f"{needle}      {marker}\n", 1), encoding="utf-8")
+        print(f"OpenClaw container alias enabled: /{alias} -> /{command_name}")
+
+
 def main() -> None:
     _ensure_openclaw_config()
+    _apply_container_only_command_aliases()
 
     config = json.loads(CONFIG_PATH.read_text())
     _ensure_main_agent(config)

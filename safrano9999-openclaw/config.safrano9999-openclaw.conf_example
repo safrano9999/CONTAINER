@@ -1,0 +1,42 @@
+# config.safrano9999-openclaw.conf_example — non-secret container composition (SOT).
+# Merged with each repo's config.conf_example by setup.sh; config.sh then asks for
+# each key and renders compose.yml + the quadlet from the *_PORT / *_PUBLISH_PORT /
+# *_VOLUMES / *_CAPABILITIES / *_DEVICES conventions.
+
+# Injected process environment wins over config.conf and .env
+INJECT_OVERWRITE=true
+
+# Host bind address for published ports
+HOST=127.0.0.1
+
+# OpenClaw gateway (Control UI + API / WebSocket)
+OPENCLAW_GATEWAY_PORT=18789
+OPENCLAW_GATEWAY_PUBLISH_PORT=18789
+
+# Tailscale node name on your tailnet (the auth key itself is a secret in .env)
+TS_HOSTNAME=safrano9999-openclaw
+
+# Plugin release tag used by setup.sh when downloading the four plugin archives.
+# Default "latest" follows each repo's latest release alias; set e.g. 2026.5.31
+# for reproducible pinned builds. Per-plugin overrides use <REPO>_PLUGIN_RELEASE_TAG.
+OPENCLAW_PLUGIN_RELEASE_TAG=latest
+# DAILYNEWS_PLUGIN_RELEASE_TAG=
+# CALENDAR_PLUGIN_RELEASE_TAG=
+# ZEROINBOX_PLUGIN_RELEASE_TAG=
+# KACHELMANN_PLUGIN_RELEASE_TAG=
+
+# Tailscale needs a TUN device + NET_ADMIN/NET_RAW to route to your tailnet
+SAFRANO9999_OPENCLAW_CAPABILITIES=NET_ADMIN,NET_RAW
+SAFRANO9999_OPENCLAW_DEVICES=/dev/net/tun
+
+# --- persistent named volumes (comment out any line you do not need) ---------
+# Gateway state: token, cron, channels, agent workspace (incl. DAILYNEWS PDFs)
+SAFRANO9999_OPENCLAW_STATE_VOLUMES=safrano9999-openclaw-state:/root/.openclaw:Z
+# Tailscale node identity (so the tailnet name/IP survive restarts)
+TAILSCALE_VOLUMES=tailscale:/var/lib/tailscale:Z
+# ZEROINBOX reports + logs ("logs und maildirs") — not the program itself
+ZEROINBOX_VOLUMES=zeroinbox-reports:/opt/safrano9999-openclaw/ZEROINBOX/REPORTS:Z,zeroinbox-logs:/opt/safrano9999-openclaw/ZEROINBOX/logs:Z
+# KACHELMANN SQLite store (only used when no external DB creds are set)
+KACHELMANN_DB_SQLITE_PATH=/var/lib/kachelmann/tilevault.sqlite3
+KACHELMANN_VOLUMES=kachelmann-data:/var/lib/kachelmann:Z
+# DAILYNEWS PDFs live in the gateway workspace -> already covered by the state volume above.

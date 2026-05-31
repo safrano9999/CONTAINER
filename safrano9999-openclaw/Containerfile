@@ -1,0 +1,87 @@
+# OpenClaw plugins container
+# =============================================================================
+# Bundles the four safcontainer OpenClaw plugins - DAILYNEWS, CALENDAR,
+# ZEROINBOX, KACHELMANN - into the official OpenClaw gateway image, with an
+# in-container Tailscale daemon so the gateway is reachable over the tailnet and
+# can in turn reach your tailnet services (Postgres, LiteLLM, ...).
+#
+# Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
+# Boot:    tini -> services/entrypoint.sh    (tailscale up -> configure -> gateway)
+# Context: staged by setup.sh - ./safrano9999/<NAME> holds each extracted plugin archive,
+#          ./services/ holds the entrypoint + configure helper.
+# =============================================================================
+
+ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
+FROM ${OPENCLAW_IMAGE}
+
+LABEL org.opencontainers.image.title="safrano9999-openclaw" \
+      org.opencontainers.image.description="OpenClaw gateway bundled with the DAILYNEWS, CALENDAR, ZEROINBOX and KACHELMANN plugins + Tailscale."
+
+# --- system layer (root) -----------------------------------------------------
+# The base image runs as the unprivileged "node" user; we need root to install
+# packages and, at runtime, to run tailscaled (NET_ADMIN + /dev/net/tun).
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Basic tooling - the Debian/apt counterparts of the fedora43-ai dnf base set.
+# GitHub CLI lives in its own apt repo, so add the keyring first.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && install -d -m 0755 /etc/apt/keyrings \
+ && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      git gh tmux wget less vim-tiny nano \
+      jq ripgrep fd-find unzip xz-utils file \
+      python3 python3-venv python3-pip \
+      iproute2 iputils-ping dnsutils procps net-tools lsof \
+ && rm -rf /var/lib/apt/lists/*
+
+# Tailscale daemon + CLI (official install script adds the apt repo).
+RUN curl -fsSL https://tailscale.com/install.sh | sh \
+ && rm -rf /var/lib/apt/lists/*
+
+# --- plugins: bundle the four repos and pre-bake their Python venvs ----------
+ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
+COPY safrano9999/DAILYNEWS    ${OPENCLAW_PLUGINS_DIR}/DAILYNEWS
+COPY safrano9999/CALENDAR     ${OPENCLAW_PLUGINS_DIR}/CALENDAR
+COPY safrano9999/ZEROINBOX    ${OPENCLAW_PLUGINS_DIR}/ZEROINBOX
+COPY safrano9999/KACHELMANN   ${OPENCLAW_PLUGINS_DIR}/KACHELMANN
+
+# Pre-build each plugin's .venv at image-build time so the first slash command
+# or cron run is instant - no runtime "pip install". KACHELMANN's requirements
+# already include both DB drivers (pymysql + psycopg[binary]).
+RUN set -eux; \
+    for d in DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; do \
+      python3 -m venv "${OPENCLAW_PLUGINS_DIR}/$d/.venv"; \
+      "${OPENCLAW_PLUGINS_DIR}/$d/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel; \
+      "${OPENCLAW_PLUGINS_DIR}/$d/.venv/bin/pip" install --no-cache-dir \
+        -r "${OPENCLAW_PLUGINS_DIR}/$d/requirements.txt" python-dotenv; \
+    done
+
+# --- runtime config + entrypoint --------------------------------------------
+COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint \
+ && mkdir -p /root/.openclaw /var/lib/tailscale
+
+# Gateway runs as root (so tailscaled can run); state lives under /root.
+ENV HOME=/root \
+    OPENCLAW_CONFIG=/root/.openclaw/openclaw.json \
+    OPENCLAW_CONFIG_DIR=/root/.openclaw \
+    OPENCLAW_GATEWAY_PORT=18789 \
+    TS_STATE_DIR=/var/lib/tailscale \
+    OPENCLAW_DISABLE_BONJOUR=1
+
+EXPOSE 18789
+
+# Liveness against the gateway's own health endpoint.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:${OPENCLAW_GATEWAY_PORT}/healthz" >/dev/null || exit 1
+
+# tini (already in the base image) reaps zombies; our script does the rest.
+ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]

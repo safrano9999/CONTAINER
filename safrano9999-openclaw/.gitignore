@@ -1,0 +1,17 @@
+# Generated / hardlinked by setup.sh + config.sh - do not commit
+.env
+env.example
+requirements.txt
+config.conf
+config.conf_example
+config.sh
+merge_conf.sh
+compose.yml
+docker-compose.yml
+*.container
+safrano9999/
+plugin-zips/
+*.zip
+*.sha256
+__pycache__/
+*.pyc

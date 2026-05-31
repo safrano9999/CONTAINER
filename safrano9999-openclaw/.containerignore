@@ -1,0 +1,30 @@
+# Keep secrets and generated/hardlinked host files out of the build context.
+# The Containerfile only COPYs ./safrano9999 and ./services.
+.env
+config.conf
+config.conf_example
+env.example
+requirements.txt
+config.sh
+merge_conf.sh
+compose.yml
+docker-compose.yml
+*.container
+plugin-zips/
+*.zip
+*.sha256
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.calenv
+**/.gmail-oauth-client.json
+**/.gmail-token*.json
+**/.venv/
+**/node_modules/
+**/logs/
+**/LOGS/
+**/REPORTS/
+**/state/
+**/*.sqlite
+**/*.sqlite3
+.git/

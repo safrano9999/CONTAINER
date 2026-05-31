@@ -80,7 +80,7 @@ fi
 # --- 3) Run the gateway ------------------------------------------------------
 gw_args=(gateway run --bind lan --port "${OPENCLAW_GATEWAY_PORT:-18789}")
 if [ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
-  gw_args+=(--auth token --token "${OPENCLAW_GATEWAY_TOKEN}")
+  gw_args+=(--auth token)
 fi
 log "starting gateway: ${OPENCLAW_BIN} ${gw_args[*]}"
 exec ${OPENCLAW_BIN} "${gw_args[@]}"

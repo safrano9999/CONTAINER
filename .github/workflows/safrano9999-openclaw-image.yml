@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             version="${GITHUB_REF_NAME}"
-            plugin_tag="${GITHUB_REF_NAME}"
+            plugin_tag="latest"
           else
             version="${{ inputs.image_tag }}"
             if [ -z "$version" ]; then
@@ -59,7 +59,7 @@ jobs:
 
       - name: Stage plugin release archives
         env:
-          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
           OPENCLAW_PLUGIN_RELEASE_TAG: ${{ steps.tags.outputs.plugin_tag }}
         run: |
           cd safrano9999-openclaw

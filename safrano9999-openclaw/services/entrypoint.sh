@@ -51,21 +51,22 @@ fi
 log "configuring OpenClaw (gateway, Telegram slash/plugin commands, plugins; no LLM)"
 /usr/local/bin/openclaw-configure
 
-if [ -n "${TELEGRAMTOKEN_OPENCLAW:-}" ]; then
-  (
-    for _ in $(seq 1 60); do
-      if curl -fsS "http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}/healthz" >/dev/null 2>&1; then
-        sleep 8
+(
+  for _ in $(seq 1 60); do
+    if curl -fsS "http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}/healthz" >/dev/null 2>&1; then
+      sleep 8
+      if [ -n "${TELEGRAMTOKEN_OPENCLAW:-}" ]; then
         /usr/local/bin/telegram-menu-sync || log "WARN: Telegram plugin menu sync failed"
         sleep 8
         /usr/local/bin/telegram-menu-sync || log "WARN: Telegram plugin menu resync failed"
-        exit 0
       fi
-      sleep 1
-    done
-    log "WARN: Telegram plugin menu sync skipped - gateway health did not become ready"
-  ) &
-fi
+      /usr/local/bin/safrano9999-routines || log "WARN: startup slash command runner failed"
+      exit 0
+    fi
+    sleep 1
+  done
+  log "WARN: startup slash command runner skipped - gateway health did not become ready"
+) &
 
 # --- 2b) KACHELMANN WebUI ----------------------------------------------------
 # fedora43 runs each web app as its own systemd service; without systemd we run

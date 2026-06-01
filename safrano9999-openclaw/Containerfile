@@ -83,8 +83,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 # Keep these final so service-only edits rebuild only the small tail layers.
 COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
 COPY services/telegram-menu-sync.py /usr/local/bin/telegram-menu-sync
+COPY services/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
+COPY services/orchestrator ${OPENCLAW_PLUGINS_DIR}/safrano9999-routines-orchestrator
 COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/telegram-menu-sync /usr/local/bin/safrano9999-openclaw-entrypoint \
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/telegram-menu-sync /usr/local/bin/safrano9999-routines /usr/local/bin/safrano9999-openclaw-entrypoint \
  && mkdir -p /root/.openclaw /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.

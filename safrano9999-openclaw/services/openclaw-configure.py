@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -30,11 +31,47 @@ PLUGIN_IDS = {
     "CALENDAR": "calendar",
     "ZEROINBOX": "zeroinbox",
     "KACHELMANN": "kachelmann",
+    "safrano9999-routines-orchestrator": "safrano9999-routines-orchestrator",
 }
+
+ROUTINE_CRON_JOBS = [
+    ("safrano9999-routines-0530", "SAFRANO9999 routines 05:30", "30 5 * * *"),
+    ("safrano9999-routines-1200", "SAFRANO9999 routines 12:00", "0 12 * * *"),
+    ("safrano9999-routines-1900", "SAFRANO9999 routines 19:00", "0 19 * * *"),
+]
 
 CONTAINER_ONLY_COMMAND_ALIASES = {
     "ZEROINBOX": ("zeroinbox", "mails"),
     "KACHELMANN": ("kachelmann", "routines"),
+}
+
+CONTAINER_ONLY_ALIAS_BLOCKS = {
+    "ZEROINBOX": """    api.registerCommand({
+      name: "mails",
+      description: "Alias for /zeroinbox in this container.",
+      acceptsArgs: true,
+      requireAuth: true,
+      handler: async (ctx) => {
+        const raw = readString(ctx?.args) ?? "";
+        const payload = await runZeroinbox(api, { raw });
+        return { text: payload.text ?? "ZEROINBOX done." };
+      },
+    });
+""",
+    "KACHELMANN": """    api.registerCommand({
+      name: "routines",
+      description: "Alias for /kachelmann in this container.",
+      acceptsArgs: true,
+      requireAuth: true,
+      handler: async (ctx) => {
+        const raw = ctx.args ?? "";
+        if (["status", "reminder"].includes(raw.trim().toLowerCase())) {
+          return { text: await runKachelmannStatus(api) };
+        }
+        return createKachelmannReply(await runKachelmann(api, { raw }));
+      },
+    });
+""",
 }
 
 
@@ -287,6 +324,47 @@ def _register_plugins(config: dict) -> list[str]:
     return registered
 
 
+def _cron_store_path(config: dict) -> Path:
+    configured = config.get("cron", {}).get("store") if isinstance(config.get("cron"), dict) else None
+    if isinstance(configured, str) and configured.strip():
+        raw = configured.strip()
+        if raw.startswith("~/"):
+            return Path.home() / raw[2:]
+        return Path(raw).expanduser().resolve()
+    return CONFIG_PATH.parent / "cron" / "jobs.json"
+
+
+def _ensure_routine_cron_jobs(config: dict) -> None:
+    config.setdefault("cron", {})["enabled"] = True
+    store_path = _cron_store_path(config)
+    try:
+        raw = json.loads(store_path.read_text()) if store_path.exists() else {}
+    except json.JSONDecodeError:
+        raw = {}
+    jobs = raw.get("jobs") if isinstance(raw, dict) and isinstance(raw.get("jobs"), list) else []
+    managed_ids = {job_id for job_id, _, _ in ROUTINE_CRON_JOBS}
+    kept = [job for job in jobs if not (isinstance(job, dict) and job.get("id") in managed_ids)]
+    now_ms = int(time.time() * 1000)
+    for job_id, name, expr in ROUTINE_CRON_JOBS:
+        kept.append({
+            "id": job_id,
+            "name": name,
+            "enabled": True,
+            "createdAtMs": now_ms,
+            "updatedAtMs": now_ms,
+            "schedule": {"kind": "cron", "expr": expr, "tz": "Europe/Vienna", "staggerMs": 0},
+            "sessionTarget": "main",
+            "wakeMode": "next-heartbeat",
+            "payload": {
+                "kind": "systemEvent",
+                "text": "",
+            },
+            "state": {},
+        })
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_path.write_text(json.dumps({"version": 1, "jobs": kept}, indent=2) + "\n")
+
+
 def _apply_container_only_command_aliases() -> None:
     """Add short Telegram aliases in this container without changing plugin repos."""
     for repo, (command_name, alias) in CONTAINER_ONLY_COMMAND_ALIASES.items():
@@ -294,14 +372,27 @@ def _apply_container_only_command_aliases() -> None:
         if not plugin_file.exists():
             continue
         source = plugin_file.read_text(encoding="utf-8")
-        marker = f'nativeNames: {{ telegram: "{alias}" }},'
-        if marker in source:
+        source = source.replace(f'      nativeNames: {{ telegram: "{alias}" }},\n', "")
+        if f'name: "{alias}"' in source:
+            plugin_file.write_text(source, encoding="utf-8")
             continue
         needle = f'      name: "{command_name}",\n'
         if needle not in source:
             print(f"OpenClaw container alias skipped: {repo} command {command_name} not found")
             continue
-        plugin_file.write_text(source.replace(needle, f"{needle}      {marker}\n", 1), encoding="utf-8")
+        alias_block = CONTAINER_ONLY_ALIAS_BLOCKS.get(repo)
+        if not alias_block:
+            print(f"OpenClaw container alias skipped: {repo} alias block missing")
+            continue
+        insert_after = "    });\n"
+        command_start = source.find(needle)
+        command_end = source.find(insert_after, command_start)
+        if command_end == -1:
+            print(f"OpenClaw container alias skipped: {repo} command block end not found")
+            continue
+        insert_at = command_end + len(insert_after)
+        source = source[:insert_at] + alias_block + source[insert_at:]
+        plugin_file.write_text(source, encoding="utf-8")
         print(f"OpenClaw container alias enabled: /{alias} -> /{command_name}")
 
 
@@ -333,6 +424,7 @@ def main() -> None:
 
     telegram_ok = _configure_telegram(config)
     registered = _register_plugins(config)
+    _ensure_routine_cron_jobs(config)
 
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
 
@@ -345,6 +437,7 @@ def main() -> None:
     if telegram_ok:
         print("OpenClaw Telegram configured: slash/plugin commands only")
     print(f"OpenClaw plugins registered: {', '.join(registered)}")
+    print("OpenClaw cron configured: safcontainer routines at 05:30, 12:00, 19:00 Europe/Vienna")
     print("OpenClaw Control UI origins: " + ", ".join(control_ui["allowedOrigins"]))
 
 

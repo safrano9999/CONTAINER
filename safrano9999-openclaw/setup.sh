@@ -96,6 +96,7 @@ plugin_tag() {
 download_plugin_zip() {
   local name="$1"
   local lower tag zip zip_path sha_path url token
+  local downloaded=false
   local -a curl_auth=()
 
   lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
@@ -109,15 +110,20 @@ download_plugin_zip() {
   rm -rf "$SAFRANO_DIR/$name" "$SAFRANO_DIR/.tmp-$name"
   rm -f "$zip_path" "$sha_path"
   echo "  downloading $name ($tag) -> $zip"
-  if command -v gh >/dev/null 2>&1; then
-    gh release download "$tag" \
+  token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  if command -v gh >/dev/null 2>&1 && [ -n "$token" ]; then
+    if gh release download "$tag" \
       -R "safrano9999/$name" \
       --pattern "$zip" \
       --pattern "$zip.sha256" \
       --dir "$SAFRANO_DIR" \
-      --clobber >/dev/null
-  else
-    token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+      --clobber >/dev/null; then
+      downloaded=true
+    else
+      echo "  gh download failed for $name; falling back to curl"
+    fi
+  fi
+  if [ "$downloaded" != "true" ]; then
     [ -n "$token" ] && curl_auth=(-H "Authorization: Bearer $token")
     curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip" -o "$zip_path"
     curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip.sha256" -o "$sha_path"

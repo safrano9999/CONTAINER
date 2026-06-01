@@ -35,6 +35,11 @@ if [ -n "${TS_AUTHKEY:-}" ]; then
   [ -n "${TS_HOSTNAME:-}" ] && up_args+=(--hostname="${TS_HOSTNAME}")
   if tailscale "${up_args[@]}"; then
     log "tailscale up: $(tailscale ip -4 2>/dev/null | head -1 || echo '?')"
+    if tailscale set --ssh; then
+      log "tailscale ssh enabled"
+    else
+      log "WARN: 'tailscale set --ssh' failed - continuing without Tailscale SSH"
+    fi
   else
     log "WARN: 'tailscale up' failed - continuing without tailnet"
   fi

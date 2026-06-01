@@ -10,13 +10,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
-ZIP_DIR="$SCRIPT_DIR/plugin-zips"
+ZIP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/safrano9999-openclaw-zips.XXXXXX")"
 SAFCONTAINER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INSTALL_DIR="$SAFCONTAINER_DIR/SCRIPTS/INSTALL"
 CONTAINER_NAME="safrano9999-openclaw"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
 PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
+
+cleanup_zip_dir() {
+  rm -rf "$ZIP_DIR"
+}
+trap cleanup_zip_dir EXIT
 
 NO_CONFIG=false
 CONFIG_ONLY=false
@@ -416,7 +421,7 @@ publish_local_image() {
   podman push "$repo:latest"
 }
 
-echo "  Staging plugin release archives -> safrano9999/"
+echo "  Staging plugin release archives -> safrano9999/ (temporary ZIP cache)"
 for p in "${PLUGINS[@]}"; do download_plugin_zip "$p"; done
 
 echo "  Merging env.examples + requirements.txt..."

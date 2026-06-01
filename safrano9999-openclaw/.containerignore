@@ -11,8 +11,11 @@ compose.yml
 docker-compose.yml
 *.container
 plugin-zips/
+safrano9999/*
 *.zip
 *.sha256
+!safrano9999/*.zip
+!safrano9999/*.zip.sha256
 **/__pycache__/
 **/*.pyc
 **/.env

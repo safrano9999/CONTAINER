@@ -4,21 +4,34 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 
-# Mirrors fedora43-ai/merge.sh: merge one file from all staged
-# ./safrano9999/* sources into the container root without duplicate keys.
-merge_dedup_from_repos() {
+# Mirrors fedora43-ai/merge.sh, but reads merge inputs directly from the
+# staged plugin ZIPs instead of unpacking whole repos on the host.
+merge_dedup_from_zips() {
   local filename="$1"
   local output="$2"
   local mode="$3"
 
+  local tmp_dir
   local -a files=()
-  for repo_dir in "$SAFRANO_DIR"/*/; do
-    [ -f "$repo_dir$filename" ] && files+=("$repo_dir$filename")
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/safrano9999-openclaw-merge.XXXXXX")"
+
+  shopt -s nullglob
+  for zip_path in "$SAFRANO_DIR"/*-latest.zip; do
+    if ! unzip -Z1 "$zip_path" | grep -qx "$filename"; then
+      continue
+    fi
+    local base extracted
+    base="$(basename "$zip_path" -latest.zip)"
+    extracted="$tmp_dir/${base}.${filename}"
+    unzip -p "$zip_path" "$filename" > "$extracted"
+    files+=("$extracted")
   done
+  shopt -u nullglob
 
   if [ "${#files[@]}" -eq 0 ]; then
-    echo "  ! Keine $filename in safrano9999/*/ gefunden"
+    echo "  ! Keine $filename in safrano9999/*-latest.zip gefunden"
     : > "$output"
+    rm -rf "$tmp_dir"
     return
   fi
 
@@ -45,9 +58,10 @@ merge_dedup_from_repos() {
     if (!(key in seen)) { seen[key] = 1; print }
   }' "${files[@]}" > "$output"
 
+  rm -rf "$tmp_dir"
   echo "  Merged $filename (${#files[@]} Quellen) -> ${output#"$SCRIPT_DIR"/}"
 }
 
-merge_dedup_from_repos "env.example" "$SCRIPT_DIR/env.example" "env"
-merge_dedup_from_repos "requirements.txt" "$SCRIPT_DIR/requirements.txt" "requirements"
+merge_dedup_from_zips "env.example" "$SCRIPT_DIR/env.example" "env"
+merge_dedup_from_zips "requirements.txt" "$SCRIPT_DIR/requirements.txt" "requirements"
 cat "$SCRIPT_DIR/env.safrano9999-openclaw.example" >> "$SCRIPT_DIR/env.example"

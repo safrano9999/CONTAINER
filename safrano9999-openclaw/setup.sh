@@ -2,7 +2,7 @@
 # setup.sh - orchestrate the safrano9999-openclaw container.
 #
 # Mirrors CONTAINER/fedora43-ai/setup.sh:
-#   1) stage plugin release archives into ./safrano9999/<NAME>
+#   1) stage plugin release archives into ./safrano9999
 #   2) merge env.example / requirements.txt / config.conf_example
 #   3) run shared config.sh, delete generated compose/quadlet, render them here
 #   4) choose Docker Hub pull or local build
@@ -10,18 +10,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
-ZIP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/safrano9999-openclaw-zips.XXXXXX")"
 SAFCONTAINER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INSTALL_DIR="$SAFCONTAINER_DIR/SCRIPTS/INSTALL"
 CONTAINER_NAME="safrano9999-openclaw"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
 PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
-
-cleanup_zip_dir() {
-  rm -rf "$ZIP_DIR"
-}
-trap cleanup_zip_dir EXIT
 
 NO_CONFIG=false
 CONFIG_ONLY=false
@@ -101,19 +95,18 @@ plugin_tag() {
 
 download_plugin_zip() {
   local name="$1"
-  local lower tag zip zip_path sha_path url tmp dst token
+  local lower tag zip zip_path sha_path url token
   local -a curl_auth=()
 
   lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
   tag="$(plugin_tag "$name")"
   zip="${lower}-latest.zip"
-  zip_path="$ZIP_DIR/$zip"
-  sha_path="$ZIP_DIR/$zip.sha256"
+  zip_path="$SAFRANO_DIR/$zip"
+  sha_path="$SAFRANO_DIR/$zip.sha256"
   url="https://github.com/safrano9999/$name/releases/download/$tag"
-  tmp="$SAFRANO_DIR/.tmp-$name"
-  dst="$SAFRANO_DIR/$name"
 
-  mkdir -p "$ZIP_DIR" "$SAFRANO_DIR"
+  mkdir -p "$SAFRANO_DIR"
+  rm -rf "$SAFRANO_DIR/$name" "$SAFRANO_DIR/.tmp-$name"
   rm -f "$zip_path" "$sha_path"
   echo "  downloading $name ($tag) -> $zip"
   if command -v gh >/dev/null 2>&1; then
@@ -121,7 +114,7 @@ download_plugin_zip() {
       -R "safrano9999/$name" \
       --pattern "$zip" \
       --pattern "$zip.sha256" \
-      --dir "$ZIP_DIR" \
+      --dir "$SAFRANO_DIR" \
       --clobber >/dev/null
   else
     token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
@@ -129,19 +122,44 @@ download_plugin_zip() {
     curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip" -o "$zip_path"
     curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip.sha256" -o "$sha_path"
   fi
-  (cd "$ZIP_DIR" && sha256sum -c "$zip.sha256" >/dev/null)
+  (cd "$SAFRANO_DIR" && sha256sum -c "$zip.sha256" >/dev/null)
 
-  rm -rf "$tmp" "$dst"
-  mkdir -p "$tmp"
-  unzip -q "$zip_path" -d "$tmp"
-  mv "$tmp" "$dst"
-  echo "  staged $name from release archive"
+  echo "  staged $name release archive"
+}
+
+stage_provider_conf() {
+  local name="$1"
+  local lower zip_path target
+
+  lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+  zip_path="$SAFRANO_DIR/${lower}-latest.zip"
+  target="$SAFRANO_DIR/${lower}-provider.conf"
+  rm -f "$target"
+  if unzip -Z1 "$zip_path" | grep -qx 'provider.conf'; then
+    unzip -p "$zip_path" provider.conf > "$target"
+  fi
 }
 
 merge_config_examples() {
   local merge_conf="$INSTALL_DIR/merge_conf.sh"
   local output="$SCRIPT_DIR/config.conf_example"
   local container_example="$SCRIPT_DIR/config.safrano9999-openclaw.conf_example"
+  local tmp_sources
+
+  tmp_sources="$(mktemp -d "${TMPDIR:-/tmp}/safrano9999-openclaw-config.XXXXXX")"
+
+  shopt -s nullglob
+  for zip_path in "$SAFRANO_DIR"/*-latest.zip; do
+    local base dst
+    if ! unzip -Z1 "$zip_path" | grep -qx 'config.conf_example'; then
+      continue
+    fi
+    base="$(basename "$zip_path" -latest.zip)"
+    dst="$tmp_sources/${base^^}"
+    mkdir -p "$dst"
+    unzip -p "$zip_path" config.conf_example > "$dst/config.conf_example"
+  done
+  shopt -u nullglob
 
   if [ -f "$merge_conf" ]; then
     ln -f "$merge_conf" "$SCRIPT_DIR/merge_conf.sh"
@@ -149,12 +167,21 @@ merge_config_examples() {
       "$SCRIPT_DIR" \
       "$output" \
       "$container_example" \
-      "$SCRIPT_DIR/safrano9999" \
+      "$tmp_sources" \
       "config.conf_example"
+    rm -rf "$tmp_sources"
     return 0
   fi
 
   echo "  merge_conf.sh not found; using setup.sh fallback merger"
+  shopt -s nullglob
+  local -a config_files=("$tmp_sources"/*/config.conf_example)
+  shopt -u nullglob
+  if [ "${#config_files[@]}" -eq 0 ]; then
+    cp "$container_example" "$output"
+    rm -rf "$tmp_sources"
+    return 0
+  fi
   awk '
     function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
     function parse_key(line,    entry, key) {
@@ -190,7 +217,8 @@ merge_config_examples() {
       }
       pending = ""
     }
-  ' "$container_example" "$SCRIPT_DIR"/safrano9999/*/config.conf_example > "$output"
+  ' "$container_example" "${config_files[@]}" > "$output"
+  rm -rf "$tmp_sources"
 }
 
 add_unique() {
@@ -421,8 +449,11 @@ publish_local_image() {
   podman push "$repo:latest"
 }
 
-echo "  Staging plugin release archives -> safrano9999/ (temporary ZIP cache)"
-for p in "${PLUGINS[@]}"; do download_plugin_zip "$p"; done
+echo "  Staging plugin release archives -> safrano9999/"
+for p in "${PLUGINS[@]}"; do
+  download_plugin_zip "$p"
+  stage_provider_conf "$p"
+done
 
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"

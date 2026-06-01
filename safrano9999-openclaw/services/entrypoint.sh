@@ -3,7 +3,7 @@
 # Replaces the systemd services fedora43-ai uses (tailscaled / tailscale-up /
 # openclaw-config / openclaw) with a single PID-1-friendly boot sequence:
 #   1) join the tailnet (if TS_AUTHKEY is injected)
-#   2) configure OpenClaw (gateway/token, Telegram commands, plugins; no LLM)
+#   2) configure OpenClaw (gateway token + plugin loading; no LLM)
 #   3) exec the gateway
 set -euo pipefail
 
@@ -48,25 +48,8 @@ else
 fi
 
 # --- 2) Configure OpenClaw ---------------------------------------------------
-log "configuring OpenClaw (gateway, Telegram slash/plugin commands, plugins; no LLM)"
+log "configuring OpenClaw (plugins only; no LLM provider)"
 /usr/local/bin/openclaw-configure
-
-(
-  for _ in $(seq 1 60); do
-    if curl -fsS "http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}/healthz" >/dev/null 2>&1; then
-      sleep 8
-      if [ -n "${TELEGRAMTOKEN_OPENCLAW:-}" ]; then
-        /usr/local/bin/telegram-menu-sync || log "WARN: Telegram plugin menu sync failed"
-        sleep 8
-        /usr/local/bin/telegram-menu-sync || log "WARN: Telegram plugin menu resync failed"
-      fi
-      /usr/local/bin/safrano9999-routines || log "WARN: startup slash command runner failed"
-      exit 0
-    fi
-    sleep 1
-  done
-  log "WARN: startup slash command runner skipped - gateway health did not become ready"
-) &
 
 # --- 2b) KACHELMANN WebUI ----------------------------------------------------
 # fedora43 runs each web app as its own systemd service; without systemd we run

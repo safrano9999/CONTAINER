@@ -1,15 +1,13 @@
 # OpenClaw plugins container
 # =============================================================================
 # Bundles the four safcontainer OpenClaw plugins - DAILYNEWS, CALENDAR,
-# ZEROINBOX, KACHELMANN - into the official OpenClaw gateway image, with an
-# in-container Tailscale daemon so the gateway is reachable over the tailnet and
-# can in turn reach your tailnet services such as Postgres. LLM environment
-# values are for standalone plugins only; OpenClaw itself is not configured with
-# a model provider in this image.
+# ZEROINBOX, KACHELMANN - into the official OpenClaw gateway image. LLM
+# environment values are for standalone plugins only; OpenClaw itself is not
+# configured with a model provider in this image.
 #
 # Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
 # Boot:    tini -> services/entrypoint.sh    (tailscale up -> configure -> gateway)
-# Context: staged by setup.sh - ./safrano9999/<NAME> holds each extracted plugin archive,
+# Context: staged by setup.sh - ./safrano9999 holds plugin ZIPs,
 #          ./services/ holds the entrypoint + configure helper.
 # =============================================================================
 
@@ -47,22 +45,25 @@ RUN apt-get update \
 RUN curl -fsSL https://tailscale.com/install.sh | sh \
  && rm -rf /var/lib/apt/lists/*
 
-# --- plugins: bundle the four repos and pre-bake their Python venvs ----------
+# --- plugins: bundle ZIPs, unpack/install dynamically, pre-bake venvs --------
 ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
-COPY safrano9999/DAILYNEWS    ${OPENCLAW_PLUGINS_DIR}/DAILYNEWS
-COPY safrano9999/CALENDAR     ${OPENCLAW_PLUGINS_DIR}/CALENDAR
-COPY safrano9999/ZEROINBOX    ${OPENCLAW_PLUGINS_DIR}/ZEROINBOX
-COPY safrano9999/KACHELMANN   ${OPENCLAW_PLUGINS_DIR}/KACHELMANN
+COPY safrano9999/*.zip safrano9999/*.zip.sha256 ${OPENCLAW_PLUGINS_DIR}/
 
-# Pre-build each plugin's .venv at image-build time so the first slash command
-# or cron run is instant - no runtime "pip install". KACHELMANN's requirements
-# already include both DB drivers (pymysql + psycopg[binary]).
 RUN set -eux; \
-    for d in DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; do \
-      python3 -m venv "${OPENCLAW_PLUGINS_DIR}/$d/.venv"; \
-      "${OPENCLAW_PLUGINS_DIR}/$d/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel; \
-      "${OPENCLAW_PLUGINS_DIR}/$d/.venv/bin/pip" install --no-cache-dir \
-        -r "${OPENCLAW_PLUGINS_DIR}/$d/requirements.txt" python-dotenv; \
+    mkdir -p /root/.openclaw; \
+    cd "${OPENCLAW_PLUGINS_DIR}"; \
+    for checksum in *.zip.sha256; do sha256sum -c "$checksum"; done; \
+    for zip in "${OPENCLAW_PLUGINS_DIR}"/*-latest.zip; do \
+      name="$(basename "$zip" -latest.zip)"; \
+      dir="${OPENCLAW_PLUGINS_DIR}/$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')"; \
+      rm -rf "$dir"; \
+      mkdir -p "$dir"; \
+      unzip -q "$zip" -d "$dir"; \
+      openclaw plugins install --link --dangerously-force-unsafe-install "$dir"; \
+      [ -f "$dir/requirements.txt" ] || continue; \
+      python3 -m venv "$dir/.venv"; \
+      "$dir/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel; \
+      "$dir/.venv/bin/pip" install --no-cache-dir -r "$dir/requirements.txt" python-dotenv; \
     done
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.
@@ -82,11 +83,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 # --- runtime config + entrypoint --------------------------------------------
 # Keep these final so service-only edits rebuild only the small tail layers.
 COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
-COPY services/telegram-menu-sync.py /usr/local/bin/telegram-menu-sync
-COPY services/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
-COPY services/orchestrator ${OPENCLAW_PLUGINS_DIR}/safrano9999-routines-orchestrator
 COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/telegram-menu-sync /usr/local/bin/safrano9999-routines /usr/local/bin/safrano9999-openclaw-entrypoint \
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint \
  && mkdir -p /root/.openclaw /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.

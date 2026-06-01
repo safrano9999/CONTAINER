@@ -13,6 +13,9 @@ HOST=127.0.0.1
 OPENCLAW_GATEWAY_PORT=18789
 OPENCLAW_GATEWAY_PUBLISH_PORT=18789
 
+# Docker Hub image used by setup.sh when you choose "pull".
+SAFRANO9999_OPENCLAW_DOCKER_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest
+
 # Tailscale node name on your tailnet (the auth key itself is a secret in .env)
 TS_HOSTNAME=safrano9999-openclaw
 
@@ -31,12 +34,12 @@ SAFRANO9999_OPENCLAW_DEVICES=/dev/net/tun
 
 # --- persistent named volumes (comment out any line you do not need) ---------
 # Gateway state: token, cron, channels, agent workspace (incl. DAILYNEWS PDFs)
-SAFRANO9999_OPENCLAW_STATE_VOLUMES=safrano9999-openclaw-state:/root/.openclaw:Z
+# SAFRANO9999_OPENCLAW_STATE_VOLUMES=safrano9999-openclaw-state:/root/.openclaw:Z
 # Tailscale node identity (so the tailnet name/IP survive restarts)
-TAILSCALE_VOLUMES=tailscale:/var/lib/tailscale:Z
+# TAILSCALE_VOLUMES=safrano9999-openclaw-tailscale:/var/lib/tailscale:Z
 # ZEROINBOX reports + logs ("logs und maildirs") — not the program itself
 ZEROINBOX_VOLUMES=zeroinbox-reports:/opt/safrano9999-openclaw/ZEROINBOX/REPORTS:Z,zeroinbox-logs:/opt/safrano9999-openclaw/ZEROINBOX/logs:Z
 # KACHELMANN SQLite store (only used when no external DB creds are set)
-KACHELMANN_DB_SQLITE_PATH=/var/lib/kachelmann/tilevault.sqlite3
-KACHELMANN_VOLUMES=kachelmann-data:/var/lib/kachelmann:Z
+# KACHELMANN_DB_SQLITE_PATH=/var/lib/kachelmann/tilevault.sqlite3
+# KACHELMANN_VOLUMES=kachelmann-data:/var/lib/kachelmann:Z
 # DAILYNEWS PDFs live in the gateway workspace -> already covered by the state volume above.

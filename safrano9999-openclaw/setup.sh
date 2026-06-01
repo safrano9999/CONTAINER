@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # setup.sh - orchestrate the safrano9999-openclaw container.
-# Modelled on CONTAINER/fedora43-ai/setup.sh:
-#   1) download the four plugin release archives into ./safrano9999/<NAME>
-#   2) merge their SOT env.example + config.conf_example (+ the container's own)
-#   3) run the shared config.sh (SOT, hardlinked) -> .env + config.conf + compose/quadlet
-#   4) build the image
+#
+# Mirrors CONTAINER/fedora43-ai/setup.sh:
+#   1) stage plugin release archives into ./safrano9999/<NAME>
+#   2) merge env.example / requirements.txt / config.conf_example
+#   3) run shared config.sh, delete generated compose/quadlet, render them here
+#   4) choose Docker Hub pull or local build
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,15 +13,28 @@ SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 ZIP_DIR="$SCRIPT_DIR/plugin-zips"
 SAFCONTAINER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INSTALL_DIR="$SAFCONTAINER_DIR/SCRIPTS/INSTALL"
-IMAGE="localhost/safrano9999-openclaw:latest"
+CONTAINER_NAME="safrano9999-openclaw"
+LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
+DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
 PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
 
-NO_CONFIG=false; CONFIG_ONLY=false; FRESH=false
+NO_CONFIG=false
+CONFIG_ONLY=false
+FRESH=false
+NO_BUILD=false
+PUSH_IMAGE=false
+IMG_CHOICE=""
+
 for arg in "$@"; do
   case "$arg" in
+    --config) CONFIG_ONLY=true ;;
     --no-config) NO_CONFIG=true ;;
-    --config)    CONFIG_ONLY=true ;;
-    --fresh)     FRESH=true ;;
+    --fresh) FRESH=true; NO_CONFIG=true; IMG_CHOICE=2 ;;
+    --pull) IMG_CHOICE=1 ;;
+    --build) IMG_CHOICE=2 ;;
+    --push) PUSH_IMAGE=true; IMG_CHOICE=2 ;;
+    --no-build|--stage-only) NO_BUILD=true; NO_CONFIG=true ;;
+    *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
 
@@ -61,6 +75,12 @@ config_value() {
     read_kv_file "$file" "$key" && return 0
   done
   return 1
+}
+
+docker_io_image() {
+  local configured
+  configured="$(config_value SAFRANO9999_OPENCLAW_DOCKER_IMAGE || true)"
+  printf '%s\n' "${configured:-$DOCKER_IO_IMAGE_DEFAULT}"
 }
 
 plugin_tag() {
@@ -113,41 +133,352 @@ download_plugin_zip() {
   echo "  staged $name from release archive"
 }
 
-# 1) download release archives into ./safrano9999/<NAME>
+merge_config_examples() {
+  local merge_conf="$INSTALL_DIR/merge_conf.sh"
+  local output="$SCRIPT_DIR/config.conf_example"
+  local container_example="$SCRIPT_DIR/config.safrano9999-openclaw.conf_example"
+
+  if [ -f "$merge_conf" ]; then
+    ln -f "$merge_conf" "$SCRIPT_DIR/merge_conf.sh"
+    bash "$SCRIPT_DIR/merge_conf.sh" \
+      "$SCRIPT_DIR" \
+      "$output" \
+      "$container_example" \
+      "$SCRIPT_DIR/safrano9999" \
+      "config.conf_example"
+    return 0
+  fi
+
+  echo "  merge_conf.sh not found; using setup.sh fallback merger"
+  awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function parse_key(line,    entry, key) {
+      entry = line
+      sub(/#.*/, "", entry)
+      entry = trim(entry)
+      if (entry !~ /^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/) return ""
+      key = entry
+      sub(/[[:space:]]*=.*/, "", key)
+      return trim(key)
+    }
+    FNR == 1 {
+      pending = ""
+      label = FILENAME
+      sub(/^.*\//, "", label)
+      pending = pending "\n# --- " label " ---\n"
+    }
+    {
+      raw = $0
+      stripped = trim(raw)
+      if (stripped == "" || substr(stripped, 1, 1) == "#") {
+        pending = pending raw "\n"
+        next
+      }
+      key = parse_key(raw)
+      if (key == "") {
+        pending = ""
+        next
+      }
+      if (!(key in seen)) {
+        printf "%s%s\n", pending, raw
+        seen[key] = 1
+      }
+      pending = ""
+    }
+  ' "$container_example" "$SCRIPT_DIR"/safrano9999/*/config.conf_example > "$output"
+}
+
+add_unique() {
+  local value="$1"
+  local array_name="$2"
+  local -n array_ref="$array_name"
+  local existing
+
+  value="$(trim "$value")"
+  [ -n "$value" ] || return 0
+  for existing in "${array_ref[@]}"; do
+    [ "$existing" = "$value" ] && return 0
+  done
+  array_ref+=("$value")
+}
+
+yaml_dq() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "$value"
+}
+
+add_volume_item() {
+  local item="$1"
+  local target_name="$2"
+  local named_target_name="$3"
+  local source
+
+  item="$(trim "$item")"
+  [ -n "$item" ] || return 0
+  add_unique "$item" "$target_name"
+  source="${item%%:*}"
+  if [[ "$source" != /* && "$source" != .* && "$source" != "~"* && "$source" != '$'* && "$source" != *"/"* ]]; then
+    add_unique "$source" "$named_target_name"
+  fi
+}
+
+split_csv_into() {
+  local value="$1"
+  local -n target="$2"
+  local item
+  local -a items=()
+
+  IFS=',' read -ra items <<< "$value"
+  for item in "${items[@]}"; do add_unique "$item" "$2"; done
+}
+
+split_volumes_into() {
+  local value="$1"
+  local -n target="$2"
+  local -n named_target="$3"
+  local item
+  local -a items=()
+
+  IFS=',' read -ra items <<< "$value"
+  for item in "${items[@]}"; do add_volume_item "$item" "$2" "$3"; done
+}
+
+source_file_for_render() {
+  if [ -f "$SCRIPT_DIR/config.conf" ]; then
+    printf '%s\n' "$SCRIPT_DIR/config.conf"
+  elif [ -f "$SCRIPT_DIR/config.conf_example" ]; then
+    printf '%s\n' "$SCRIPT_DIR/config.conf_example"
+  else
+    return 1
+  fi
+}
+
+render_compose_and_quadlet() {
+  local image="$1"
+  local include_build="$2"
+  local source_file host compose_file quadlet_file line stripped entry key value disabled
+  local prefix internal_key internal_port publish_port publish_host map source
+  local first_port=""
+  local -a ports=()
+  local -a volumes=()
+  local -a disabled_volumes=()
+  local -a caps=()
+  local -a devices=()
+  local -a named_volumes=()
+  local -a disabled_named_volumes=()
+
+  source_file="$(source_file_for_render)"
+  host="$(config_value HOST || true)"
+  [ -n "$host" ] || host="127.0.0.1"
+  compose_file="$SCRIPT_DIR/compose.yml"
+  quadlet_file="$SCRIPT_DIR/${CONTAINER_NAME}.container"
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    stripped="$(trim "$line")"
+    [[ -z "$stripped" ]] && continue
+
+    disabled=false
+    if [[ "$stripped" == \#* ]]; then
+      disabled=true
+      entry="$(trim "${stripped#\#}")"
+    else
+      entry="${line%%#*}"
+      entry="$(trim "$entry")"
+    fi
+    [[ "$entry" == *=* ]] || continue
+
+    key="$(trim "${entry%%=*}")"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    if $disabled; then
+      value="$(trim "${entry#*=}")"
+      if [[ "$key" == *_VOLUMES ]]; then
+        split_volumes_into "$value" disabled_volumes disabled_named_volumes
+      fi
+      continue
+    fi
+
+    value="$(config_value "$key" || true)"
+    [ -n "$value" ] || continue
+
+    if [[ "$key" == *_PUBLISH_PORT ]]; then
+      prefix="${key%_PUBLISH_PORT}"
+      internal_key="${prefix}_PORT"
+      internal_port="$(config_value "$internal_key" || true)"
+      [ -n "$internal_port" ] || internal_port="$value"
+      publish_port="$value"
+      publish_host="$(config_value "${prefix}_PUBLISH_HOST" || true)"
+      [ -n "$publish_host" ] || publish_host="$host"
+      map="${publish_host}:${publish_port}:${internal_port}"
+      add_unique "$map" ports
+      [ -n "$first_port" ] || first_port="$internal_port"
+      continue
+    fi
+
+    if [[ "$key" == "PORT" || ( "$key" == *_PORT && "$key" != *_PUBLISH_PORT ) ]]; then
+      [ -n "$first_port" ] || first_port="$value"
+      continue
+    fi
+
+    if [[ "$key" == *_CAPABILITIES ]]; then
+      split_csv_into "$value" caps
+    elif [[ "$key" == *_DEVICES ]]; then
+      split_csv_into "$value" devices
+    elif [[ "$key" == *_VOLUMES ]]; then
+      split_volumes_into "$value" volumes named_volumes
+    fi
+  done < "$source_file"
+
+  if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
+    add_unique "${host}:${first_port}:${first_port}" ports
+  fi
+
+  {
+    printf '# Generated by setup.sh for %s\n' "$CONTAINER_NAME"
+    printf '# Edit config.conf, then run ./setup.sh again.\n'
+    printf '# Usage: docker compose -f compose.yml up -d\n\n'
+    printf 'services:\n'
+    printf '  %s:\n' "$CONTAINER_NAME"
+    if [ "$include_build" = "true" ]; then
+      printf '    build:\n'
+      printf '      context: .\n'
+      printf '      dockerfile: Containerfile\n'
+    fi
+    printf '    image: %s\n' "$image"
+    printf '    container_name: %s\n' "$CONTAINER_NAME"
+    printf '    hostname: %s\n' "$CONTAINER_NAME"
+    if [ "${#ports[@]}" -gt 0 ]; then
+      printf '    ports:\n'
+      for item in "${ports[@]}"; do printf '      - %s\n' "$(yaml_dq "$item")"; done
+    fi
+    if [ -f "$SCRIPT_DIR/config.conf" ] || [ -f "$SCRIPT_DIR/.env" ]; then
+      printf '    env_file:\n'
+      [ -f "$SCRIPT_DIR/config.conf" ] && printf '      - %s\n' "$SCRIPT_DIR/config.conf"
+      [ -f "$SCRIPT_DIR/.env" ] && printf '      - %s\n' "$SCRIPT_DIR/.env"
+    fi
+    if [ "${#volumes[@]}" -gt 0 ]; then
+      printf '    volumes:\n'
+      for item in "${disabled_volumes[@]}"; do printf '      # - %s\n' "$item"; done
+      for item in "${volumes[@]}"; do printf '      - %s\n' "$item"; done
+    fi
+    if [ "${#caps[@]}" -gt 0 ]; then
+      printf '    cap_add:\n'
+      for item in "${caps[@]}"; do printf '      - %s\n' "$item"; done
+    fi
+    if [ "${#devices[@]}" -gt 0 ]; then
+      printf '    devices:\n'
+      for item in "${devices[@]}"; do printf '      - %s\n' "$item"; done
+    fi
+    printf '    restart: always\n'
+    if [ "${#named_volumes[@]}" -gt 0 ]; then
+      printf '\nvolumes:\n'
+      for item in "${disabled_named_volumes[@]}"; do printf '  # %s: {}\n' "$item"; done
+      for item in "${named_volumes[@]}"; do printf '  %s: {}\n' "$item"; done
+    fi
+  } > "$compose_file"
+  echo "  Written: $compose_file"
+
+  {
+    printf '# Generated by setup.sh for %s\n' "$CONTAINER_NAME"
+    printf '# Edit config.conf, then run ./setup.sh again.\n\n'
+    printf '[Container]\n'
+    printf 'ContainerName=%s\n' "$CONTAINER_NAME"
+    printf 'Image=%s\n' "$image"
+    [ -f "$SCRIPT_DIR/config.conf" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/config.conf"
+    [ -f "$SCRIPT_DIR/.env" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/.env"
+    for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
+    for item in "${disabled_volumes[@]}"; do printf '# Volume=%s\n' "$item"; done
+    for item in "${volumes[@]}"; do printf 'Volume=%s\n' "$item"; done
+    for item in "${caps[@]}"; do printf 'AddCapability=%s\n' "$item"; done
+    for item in "${devices[@]}"; do printf 'AddDevice=%s\n' "$item"; done
+    printf '#AutoUpdate=registry\n\n'
+    printf '[Service]\n'
+    printf 'Restart=always\n'
+    printf 'TimeoutStartSec=30\n\n'
+    printf '[Install]\n'
+    printf 'WantedBy=default.target\n'
+  } > "$quadlet_file"
+  echo "  Written: $quadlet_file"
+}
+
+publish_local_image() {
+  local docker_image="$1"
+  local version_tag repo
+
+  repo="${docker_image%:*}"
+  version_tag="${IMAGE_VERSION_TAG:-$(date +%Y.%-m.%-d)}"
+  echo "  Tagging Docker Hub image: $repo:$version_tag and $repo:latest"
+  podman tag "$LOCAL_IMAGE" "$repo:$version_tag"
+  podman tag "$LOCAL_IMAGE" "$repo:latest"
+  podman push "$repo:$version_tag"
+  podman push "$repo:latest"
+}
+
 echo "  Staging plugin release archives -> safrano9999/"
 for p in "${PLUGINS[@]}"; do download_plugin_zip "$p"; done
 
-# 2) merge SOT examples
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
 echo "  Merging config.conf_example ..."
-ln -f "$INSTALL_DIR/merge_conf.sh" "$SCRIPT_DIR/merge_conf.sh"
-bash "$SCRIPT_DIR/merge_conf.sh" \
-  "$SCRIPT_DIR" \
-  "$SCRIPT_DIR/config.conf_example" \
-  "$SCRIPT_DIR/config.safrano9999-openclaw.conf_example" \
-  "$SCRIPT_DIR/safrano9999" \
-  "config.conf_example"
+merge_config_examples
 
-# 3) interactive config + compose/quadlet render via the shared config.sh
 if ! $NO_CONFIG; then
-  ln -f "$INSTALL_DIR/config.sh" "$SCRIPT_DIR/config.sh"
+  config_sh="$INSTALL_DIR/config.sh"
+  [ -f "$config_sh" ] || { echo "Missing shared config.sh at $config_sh" >&2; exit 1; }
+  ln -f "$config_sh" "$SCRIPT_DIR/config.sh"
   ( cd "$SCRIPT_DIR" && bash config.sh )
+  rm -f "$SCRIPT_DIR/${CONTAINER_NAME}.container" "$SCRIPT_DIR/compose.yml" "$SCRIPT_DIR/docker-compose.yml"
 fi
+
+render_compose_and_quadlet "$LOCAL_IMAGE" true
 
 $CONFIG_ONLY && { echo "  Config done."; exit 0; }
+$NO_BUILD && { echo "  Staging done."; exit 0; }
 
-# 4) build the image
-if $FRESH; then
-  echo "  Fresh build ..."
-  podman build --pull=always --no-cache -t "$IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
-else
-  echo "  Building $IMAGE ..."
-  podman build -t "$IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+DOCKER_IO_IMAGE="$(docker_io_image)"
+
+if [ -z "$IMG_CHOICE" ]; then
+  echo ""
+  echo "  Image source:"
+  echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
+  echo "    (2) Build locally"
+  echo ""
+  read -rp "  Choose [1/2] (default: 1): " IMG_CHOICE
+  IMG_CHOICE="${IMG_CHOICE:-1}"
 fi
+
+case "$IMG_CHOICE" in
+  1)
+    echo ""
+    echo "  Pulling $DOCKER_IO_IMAGE ..."
+    podman pull "$DOCKER_IO_IMAGE"
+    render_compose_and_quadlet "$DOCKER_IO_IMAGE" false
+    echo "  Done. Image ready: $DOCKER_IO_IMAGE"
+    ;;
+  2)
+    echo ""
+    if $FRESH; then
+      echo "  Fresh build ..."
+      podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+    else
+      echo "  Building $LOCAL_IMAGE ..."
+      podman build -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+    fi
+    if $PUSH_IMAGE; then
+      publish_local_image "$DOCKER_IO_IMAGE"
+    fi
+    echo "  Done. Image ready: $LOCAL_IMAGE"
+    ;;
+  *)
+    echo "Invalid image choice: $IMG_CHOICE" >&2
+    exit 2
+    ;;
+esac
+
 echo ""
-echo "  Done. Image: $IMAGE"
 echo "  Start:   podman-compose -f $SCRIPT_DIR/compose.yml up -d"
-echo "  Quadlet: cp $SCRIPT_DIR/safrano9999-openclaw.container ~/.config/containers/systemd/"
-echo "           systemctl --user daemon-reload && systemctl --user start safrano9999-openclaw"
+echo "  Quadlet: ln -sf $SCRIPT_DIR/${CONTAINER_NAME}.container ~/.config/containers/systemd/${CONTAINER_NAME}.container"
+echo "           systemctl --user daemon-reload && systemctl --user restart ${CONTAINER_NAME}.service"

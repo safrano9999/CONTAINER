@@ -149,6 +149,35 @@ stage_provider_conf() {
   fi
 }
 
+stage_init_scripts() {
+  local name="$1"
+  local lower zip_path member target
+
+  lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+  zip_path="$SAFRANO_DIR/${lower}-latest.zip"
+  rm -f "$SCRIPT_DIR/${name}_init"*
+
+  while IFS= read -r member || [ -n "$member" ]; do
+    [ -n "$member" ] || continue
+    target="$SCRIPT_DIR/$(basename "$member")"
+    unzip -p "$zip_path" "$member" > "$target"
+    chmod +x "$target"
+    echo "  staged init script: $(basename "$target")"
+  done < <(unzip -Z1 "$zip_path" | grep -E "^${name}_init[^/]*$" || true)
+}
+
+run_init_scripts() {
+  local script
+  shopt -s nullglob
+  for script in "$SCRIPT_DIR"/*_init*; do
+    [ -f "$script" ] || continue
+    [ -x "$script" ] || chmod +x "$script"
+    echo "  Running init script: $(basename "$script")"
+    (cd "$SCRIPT_DIR" && "$script")
+  done
+  shopt -u nullglob
+}
+
 merge_config_examples() {
   local merge_conf="$INSTALL_DIR/merge_conf.sh"
   local output="$SCRIPT_DIR/config.conf_example"
@@ -462,6 +491,7 @@ echo "  Staging plugin release archives -> safrano9999/"
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"
+  stage_init_scripts "$p"
 done
 
 echo "  Merging env.examples + requirements.txt..."
@@ -471,6 +501,7 @@ echo "  Merging config.conf_example ..."
 merge_config_examples
 
 if ! $NO_CONFIG; then
+  run_init_scripts
   config_sh="$INSTALL_DIR/config.sh"
   [ -f "$config_sh" ] || { echo "Missing shared config.sh at $config_sh" >&2; exit 1; }
   ln -f "$config_sh" "$SCRIPT_DIR/config.sh"

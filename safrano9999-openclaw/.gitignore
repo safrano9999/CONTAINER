@@ -6,6 +6,7 @@ config.conf
 config.conf_example
 config.sh
 merge_conf.sh
+*_init*
 compose.yml
 docker-compose.yml
 *.container

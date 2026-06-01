@@ -51,7 +51,18 @@ fi
 log "configuring OpenClaw (plugins only; no LLM provider)"
 /usr/local/bin/openclaw-configure
 
-# --- 2b) KACHELMANN WebUI ----------------------------------------------------
+# --- 2b) ZEROINBOX folder/label init -----------------------------------------
+zdir="${OPENCLAW_PLUGINS_DIR:-/opt/safrano9999-openclaw}/ZEROINBOX"
+if [ -x "${zdir}/.venv/bin/python" ] && [ -f "${zdir}/scripts/gmail-init-labels" ]; then
+  log "running ZEROINBOX label init"
+  if ( cd "${zdir}" && "${zdir}/.venv/bin/python" scripts/gmail-init-labels --account all ); then
+    log "ZEROINBOX label init done"
+  else
+    log "WARN: ZEROINBOX label init failed - continuing"
+  fi
+fi
+
+# --- 2c) KACHELMANN WebUI ----------------------------------------------------
 # fedora43 runs each web app as its own systemd service; without systemd we run
 # the KACHELMANN FastAPI WebUI as a background process (reachable on its port /
 # over the tailnet). Gated on KACHELMANN_PORT.

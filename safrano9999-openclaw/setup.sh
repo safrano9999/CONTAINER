@@ -111,6 +111,9 @@ download_plugin_zip() {
   rm -f "$zip_path" "$sha_path"
   echo "  downloading $name ($tag) -> $zip"
   token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  if [ -z "$token" ] && command -v gh >/dev/null 2>&1; then
+    token="$(gh auth token 2>/dev/null || true)"
+  fi
   if command -v gh >/dev/null 2>&1 && [ -n "$token" ]; then
     if gh release download "$tag" \
       -R "safrano9999/$name" \

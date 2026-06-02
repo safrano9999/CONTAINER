@@ -204,6 +204,7 @@ def _register_plugins(config: dict) -> list[str]:
     paths = plugins.setdefault("load", {}).setdefault("paths", [])
     entries = plugins.setdefault("entries", {})
     registered: list[str] = []
+    telegram_target = os.environ.get("OPENCLAW_TELEGRAM_TARGET", "").strip()
 
     for repo, plugin_id in PLUGIN_IDS.items():
         repo_path = str(PLUGINS_DIR / repo)
@@ -211,6 +212,18 @@ def _register_plugins(config: dict) -> list[str]:
             paths.append(repo_path)
         entries.setdefault(plugin_id, {})["enabled"] = True
         registered.append(plugin_id)
+
+    if telegram_target:
+        calendar_config = entries.setdefault("calendar", {}).setdefault("config", {})
+        calendar_config["delivery"] = {
+            "channel": "telegram",
+            "target": telegram_target,
+        }
+        kachelmann_config = entries.setdefault("kachelmann", {}).setdefault("config", {})
+        kachelmann_config["statusDelivery"] = {
+            "channel": "telegram",
+            "target": telegram_target,
+        }
     return registered
 
 

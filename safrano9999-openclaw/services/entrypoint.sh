@@ -82,5 +82,8 @@ gw_args=(gateway run --bind lan --port "${OPENCLAW_GATEWAY_PORT:-18789}")
 if [ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
   gw_args+=(--auth token)
 fi
+if [ -x /usr/local/bin/safrano9999-routines ]; then
+  /usr/local/bin/safrano9999-routines init &
+fi
 log "starting gateway: ${OPENCLAW_BIN} ${gw_args[*]}"
 exec ${OPENCLAW_BIN} "${gw_args[@]}"

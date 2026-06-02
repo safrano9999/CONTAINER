@@ -59,41 +59,6 @@ CONTAINER_ONLY_ALIAS_BLOCKS = {
 """,
 }
 
-CONTAINER_ONLY_EXTRA_COMMANDS = {
-    "KACHELMANN": [
-        (
-            "start",
-            """    api.registerCommand({
-      name: "start",
-      description: "Show the safcontainer OpenClaw commands.",
-      acceptsArgs: false,
-      requireAuth: false,
-      channels: ["telegram"],
-      handler: async () => ({
-        text: [
-          "OpenClaw Gateway ready.",
-          "",
-          "/dailynews",
-          "/calendar",
-          "/zeroinbox",
-          "/mails",
-          "/kachelmann",
-          "/routines",
-          "",
-          "OpenClaw:",
-          "/status",
-          "/help",
-          "/commands",
-          "/tools",
-        ].join("\\n"),
-      }),
-    });
-""",
-        ),
-    ],
-}
-
-
 def _openclaw_cmd(*args: str) -> list[str]:
     raw = os.environ.get("OPENCLAW_BIN", "").strip()
     if raw:
@@ -267,32 +232,6 @@ def _apply_container_only_command_aliases() -> None:
         print(f"OpenClaw container alias enabled: /{alias} -> /{command_name}")
 
 
-def _apply_container_only_extra_commands() -> None:
-    for repo, commands in CONTAINER_ONLY_EXTRA_COMMANDS.items():
-        plugin_file = PLUGINS_DIR / repo / "index.js"
-        if not plugin_file.exists():
-            continue
-
-        source = plugin_file.read_text(encoding="utf-8")
-        changed = False
-        for command_name, command_block in commands:
-            if f'name: "{command_name}"' in source:
-                continue
-
-            register_marker = "    api.registerCommand({\n"
-            insert_at = source.find(register_marker)
-            if insert_at == -1:
-                print(f"OpenClaw container command skipped: /{command_name}")
-                continue
-
-            source = source[:insert_at] + command_block + source[insert_at:]
-            changed = True
-            print(f"OpenClaw container command enabled: /{command_name}")
-
-        if changed:
-            plugin_file.write_text(source, encoding="utf-8")
-
-
 def _disable_plugin_command_auth() -> None:
     for repo in PLUGIN_IDS:
         plugin_file = PLUGINS_DIR / repo / "index.js"
@@ -308,7 +247,6 @@ def _disable_plugin_command_auth() -> None:
 def main() -> None:
     _ensure_openclaw_config()
     _apply_container_only_command_aliases()
-    _apply_container_only_extra_commands()
     _disable_plugin_command_auth()
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))

@@ -71,6 +71,14 @@ def _openclaw_cmd(*args: str) -> list[str]:
     return [*base, *args]
 
 
+def _env_ref(name: str) -> dict:
+    return {
+        "source": "env",
+        "provider": "default",
+        "id": name,
+    }
+
+
 def _ensure_openclaw_config() -> None:
     if CONFIG_PATH.exists() and CONFIG_PATH.stat().st_size > 0:
         return
@@ -104,28 +112,84 @@ def _configure_gateway(config: dict) -> None:
     gateway["mode"] = "local"
     gateway["bind"] = "lan"
     gateway["port"] = GATEWAY_PORT
+    control_ui = gateway.setdefault("controlUi", {})
+    control_ui["allowInsecureAuth"] = True
+    control_ui["dangerouslyDisableDeviceAuth"] = True
+    origins = control_ui.setdefault("allowedOrigins", [])
+    for origin in (
+        f"http://127.0.0.1:{GATEWAY_PORT}",
+        f"http://localhost:{GATEWAY_PORT}",
+        f"http://127.0.0.1:{os.environ.get('OPENCLAW_GATEWAY_PUBLISH_PORT', GATEWAY_PORT)}",
+        f"http://localhost:{os.environ.get('OPENCLAW_GATEWAY_PUBLISH_PORT', GATEWAY_PORT)}",
+    ):
+        if origin not in origins:
+            origins.append(origin)
     if os.environ.get("OPENCLAW_GATEWAY_TOKEN", "").strip():
         gateway["auth"] = {
             "mode": "token",
-            "token": {
-                "source": "env",
-                "provider": "default",
-                "id": "OPENCLAW_GATEWAY_TOKEN",
-            },
+            "token": _env_ref("OPENCLAW_GATEWAY_TOKEN"),
         }
 
 
 def _configure_telegram(config: dict) -> bool:
     if not os.environ.get("TELEGRAMTOKEN_OPENCLAW", "").strip():
         return False
+    token_ref = _env_ref("TELEGRAMTOKEN_OPENCLAW")
     telegram = config.setdefault("channels", {}).setdefault("telegram", {})
     telegram["enabled"] = True
-    telegram["botToken"] = {
-        "source": "env",
-        "provider": "default",
-        "id": "TELEGRAMTOKEN_OPENCLAW",
+    telegram["botToken"] = token_ref
+    telegram["capabilities"] = {"inlineButtons": "dm"}
+    telegram["commands"] = {
+        "native": False,
+        "nativeSkills": False,
     }
+    telegram["dmPolicy"] = "open"
+    telegram["groupPolicy"] = "open"
+    telegram["streaming"] = {"mode": "off"}
+    telegram["network"] = {
+        "autoSelectFamily": False,
+        "dnsResultOrder": "ipv4first",
+    }
+    telegram["execApprovals"] = {
+        "enabled": False,
+        "approvers": [],
+        "agentFilter": ["main"],
+        "target": "dm",
+    }
+    telegram["accounts"] = {
+        "default": {
+            "name": "main",
+            "enabled": True,
+            "dmPolicy": "open",
+            "botToken": token_ref,
+            "groupPolicy": "open",
+            "streaming": {"mode": "partial"},
+        }
+    }
+    telegram["defaultAccount"] = "default"
     return True
+
+
+def _configure_main_agent(config: dict) -> None:
+    agents = config.setdefault("agents", {})
+    agent_list = agents.setdefault("list", [])
+    main = next((entry for entry in agent_list if entry.get("id") == "main"), None)
+    if main is None:
+        main = {"id": "main"}
+        agent_list.insert(0, main)
+    main["heartbeat"] = {
+        "every": "360m",
+        "target": "last",
+        "directPolicy": "allow",
+    }
+    main["tools"] = {
+        "alsoAllow": [
+            "group:fs",
+            "group:web",
+            "group:runtime",
+        ],
+        "deny": [],
+    }
 
 
 def _register_plugins(config: dict) -> list[str]:
@@ -175,6 +239,7 @@ def main() -> None:
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     _configure_gateway(config)
     telegram_configured = _configure_telegram(config)
+    _configure_main_agent(config)
     registered = _register_plugins(config)
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 

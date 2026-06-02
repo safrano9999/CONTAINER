@@ -35,7 +35,7 @@ CONTAINER_ONLY_ALIAS_BLOCKS = {
       name: "mails",
       description: "Alias for /zeroinbox in this container.",
       acceptsArgs: true,
-      requireAuth: true,
+      requireAuth: false,
       handler: async (ctx) => {
         const raw = readString(ctx?.args) ?? "";
         const payload = await runZeroinbox(api, { raw });
@@ -47,7 +47,7 @@ CONTAINER_ONLY_ALIAS_BLOCKS = {
       name: "routines",
       description: "Alias for /kachelmann in this container.",
       acceptsArgs: true,
-      requireAuth: true,
+      requireAuth: false,
       handler: async (ctx) => {
         const raw = ctx.args ?? "";
         if (["status", "reminder"].includes(raw.trim().toLowerCase())) {
@@ -144,7 +144,9 @@ def _configure_telegram(config: dict) -> bool:
         "nativeSkills": False,
     }
     telegram["dmPolicy"] = "open"
+    telegram["allowFrom"] = ["*"]
     telegram["groupPolicy"] = "open"
+    telegram["groupAllowFrom"] = ["*"]
     telegram["streaming"] = {"mode": "off"}
     telegram["network"] = {
         "autoSelectFamily": False,
@@ -161,8 +163,10 @@ def _configure_telegram(config: dict) -> bool:
             "name": "main",
             "enabled": True,
             "dmPolicy": "open",
+            "allowFrom": ["*"],
             "botToken": token_ref,
             "groupPolicy": "open",
+            "groupAllowFrom": ["*"],
             "streaming": {"mode": "partial"},
         }
     }
@@ -182,14 +186,7 @@ def _configure_main_agent(config: dict) -> None:
         "target": "last",
         "directPolicy": "allow",
     }
-    main["tools"] = {
-        "alsoAllow": [
-            "group:fs",
-            "group:web",
-            "group:runtime",
-        ],
-        "deny": [],
-    }
+    main["tools"] = {"allow": ["*"], "alsoAllow": ["*"], "deny": []}
 
 
 def _register_plugins(config: dict) -> list[str]:
@@ -232,9 +229,22 @@ def _apply_container_only_command_aliases() -> None:
         print(f"OpenClaw container alias enabled: /{alias} -> /{command_name}")
 
 
+def _disable_plugin_command_auth() -> None:
+    for repo in PLUGIN_IDS:
+        plugin_file = PLUGINS_DIR / repo / "index.js"
+        if not plugin_file.exists():
+            continue
+        source = plugin_file.read_text(encoding="utf-8")
+        patched = source.replace("      requireAuth: true,", "      requireAuth: false,")
+        if patched != source:
+            plugin_file.write_text(patched, encoding="utf-8")
+            print(f"OpenClaw container command auth disabled: {repo}")
+
+
 def main() -> None:
     _ensure_openclaw_config()
     _apply_container_only_command_aliases()
+    _disable_plugin_command_auth()
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     _configure_gateway(config)

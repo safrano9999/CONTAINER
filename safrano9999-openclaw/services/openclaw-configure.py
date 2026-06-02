@@ -175,11 +175,22 @@ def _configure_telegram(config: dict) -> bool:
 
 def _configure_main_agent(config: dict) -> None:
     agents = config.setdefault("agents", {})
+    workspace = (
+        os.environ.get("OPENCLAW_AGENT_WORKSPACE", "").strip()
+        or os.environ.get("OPENCLAW_WORKSPACE_DIR", "").strip()
+        or "/root/.openclaw/workspace"
+    )
+    workspace_path = str(Path(os.path.expanduser(workspace)).resolve())
+    Path(workspace_path).mkdir(parents=True, exist_ok=True)
+    agents.setdefault("defaults", {}).setdefault("workspace", workspace_path)
+
     agent_list = agents.setdefault("list", [])
     main = next((entry for entry in agent_list if entry.get("id") == "main"), None)
     if main is None:
         main = {"id": "main"}
         agent_list.insert(0, main)
+    if not str(main.get("workspace", "")).strip():
+        main["workspace"] = workspace_path
     main["heartbeat"] = {
         "every": "360m",
         "target": "last",

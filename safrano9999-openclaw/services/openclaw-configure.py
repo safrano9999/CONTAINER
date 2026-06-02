@@ -204,6 +204,10 @@ def _register_plugins(config: dict) -> list[str]:
     return registered
 
 
+def _refresh_plugin_registry() -> None:
+    subprocess.run(_openclaw_cmd("plugins", "registry", "--refresh"), check=True)
+
+
 def _apply_container_only_command_aliases() -> None:
     for repo, (command_name, alias) in CONTAINER_ONLY_COMMAND_ALIASES.items():
         plugin_file = PLUGINS_DIR / repo / "index.js"
@@ -252,6 +256,7 @@ def main() -> None:
     _configure_main_agent(config)
     registered = _register_plugins(config)
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _refresh_plugin_registry()
 
     print("OpenClaw model provider intentionally not configured")
     if telegram_configured:

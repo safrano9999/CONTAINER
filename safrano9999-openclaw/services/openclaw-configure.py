@@ -186,7 +186,7 @@ def _configure_main_agent(config: dict) -> None:
         "target": "last",
         "directPolicy": "allow",
     }
-    main["tools"] = {"allow": ["*"], "alsoAllow": ["*"], "deny": []}
+    main["tools"] = {"allow": ["*"], "deny": []}
 
 
 def _register_plugins(config: dict) -> list[str]:

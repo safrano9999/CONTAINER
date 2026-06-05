@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
-SHARED_SERVICES_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/services"
+SHARED_SCRIPTS_DIR="${SHARED_SCRIPTS_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS}"
+SHARED_SERVICES_DIR="$SHARED_SCRIPTS_DIR/services"
 
 CONFIG_ONLY=false
 NO_CONFIG=false
@@ -114,7 +115,7 @@ link_shared_openclaw_services
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
-MERGE_CONF_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/merge_conf.sh"
+MERGE_CONF_SH="$SHARED_SCRIPTS_DIR/INSTALL/merge_conf.sh"
 ln -f "$MERGE_CONF_SH" "$SCRIPT_DIR/merge_conf.sh"
 bash "$SCRIPT_DIR/merge_conf.sh" \
     "$SCRIPT_DIR" \
@@ -125,7 +126,7 @@ bash "$SCRIPT_DIR/merge_conf.sh" \
 
 # ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
-    CONFIG_SH="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/INSTALL/config.sh"
+    CONFIG_SH="$SHARED_SCRIPTS_DIR/INSTALL/config.sh"
     ln -f "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
     echo ""
     (cd "$SCRIPT_DIR" && bash config.sh)

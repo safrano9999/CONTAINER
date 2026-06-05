@@ -31,6 +31,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout shared scripts
+        uses: actions/checkout@v4
+        with:
+          repository: safrano9999/SCRIPTS
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          path: SCRIPTS
+
       - name: Resolve tags
         id: tags
         shell: bash
@@ -61,6 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
           OPENCLAW_PLUGIN_RELEASE_TAG: ${{ steps.tags.outputs.plugin_tag }}
+          SHARED_SCRIPTS_DIR: ${{ github.workspace }}/SCRIPTS
         run: |
           cd safrano9999-openclaw
           ./setup.sh --no-config --no-build
@@ -93,6 +101,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout shared scripts
+        uses: actions/checkout@v4
+        with:
+          repository: safrano9999/SCRIPTS
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          path: SCRIPTS
+
       - name: Resolve tags
         id: tags
         shell: bash
@@ -119,6 +134,7 @@ jobs:
       - name: Stage source clones
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          SHARED_SCRIPTS_DIR: ${{ github.workspace }}/SCRIPTS
         run: |
           cd fedora43-ai
           ./setup.sh --no-config --no-build

@@ -117,6 +117,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Stage source clones
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
           cd fedora43-ai
           ./setup.sh --no-config --no-build

@@ -39,6 +39,16 @@ link_shared_openclaw_services() {
     done
 }
 
+github_repo_url() {
+    local repo="$1"
+
+    if [ -n "${GH_TOKEN:-}" ]; then
+        printf 'https://x-access-token:%s@github.com/safrano9999/%s' "$GH_TOKEN" "$repo"
+    else
+        printf 'https://github.com/safrano9999/%s' "$repo"
+    fi
+}
+
 sync_repo() {
     local spec="$1"
     local repo="$spec"
@@ -62,10 +72,12 @@ sync_repo() {
             git -C "$SAFRANO_DIR/$repo" pull --ff-only
         fi
     else
+        local url
+        url="$(github_repo_url "$repo")"
         if [ -n "$branch" ]; then
-            git clone --depth 1 --branch "$branch" "https://github.com/safrano9999/$repo" "$SAFRANO_DIR/$repo"
+            git clone --depth 1 --branch "$branch" "$url" "$SAFRANO_DIR/$repo"
         else
-            git clone --depth 1 "https://github.com/safrano9999/$repo" "$SAFRANO_DIR/$repo"
+            git clone --depth 1 "$url" "$SAFRANO_DIR/$repo"
         fi
     fi
 }

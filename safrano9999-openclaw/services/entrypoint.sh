@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
 # OpenClaw plugins container entrypoint.
-# Replaces the systemd services fedora43-ai uses (tailscaled / tailscale-up /
-# openclaw-config / openclaw) with a single PID-1-friendly boot sequence:
-#   1) join the tailnet (if TS_AUTHKEY is injected)
-#   2) configure OpenClaw (gateway token + plugin loading; no LLM)
-#   3) exec the gateway
+# The official OpenClaw image boots through tini; keep that base flow and do the
+# small deterministic setup here before exec'ing the gateway.
 set -euo pipefail
 
 log() { printf '[entrypoint] %s\n' "$*"; }
 
-# OpenClaw CLI: the image may expose `openclaw` on PATH or only openclaw.mjs.
 if command -v openclaw >/dev/null 2>&1; then
   OPENCLAW_BIN=(openclaw)
 elif [ -f /app/openclaw.mjs ]; then
   OPENCLAW_BIN=(node /app/openclaw.mjs)
 else
-  log "FATAL: cannot find the openclaw CLI"; exit 1
+  log "FATAL: cannot find the openclaw CLI"
+  exit 1
 fi
-export OPENCLAW_BIN="${OPENCLAW_BIN[*]}"   # consumed by openclaw-configure
+export OPENCLAW_BIN="${OPENCLAW_BIN[*]}"
 
-# --- 1) Tailscale ------------------------------------------------------------
-# Ephemeral auth keys are recommended: the node re-registers cleanly on every
-# restart. Needs NET_ADMIN + /dev/net/tun (set via *_CAPABILITIES/*_DEVICES).
 if [ -n "${TS_AUTHKEY:-}" ]; then
   log "starting tailscaled (state: ${TS_STATE_DIR:=/var/lib/tailscale})"
   mkdir -p "${TS_STATE_DIR}" /run/tailscale
@@ -35,11 +29,6 @@ if [ -n "${TS_AUTHKEY:-}" ]; then
   [ -n "${TS_HOSTNAME:-}" ] && up_args+=(--hostname="${TS_HOSTNAME}")
   if tailscale "${up_args[@]}"; then
     log "tailscale up: $(tailscale ip -4 2>/dev/null | head -1 || echo '?')"
-    if tailscale set --ssh; then
-      log "tailscale ssh enabled"
-    else
-      log "WARN: 'tailscale set --ssh' failed - continuing without Tailscale SSH"
-    fi
   else
     log "WARN: 'tailscale up' failed - continuing without tailnet"
   fi
@@ -47,11 +36,9 @@ else
   log "TS_AUTHKEY not set - skipping Tailscale"
 fi
 
-# --- 2) Configure OpenClaw ---------------------------------------------------
-log "configuring OpenClaw (plugins only; no LLM provider)"
+log "configuring OpenClaw (plugins only; no OpenClaw LLM provider)"
 /usr/local/bin/openclaw-configure
 
-# --- 2b) ZEROINBOX folder/label init -----------------------------------------
 zdir="${OPENCLAW_PLUGINS_DIR:-/opt/safrano9999-openclaw}/ZEROINBOX"
 if [ -x "${zdir}/.venv/bin/python" ] && [ -f "${zdir}/scripts/gmail-init-labels" ]; then
   log "running ZEROINBOX label init"
@@ -62,10 +49,6 @@ if [ -x "${zdir}/.venv/bin/python" ] && [ -f "${zdir}/scripts/gmail-init-labels"
   fi
 fi
 
-# --- 2c) KACHELMANN WebUI ----------------------------------------------------
-# fedora43 runs each web app as its own systemd service; without systemd we run
-# the KACHELMANN FastAPI WebUI as a background process (reachable on its port /
-# over the tailnet). Gated on KACHELMANN_PORT.
 if [ -n "${KACHELMANN_PORT:-}" ]; then
   kdir="${OPENCLAW_PLUGINS_DIR:-/opt/safrano9999-openclaw}/KACHELMANN"
   if [ -x "${kdir}/.venv/bin/uvicorn" ]; then
@@ -77,13 +60,14 @@ if [ -n "${KACHELMANN_PORT:-}" ]; then
   fi
 fi
 
-# --- 3) Run the gateway ------------------------------------------------------
 gw_args=(gateway run --bind lan --port "${OPENCLAW_GATEWAY_PORT:-18789}")
 if [ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
   gw_args+=(--auth token)
 fi
+
 if [ -x /usr/local/bin/safrano9999-routines ]; then
   /usr/local/bin/safrano9999-routines init &
 fi
+
 log "starting gateway: ${OPENCLAW_BIN} ${gw_args[*]}"
 exec ${OPENCLAW_BIN} "${gw_args[@]}"

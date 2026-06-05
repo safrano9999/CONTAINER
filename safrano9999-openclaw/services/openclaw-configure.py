@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Configure OpenClaw for the safcontainer plugin gateway.
-
-This stays intentionally small:
-- no OpenClaw LLM provider by default
-- normal OpenClaw commands/channels stay available
-- install the four plugin paths and the two container-only aliases
-"""
+"""Configure OpenClaw for the safcontainer plugin gateway."""
 
 import json
 import os
-import shutil
-import subprocess
 from pathlib import Path
+
+from openclaw_common import (
+    configure_gateway,
+    configure_telegram_main,
+    ensure_main_agent,
+    openclaw_cmd,
+    refresh_plugin_registry,
+)
 
 
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
@@ -59,144 +59,34 @@ CONTAINER_ONLY_ALIAS_BLOCKS = {
 """,
 }
 
-def _openclaw_cmd(*args: str) -> list[str]:
-    raw = os.environ.get("OPENCLAW_BIN", "").strip()
-    if raw:
-        base = raw.split()
-    elif shutil.which("openclaw"):
-        base = ["openclaw"]
-    else:
-        base = ["node", "/app/openclaw.mjs"]
-    return [*base, *args]
-
-
-def _env_ref(name: str) -> dict:
-    return {
-        "source": "env",
-        "provider": "default",
-        "id": name,
-    }
-
 
 def _ensure_openclaw_config() -> None:
     if CONFIG_PATH.exists() and CONFIG_PATH.stat().st_size > 0:
         return
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        _openclaw_cmd(
-            "onboard",
-            "--non-interactive",
-            "--accept-risk",
-            "--skip-health",
-            "--auth-choice",
-            "skip",
-            "--skip-daemon",
-            "--skip-search",
-            "--gateway-auth",
-            "token",
-            "--gateway-token-ref-env",
-            "OPENCLAW_GATEWAY_TOKEN",
-            "--gateway-bind",
-            "lan",
-            "--gateway-port",
-            str(GATEWAY_PORT),
-            "--suppress-gateway-token-output",
-        ),
-        check=True,
+    os.environ["OPENCLAW_BIN"] = " ".join(openclaw_cmd())
+    command = openclaw_cmd(
+        "onboard",
+        "--non-interactive",
+        "--accept-risk",
+        "--skip-health",
+        "--auth-choice",
+        "skip",
+        "--skip-daemon",
+        "--skip-search",
+        "--gateway-auth",
+        "token",
+        "--gateway-token-ref-env",
+        "OPENCLAW_GATEWAY_TOKEN",
+        "--gateway-bind",
+        "lan",
+        "--gateway-port",
+        str(GATEWAY_PORT),
+        "--suppress-gateway-token-output",
     )
+    import subprocess
 
-
-def _configure_gateway(config: dict) -> None:
-    gateway = config.setdefault("gateway", {})
-    gateway["mode"] = "local"
-    gateway["bind"] = "lan"
-    gateway["port"] = GATEWAY_PORT
-    control_ui = gateway.setdefault("controlUi", {})
-    control_ui["allowInsecureAuth"] = True
-    control_ui["dangerouslyDisableDeviceAuth"] = True
-    origins = control_ui.setdefault("allowedOrigins", [])
-    for origin in (
-        f"http://127.0.0.1:{GATEWAY_PORT}",
-        f"http://localhost:{GATEWAY_PORT}",
-        f"http://127.0.0.1:{os.environ.get('OPENCLAW_GATEWAY_PUBLISH_PORT', GATEWAY_PORT)}",
-        f"http://localhost:{os.environ.get('OPENCLAW_GATEWAY_PUBLISH_PORT', GATEWAY_PORT)}",
-    ):
-        if origin not in origins:
-            origins.append(origin)
-    if os.environ.get("OPENCLAW_GATEWAY_TOKEN", "").strip():
-        gateway["auth"] = {
-            "mode": "token",
-            "token": _env_ref("OPENCLAW_GATEWAY_TOKEN"),
-        }
-
-
-def _configure_telegram(config: dict) -> bool:
-    if not os.environ.get("TELEGRAMTOKEN_OPENCLAW", "").strip():
-        return False
-    token_ref = _env_ref("TELEGRAMTOKEN_OPENCLAW")
-    telegram = config.setdefault("channels", {}).setdefault("telegram", {})
-    telegram["enabled"] = True
-    telegram["botToken"] = token_ref
-    telegram["capabilities"] = {"inlineButtons": "dm"}
-    telegram["commands"] = {
-        "native": False,
-        "nativeSkills": False,
-    }
-    telegram["dmPolicy"] = "open"
-    telegram["allowFrom"] = ["*"]
-    telegram["groupPolicy"] = "open"
-    telegram["groupAllowFrom"] = ["*"]
-    telegram["streaming"] = {"mode": "off"}
-    telegram["network"] = {
-        "autoSelectFamily": False,
-        "dnsResultOrder": "ipv4first",
-    }
-    telegram["execApprovals"] = {
-        "enabled": False,
-        "approvers": [],
-        "agentFilter": ["main"],
-        "target": "dm",
-    }
-    telegram["accounts"] = {
-        "default": {
-            "name": "main",
-            "enabled": True,
-            "dmPolicy": "open",
-            "allowFrom": ["*"],
-            "botToken": token_ref,
-            "groupPolicy": "open",
-            "groupAllowFrom": ["*"],
-            "streaming": {"mode": "partial"},
-        }
-    }
-    telegram["defaultAccount"] = "default"
-    return True
-
-
-def _configure_main_agent(config: dict) -> None:
-    agents = config.setdefault("agents", {})
-    workspace = (
-        os.environ.get("OPENCLAW_AGENT_WORKSPACE", "").strip()
-        or os.environ.get("OPENCLAW_WORKSPACE_DIR", "").strip()
-        or "/root/.openclaw/workspace"
-    )
-    workspace_path = str(Path(os.path.expanduser(workspace)).resolve())
-    Path(workspace_path).mkdir(parents=True, exist_ok=True)
-    agents.setdefault("defaults", {}).setdefault("workspace", workspace_path)
-
-    agent_list = agents.setdefault("list", [])
-    main = next((entry for entry in agent_list if entry.get("id") == "main"), None)
-    if main is None:
-        main = {"id": "main"}
-        agent_list.insert(0, main)
-    if not str(main.get("workspace", "")).strip():
-        main["workspace"] = workspace_path
-    main["heartbeat"] = {
-        "every": "360m",
-        "target": "last",
-        "directPolicy": "allow",
-    }
-    main["tools"] = {"allow": ["*"], "deny": []}
+    subprocess.run(command, check=True)
 
 
 def _register_plugins(config: dict) -> list[str]:
@@ -225,10 +115,6 @@ def _register_plugins(config: dict) -> list[str]:
             "target": telegram_target,
         }
     return registered
-
-
-def _refresh_plugin_registry() -> None:
-    subprocess.run(_openclaw_cmd("plugins", "registry", "--refresh"), check=True)
 
 
 def _apply_container_only_command_aliases() -> None:
@@ -274,22 +160,35 @@ def main() -> None:
     _disable_plugin_command_auth()
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    _configure_gateway(config)
-    telegram_configured = _configure_telegram(config)
-    _configure_main_agent(config)
+    configure_gateway(
+        config,
+        port=GATEWAY_PORT,
+        include_tailscale_origins=False,
+        allow_insecure_auth=True,
+    )
+    telegram_configured = configure_telegram_main(
+        config,
+        include_account=True,
+    )
+    ensure_main_agent(
+        config,
+        config_path=CONFIG_PATH,
+        heartbeat={"every": "360m", "target": "last", "directPolicy": "allow"},
+        tools={"allow": ["*"], "deny": []},
+    )
+
+    # Fedora-style LiteLLM/OpenClaw-Harness, intentionally disabled here:
+    # from openclaw_common import configure_litellm_provider
+    # configure_litellm_provider(config, default_model="deepseek-v4-flash")
+
     registered = _register_plugins(config)
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    _refresh_plugin_registry()
+    refresh_plugin_registry()
 
     print("OpenClaw model provider intentionally not configured")
     if telegram_configured:
         print("OpenClaw Telegram configured")
     print(f"OpenClaw plugins registered: {', '.join(registered)}")
-
-
-# OpenClaw LiteLLM provider stays disabled here. If you want to enable it later,
-# add the same provider/baseUrl/apiKey mapping used by fedora43-ai, but keep it
-# commented by default in this container.
 
 
 if __name__ == "__main__":

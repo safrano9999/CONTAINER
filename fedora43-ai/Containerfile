@@ -133,6 +133,16 @@ COPY safrano9999/PV_D-A-CH /opt/safrano9999/PV_D-A-CH
 COPY safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES /opt/safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
 COPY safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW /opt/safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
 COPY safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager /opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
+COPY safrano9999/DAILYNEWS /opt/safrano9999/DAILYNEWS
+COPY safrano9999/CALENDAR /opt/safrano9999/CALENDAR
+COPY safrano9999/ZEROINBOX /opt/safrano9999/ZEROINBOX
+COPY safrano9999/KACHELMANN /opt/safrano9999/KACHELMANN
+
+RUN set -eux; \
+    for dir in /opt/safrano9999/DAILYNEWS /opt/safrano9999/CALENDAR /opt/safrano9999/ZEROINBOX /opt/safrano9999/KACHELMANN; do \
+      [ -x "$dir/scripts/setup-python.sh" ] || continue; \
+      (cd "$dir" && ./scripts/setup-python.sh); \
+    done
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
@@ -144,24 +154,44 @@ RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && chmod +x /opt/safrano9999/CITADEL/scan.sh
 
 COPY services/*.service /etc/systemd/system/
+RUN mkdir -p /etc/systemd/system/tailscale-up.service.d \
+    /etc/systemd/system/openclaw-config.service.d \
+    /etc/systemd/system/openclaw.service.d \
+ && printf '%s\n' '[Service]' 'ExecStartPost=-/usr/bin/tailscale set --ssh' \
+      > /etc/systemd/system/tailscale-up.service.d/10-tailscale-ssh.conf \
+ && printf '%s\n' '[Service]' \
+      'PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL OPENCLAW_LITELLM_MODEL_NAME OPENCLAW_LITELLM_CONTEXT_WINDOW OPENCLAW_LITELLM_MAX_TOKENS BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \
+      'ExecCondition=/bin/bash -c '\''[ -n "$$LITELLM_API_KEY" ] && [ -n "$$LITELLM_URL" ] && [ -n "$$LITELLM_PORT" ]'\''' \
+      > /etc/systemd/system/openclaw-config.service.d/10-fedora-litellm.conf \
+ && printf '%s\n' '[Service]' \
+      'PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL OPENCLAW_LITELLM_MODEL_NAME OPENCLAW_LITELLM_CONTEXT_WINDOW OPENCLAW_LITELLM_MAX_TOKENS BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \
+      'ExecCondition=/bin/bash -c '\''[ -n "$$LITELLM_API_KEY" ] && [ -n "$$LITELLM_URL" ] && [ -n "$$LITELLM_PORT" ]'\''' \
+      > /etc/systemd/system/openclaw.service.d/10-fedora-litellm.conf \
+ && printf '%s\n' '[Unit]' \
+      'Requires=openclaw-safrano9999.service' \
+      'After=openclaw-safrano9999.service' \
+      > /etc/systemd/system/openclaw.service.d/20-safrano9999.conf
 COPY services/fedora-bin/* /usr/local/share/fedora43-ai/bin/
 
 RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service napoleon.service naturalgrounding.service \
     citadel-setup.service citadel-scan.service bip39.service fedora43-ai.service \
-    tailscaled.service tailscale-up.service openclaw-config.service openclaw.service hermes.service \
+    tailscaled.service tailscale-up.service openclaw-config.service openclaw-safrano9999.service openclaw.service hermes.service \
     hermes-dashboard.service
 
 RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
 
 COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY services/openclaw-safrano9999.py /usr/local/bin/openclaw-safrano9999
 COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
 COPY services/hermes-patch-ssl-verify.py /usr/local/bin/hermes-patch-ssl-verify
 COPY services/openclaw-patch-models-command.py /usr/local/bin/openclaw-patch-models-command
 COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
 COPY services/codex-save-auth.sh /usr/local/bin/codex-save-auth
 COPY services/fedora43-ai-init.sh /usr/local/bin/fedora43-ai-init
+COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
 
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-litellm \
+    /usr/local/bin/openclaw-safrano9999 \
     /usr/local/bin/hermes-patch-ssl-verify \
     /usr/local/bin/openclaw-patch-models-command \
     /usr/local/bin/vikai-bootstrap-openclaw-agents \

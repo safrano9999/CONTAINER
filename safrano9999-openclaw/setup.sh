@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SAFCONTAINER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INSTALL_DIR="$SAFCONTAINER_DIR/SCRIPTS/INSTALL"
+SHARED_SERVICES_DIR="$SAFCONTAINER_DIR/SCRIPTS/services"
 CONTAINER_NAME="safrano9999-openclaw"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
@@ -80,6 +81,18 @@ docker_io_image() {
   local configured
   configured="$(config_value SAFRANO9999_OPENCLAW_DOCKER_IMAGE || true)"
   printf '%s\n' "${configured:-$DOCKER_IO_IMAGE_DEFAULT}"
+}
+
+link_shared_openclaw_helper() {
+  local name src dst
+
+  mkdir -p "$SCRIPT_DIR/services"
+  for name in openclaw_common.py; do
+    src="$SHARED_SERVICES_DIR/openclaw/$name"
+    dst="$SCRIPT_DIR/services/$name"
+    [ -f "$src" ] || { echo "Missing shared OpenClaw helper: $src" >&2; exit 1; }
+    ln -f "$src" "$dst"
+  done
 }
 
 plugin_tag() {
@@ -488,6 +501,7 @@ publish_local_image() {
 }
 
 echo "  Staging plugin release archives -> safrano9999/"
+link_shared_openclaw_helper
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"

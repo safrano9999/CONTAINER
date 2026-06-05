@@ -3,10 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
+SHARED_SERVICES_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS/services"
 
 CONFIG_ONLY=false
 NO_CONFIG=false
 FRESH=false
+NO_BUILD=false
 INSTANCE="fedora43-ai"
 
 for arg in "$@"; do
@@ -14,9 +16,28 @@ for arg in "$@"; do
         --config)    CONFIG_ONLY=true ;;
         --no-config) NO_CONFIG=true ;;
         --fresh)     FRESH=true; NO_CONFIG=true ;;
+        --no-build|--stage-only) NO_BUILD=true; NO_CONFIG=true ;;
         *) INSTANCE="$arg" ;;
     esac
 done
+
+link_shared_openclaw_services() {
+    local name src dst
+
+    mkdir -p "$SCRIPT_DIR/services"
+    for name in tailscaled.service tailscale-up.service; do
+        src="$SHARED_SERVICES_DIR/$name"
+        dst="$SCRIPT_DIR/services/$name"
+        [ -f "$src" ] || { echo "Missing shared OpenClaw service: $src" >&2; exit 1; }
+        ln -f "$src" "$dst"
+    done
+    for name in openclaw.service openclaw-config.service openclaw_common.py; do
+        src="$SHARED_SERVICES_DIR/openclaw/$name"
+        dst="$SCRIPT_DIR/services/$name"
+        [ -f "$src" ] || { echo "Missing shared OpenClaw service helper: $src" >&2; exit 1; }
+        ln -f "$src" "$dst"
+    done
+}
 
 sync_repo() {
     local spec="$1"
@@ -49,11 +70,33 @@ sync_repo() {
     fi
 }
 
+relink_shared_repo_files() {
+    local script="$SCRIPT_DIR/scripts/relink-shared-files.sh"
+
+    [ -x "$script" ] || return 0
+    "$script" "$SAFRANO_DIR"
+}
+
 # ── Repos klonen oder aktualisieren ──────────────────────────────────
-REPOS=(CODEANALYST JUGO CITADEL VikAI PV_D-A-CH NAPOLEON_HILLS_AI_MASTERMIND_CLASSES SOLANA_AIRGAPPED_DEBIAN_WORKFLOW NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual)
+REPOS=(
+    CODEANALYST
+    JUGO
+    CITADEL
+    VikAI
+    PV_D-A-CH
+    NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
+    SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
+    NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual
+    DAILYNEWS
+    CALENDAR
+    ZEROINBOX
+    KACHELMANN
+)
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
+relink_shared_repo_files
+link_shared_openclaw_services
 
 # ── env.examples + requirements.txt dedupliziert zusammenführen ──────
 echo "  Merging env.examples + requirements.txt..."
@@ -278,6 +321,7 @@ echo "  Generating fedora43-ai.container..."
 render_compose_from_conf
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
+$NO_BUILD && echo "" && echo "  Staging done." && exit 0
 
 # ── Image-Quelle wählen ──────────────────────────────────────────────
 DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"

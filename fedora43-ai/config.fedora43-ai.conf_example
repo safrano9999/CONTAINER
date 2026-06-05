@@ -22,6 +22,12 @@ HERMES_API_SERVER_PORT=8642
 # Hermes OpenAI compatible API host port
 HERMES_API_SERVER_PUBLISH_PORT=18642
 
+# KACHELMANN WebUI internal port inside fedora43-ai
+KACHELMANN_PORT=11006
+
+# KACHELMANN WebUI host port for fedora43-ai
+KACHELMANN_PUBLISH_PORT=11006
+
 # PV_D-A-CH database host from inside the Fedora container
 PV_DACH_DB_HOST=host.containers.internal
 

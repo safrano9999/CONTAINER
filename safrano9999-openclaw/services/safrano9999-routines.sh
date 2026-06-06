@@ -99,7 +99,6 @@ run_all() {
 }
 
 install_crons() {
-  wait_gateway || return 1
   local spec="${crontab_spec}"
   if [ "${1:-}" = "--crontab" ]; then
     shift

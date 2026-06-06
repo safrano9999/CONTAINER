@@ -66,7 +66,8 @@ if [ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
 fi
 
 if [ -x /usr/local/bin/safrano9999-routines ]; then
-  /usr/local/bin/safrano9999-routines init &
+  /usr/local/bin/safrano9999-routines install-crons
+  /usr/local/bin/safrano9999-routines run &
 fi
 
 log "starting gateway: ${OPENCLAW_BIN} ${gw_args[*]}"

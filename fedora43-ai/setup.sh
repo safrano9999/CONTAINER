@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SHARED_SCRIPTS_DIR="${SHARED_SCRIPTS_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS}"
-SHARED_SERVICES_DIR="$SHARED_SCRIPTS_DIR/services"
 
 CONFIG_ONLY=false
 NO_CONFIG=false
@@ -43,24 +42,6 @@ for arg in "$@"; do
         *) INSTANCE="$arg" ;;
     esac
 done
-
-link_shared_openclaw_services() {
-    local name src dst
-
-    mkdir -p "$SCRIPT_DIR/services"
-    for name in tailscaled.service tailscale-up.service; do
-        src="$SHARED_SERVICES_DIR/$name"
-        dst="$SCRIPT_DIR/services/$name"
-        [ -f "$src" ] || { echo "Missing shared OpenClaw service: $src" >&2; exit 1; }
-        ln -f "$src" "$dst"
-    done
-    for name in openclaw.service openclaw-config.service openclaw_common.py safrano9999_plugins.py; do
-        src="$SHARED_SERVICES_DIR/openclaw/$name"
-        dst="$SCRIPT_DIR/services/$name"
-        [ -f "$src" ] || { echo "Missing shared OpenClaw service helper: $src" >&2; exit 1; }
-        ln -f "$src" "$dst"
-    done
-}
 
 github_repo_url() {
     local repo="$1"
@@ -101,15 +82,9 @@ sync_repo() {
     fi
 }
 
-relink_shared_repo_files() {
-    local script="$SCRIPT_DIR/scripts/relink-shared-files.sh"
-
-    [ -x "$script" ] || return 0
-    "$script" "$SAFRANO_DIR"
-}
-
 # ── Repos klonen oder aktualisieren ──────────────────────────────────
 REPOS=(
+    SCRIPTS
     CODEANALYST
     JUGO
     CITADEL
@@ -126,28 +101,25 @@ REPOS=(
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
-relink_shared_repo_files
-link_shared_openclaw_services
+"$SHARED_SCRIPTS_DIR/relink_shared.sh" \
+    config.sh merge_conf.sh python_header.py \
+    openclaw-config.service openclaw.service openclaw_common.py \
+    safrano9999_plugins.py tailscale-up.service tailscaled.service
 
 # ── env.examples + requirements.txt dedupliziert zusammenführen ──────
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
-MERGE_CONF_SH="$SHARED_SCRIPTS_DIR/INSTALL/merge_conf.sh"
-ln -f "$MERGE_CONF_SH" "$SCRIPT_DIR/merge_conf.sh"
-bash "$SCRIPT_DIR/merge_conf.sh" \
+bash "$SHARED_SCRIPTS_DIR/INSTALL/merge_conf.sh" \
     "$SCRIPT_DIR" \
     "$SCRIPT_DIR/config.conf_example" \
     "$SCRIPT_DIR/config.fedora43-ai.conf_example" \
     "$SCRIPT_DIR/safrano9999" \
     "config.conf_example"
 
-# ── config.sh aus SCRIPTS/INSTALL als Hardlink bereitstellen ─────────
 if ! $NO_CONFIG; then
-    CONFIG_SH="$SHARED_SCRIPTS_DIR/INSTALL/config.sh"
-    ln -f "$CONFIG_SH" "$SCRIPT_DIR/config.sh"
     echo ""
-    (cd "$SCRIPT_DIR" && bash config.sh)
+    (cd "$SCRIPT_DIR" && bash "$SHARED_SCRIPTS_DIR/INSTALL/config.sh")
     CONTAINER_NAME="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]')"
     rm -f "$SCRIPT_DIR/$CONTAINER_NAME.container" "$SCRIPT_DIR/docker-compose.yml"
 fi

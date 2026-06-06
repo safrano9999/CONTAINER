@@ -125,6 +125,7 @@ COPY requirements.txt /requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /requirements.txt
 
+COPY safrano9999/SCRIPTS /opt/safrano9999/SCRIPTS
 COPY safrano9999/CODEANALYST /opt/safrano9999/CODEANALYST
 COPY safrano9999/JUGO /opt/safrano9999/JUGO
 COPY safrano9999/CITADEL /opt/safrano9999/CITADEL
@@ -189,6 +190,11 @@ COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-
 COPY services/codex-save-auth.sh /usr/local/bin/codex-save-auth
 COPY services/fedora43-ai-init.sh /usr/local/bin/fedora43-ai-init
 COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
+
+RUN /opt/safrano9999/SCRIPTS/relink_shared.sh \
+    config.sh merge_conf.sh python_header.py \
+    openclaw-config.service openclaw.service openclaw_common.py \
+    safrano9999_plugins.py tailscale-up.service tailscaled.service
 
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-litellm \
     /usr/local/bin/openclaw-safrano9999 \

@@ -48,6 +48,7 @@ RUN curl -fsSL https://tailscale.com/install.sh | sh \
 # --- plugins: bundle ZIPs, unpack/install dynamically, pre-bake venvs --------
 ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
 COPY safrano9999/*.zip safrano9999/*.zip.sha256 ${OPENCLAW_PLUGINS_DIR}/
+COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 
 RUN set -eux; \
     mkdir -p /root/.openclaw; \
@@ -59,12 +60,12 @@ RUN set -eux; \
       rm -rf "$dir"; \
       mkdir -p "$dir"; \
       unzip -q "$zip" -d "$dir"; \
-      openclaw plugins install --link --dangerously-force-unsafe-install "$dir"; \
       [ -f "$dir/requirements.txt" ] || continue; \
       python3 -m venv "$dir/.venv"; \
       "$dir/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel; \
       "$dir/.venv/bin/pip" install --no-cache-dir -r "$dir/requirements.txt" python-dotenv; \
-    done
+    done; \
+    python3 /usr/local/bin/safrano9999_plugins.py install --plugins-dir "$OPENCLAW_PLUGINS_DIR"
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.
 ENV HOME=/root \

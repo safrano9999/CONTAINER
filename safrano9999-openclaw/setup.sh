@@ -21,16 +21,34 @@ PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
 
 NO_CONFIG=false
 CONFIG_ONLY=false
-FRESH=false
+NO_CACHE=false
 NO_BUILD=false
 PUSH_IMAGE=false
+BUILD_ONLY=false
 IMG_CHOICE=""
+
+show_help() {
+  cat <<'EOF'
+Usage: ./setup.sh [OPTIONS]
+
+Options:
+  --build-only        Skip config.sh, then ask interactively for pull/build
+  --no-cache          Use with --build-only to build with --pull=always --no-cache
+  --config-only       Stop after staging, merging, config, compose and quadlet
+  --help              Show this help and exit
+
+Without options, setup runs config + local build without --no-cache.
+EOF
+}
 
 for arg in "$@"; do
   case "$arg" in
-    --config) CONFIG_ONLY=true ;;
+    --help) show_help; exit 0 ;;
+    --config|--config-only) CONFIG_ONLY=true ;;
     --no-config) NO_CONFIG=true ;;
-    --fresh) FRESH=true; NO_CONFIG=true; IMG_CHOICE=2 ;;
+    --build-only) BUILD_ONLY=true; NO_CONFIG=true ;;
+    --no-cache) NO_CACHE=true ;;
+    --fresh) NO_CACHE=true; NO_CONFIG=true; IMG_CHOICE=2 ;;
     --pull) IMG_CHOICE=1 ;;
     --build) IMG_CHOICE=2 ;;
     --push) PUSH_IMAGE=true; IMG_CHOICE=2 ;;
@@ -88,7 +106,7 @@ link_shared_openclaw_helper() {
   local name src dst
 
   mkdir -p "$SCRIPT_DIR/services"
-  for name in openclaw_common.py; do
+  for name in openclaw_common.py safrano9999_plugins.py; do
     src="$SHARED_SERVICES_DIR/openclaw/$name"
     dst="$SCRIPT_DIR/services/$name"
     [ -f "$src" ] || { echo "Missing shared OpenClaw helper: $src" >&2; exit 1; }
@@ -109,7 +127,7 @@ plugin_tag() {
 
 download_plugin_zip() {
   local name="$1"
-  local lower tag zip zip_path sha_path url token
+  local lower tag zip zip_path sha_path url
   local downloaded=false
   local -a curl_auth=()
 
@@ -124,11 +142,7 @@ download_plugin_zip() {
   rm -rf "$SAFRANO_DIR/$name" "$SAFRANO_DIR/.tmp-$name"
   rm -f "$zip_path" "$sha_path"
   echo "  downloading $name ($tag) -> $zip"
-  token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-  if [ -z "$token" ] && command -v gh >/dev/null 2>&1; then
-    token="$(gh auth token 2>/dev/null || true)"
-  fi
-  if command -v gh >/dev/null 2>&1 && [ -n "$token" ]; then
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     if gh release download "$tag" \
       -R "safrano9999/$name" \
       --pattern "$zip" \
@@ -531,14 +545,16 @@ $NO_BUILD && { echo "  Staging done."; exit 0; }
 
 DOCKER_IO_IMAGE="$(docker_io_image)"
 
-if [ -z "$IMG_CHOICE" ]; then
+if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
   echo ""
   echo "  Image source:"
   echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
   echo "    (2) Build locally"
   echo ""
-  read -rp "  Choose [1/2] (default: 1): " IMG_CHOICE
-  IMG_CHOICE="${IMG_CHOICE:-1}"
+  read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
+  IMG_CHOICE="${IMG_CHOICE:-2}"
+elif [ -z "$IMG_CHOICE" ]; then
+  IMG_CHOICE=2
 fi
 
 case "$IMG_CHOICE" in
@@ -551,8 +567,8 @@ case "$IMG_CHOICE" in
     ;;
   2)
     echo ""
-    if $FRESH; then
-      echo "  Fresh build ..."
+    if $NO_CACHE; then
+      echo "  Building $LOCAL_IMAGE with --no-cache ..."
       podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     else
       echo "  Building $LOCAL_IMAGE ..."

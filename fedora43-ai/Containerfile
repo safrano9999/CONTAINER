@@ -137,12 +137,9 @@ COPY safrano9999/DAILYNEWS /opt/safrano9999/DAILYNEWS
 COPY safrano9999/CALENDAR /opt/safrano9999/CALENDAR
 COPY safrano9999/ZEROINBOX /opt/safrano9999/ZEROINBOX
 COPY safrano9999/KACHELMANN /opt/safrano9999/KACHELMANN
+COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 
-RUN set -eux; \
-    for dir in /opt/safrano9999/DAILYNEWS /opt/safrano9999/CALENDAR /opt/safrano9999/ZEROINBOX /opt/safrano9999/KACHELMANN; do \
-      [ -x "$dir/scripts/setup-python.sh" ] || continue; \
-      (cd "$dir" && ./scripts/setup-python.sh); \
-    done
+RUN python3 /usr/local/bin/safrano9999_plugins.py setup-python --plugins-dir /opt/safrano9999
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
@@ -157,7 +154,10 @@ COPY services/*.service /etc/systemd/system/
 RUN mkdir -p /etc/systemd/system/tailscale-up.service.d \
     /etc/systemd/system/openclaw-config.service.d \
     /etc/systemd/system/openclaw.service.d \
- && printf '%s\n' '[Service]' 'ExecStartPost=-/usr/bin/tailscale set --ssh' \
+ && printf '%s\n' '[Service]' \
+      'ExecStart=' \
+      'ExecStart=/bin/bash -c '\''args=(up --authkey="$$TS_AUTHKEY" --accept-routes --accept-dns --ssh); [ -n "$$TS_HOSTNAME" ] && args+=(--hostname="$$TS_HOSTNAME"); exec /usr/bin/tailscale "$${args[@]}"'\''' \
+      'ExecStartPost=-/usr/bin/tailscale set --ssh' \
       > /etc/systemd/system/tailscale-up.service.d/10-tailscale-ssh.conf \
  && printf '%s\n' '[Service]' \
       'PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL OPENCLAW_LITELLM_MODEL_NAME OPENCLAW_LITELLM_CONTEXT_WINDOW OPENCLAW_LITELLM_MAX_TOKENS BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \

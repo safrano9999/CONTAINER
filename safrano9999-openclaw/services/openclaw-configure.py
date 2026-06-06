@@ -12,18 +12,15 @@ from openclaw_common import (
     openclaw_cmd,
     refresh_plugin_registry,
 )
+from safrano9999_plugins import (
+    disable_plugin_command_auth,
+    register_openclaw_plugins,
+)
 
 
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
 GATEWAY_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PORT", "18789") or "18789")
 PLUGINS_DIR = Path(os.environ.get("OPENCLAW_PLUGINS_DIR", "/opt/safrano9999-openclaw"))
-
-PLUGIN_IDS = {
-    "DAILYNEWS": "dailynews",
-    "CALENDAR": "calendar",
-    "ZEROINBOX": "zeroinbox",
-    "KACHELMANN": "kachelmann",
-}
 
 CONTAINER_ONLY_COMMAND_ALIASES = {
     "ZEROINBOX": ("zeroinbox", "mails"),
@@ -89,34 +86,6 @@ def _ensure_openclaw_config() -> None:
     subprocess.run(command, check=True)
 
 
-def _register_plugins(config: dict) -> list[str]:
-    plugins = config.setdefault("plugins", {})
-    paths = plugins.setdefault("load", {}).setdefault("paths", [])
-    entries = plugins.setdefault("entries", {})
-    registered: list[str] = []
-    telegram_target = os.environ.get("OPENCLAW_TELEGRAM_TARGET", "").strip()
-
-    for repo, plugin_id in PLUGIN_IDS.items():
-        repo_path = str(PLUGINS_DIR / repo)
-        if repo_path not in paths:
-            paths.append(repo_path)
-        entries.setdefault(plugin_id, {})["enabled"] = True
-        registered.append(plugin_id)
-
-    if telegram_target:
-        calendar_config = entries.setdefault("calendar", {}).setdefault("config", {})
-        calendar_config["delivery"] = {
-            "channel": "telegram",
-            "target": telegram_target,
-        }
-        kachelmann_config = entries.setdefault("kachelmann", {}).setdefault("config", {})
-        kachelmann_config["statusDelivery"] = {
-            "channel": "telegram",
-            "target": telegram_target,
-        }
-    return registered
-
-
 def _apply_container_only_command_aliases() -> None:
     for repo, (command_name, alias) in CONTAINER_ONLY_COMMAND_ALIASES.items():
         plugin_file = PLUGINS_DIR / repo / "index.js"
@@ -142,22 +111,10 @@ def _apply_container_only_command_aliases() -> None:
         print(f"OpenClaw container alias enabled: /{alias} -> /{command_name}")
 
 
-def _disable_plugin_command_auth() -> None:
-    for repo in PLUGIN_IDS:
-        plugin_file = PLUGINS_DIR / repo / "index.js"
-        if not plugin_file.exists():
-            continue
-        source = plugin_file.read_text(encoding="utf-8")
-        patched = source.replace("      requireAuth: true,", "      requireAuth: false,")
-        if patched != source:
-            plugin_file.write_text(patched, encoding="utf-8")
-            print(f"OpenClaw container command auth disabled: {repo}")
-
-
 def main() -> None:
     _ensure_openclaw_config()
     _apply_container_only_command_aliases()
-    _disable_plugin_command_auth()
+    disable_plugin_command_auth(PLUGINS_DIR, log_prefix="OpenClaw container command auth disabled")
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     configure_gateway(
@@ -181,7 +138,11 @@ def main() -> None:
     # from openclaw_common import configure_litellm_provider
     # configure_litellm_provider(config, default_model="deepseek-v4-flash")
 
-    registered = _register_plugins(config)
+    registered = register_openclaw_plugins(
+        config,
+        PLUGINS_DIR,
+        telegram_target=os.environ.get("OPENCLAW_TELEGRAM_TARGET", ""),
+    )
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     refresh_plugin_registry()
 

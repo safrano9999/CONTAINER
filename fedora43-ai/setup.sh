@@ -8,16 +8,38 @@ SHARED_SERVICES_DIR="$SHARED_SCRIPTS_DIR/services"
 
 CONFIG_ONLY=false
 NO_CONFIG=false
-FRESH=false
+NO_CACHE=false
+BUILD_ONLY=false
 NO_BUILD=false
+IMG_CHOICE=""
 INSTANCE="fedora43-ai"
+
+show_help() {
+    cat <<'EOF'
+Usage: ./setup.sh [OPTIONS] [INSTANCE]
+
+Options:
+  --build-only        Skip config.sh, then ask interactively for pull/build
+  --no-cache          Use with --build-only to build with --pull=always --no-cache
+  --config-only       Stop after staging, merging, config, compose and quadlet
+  --help              Show this help and exit
+
+INSTANCE defaults to fedora43-ai and is used by compose build metadata.
+Without options, setup runs config + local build without --no-cache.
+EOF
+}
 
 for arg in "$@"; do
     case "$arg" in
-        --config)    CONFIG_ONLY=true ;;
+        --help)      show_help; exit 0 ;;
+        --config|--config-only) CONFIG_ONLY=true ;;
+        --build-only) BUILD_ONLY=true; NO_CONFIG=true ;;
+        --no-cache)  NO_CACHE=true ;;
         --no-config) NO_CONFIG=true ;;
-        --fresh)     FRESH=true; NO_CONFIG=true ;;
         --no-build|--stage-only) NO_BUILD=true; NO_CONFIG=true ;;
+        --pull)      IMG_CHOICE=1 ;;
+        --build)     IMG_CHOICE=2 ;;
+        --*)         echo "Unknown argument: $arg" >&2; exit 2 ;;
         *) INSTANCE="$arg" ;;
     esac
 done
@@ -32,7 +54,7 @@ link_shared_openclaw_services() {
         [ -f "$src" ] || { echo "Missing shared OpenClaw service: $src" >&2; exit 1; }
         ln -f "$src" "$dst"
     done
-    for name in openclaw.service openclaw-config.service openclaw_common.py; do
+    for name in openclaw.service openclaw-config.service openclaw_common.py safrano9999_plugins.py; do
         src="$SHARED_SERVICES_DIR/openclaw/$name"
         dst="$SCRIPT_DIR/services/$name"
         [ -f "$src" ] || { echo "Missing shared OpenClaw service helper: $src" >&2; exit 1; }
@@ -43,11 +65,7 @@ link_shared_openclaw_services() {
 github_repo_url() {
     local repo="$1"
 
-    if [ -n "${GH_TOKEN:-}" ]; then
-        printf 'https://x-access-token:%s@github.com/safrano9999/%s' "$GH_TOKEN" "$repo"
-    else
-        printf 'https://github.com/safrano9999/%s' "$repo"
-    fi
+    printf 'https://github.com/safrano9999/%s' "$repo"
 }
 
 sync_repo() {
@@ -157,6 +175,12 @@ render_compose_from_conf() {
         return s
     }
     function yaml_dq(s,    t) {
+        t = s
+        gsub(/\\/, "\\\\", t)
+        gsub(/"/, "\\\"", t)
+        return "\"" t "\""
+    }
+    function systemd_dq(s,    t) {
         t = s
         gsub(/\\/, "\\\\", t)
         gsub(/"/, "\\\"", t)
@@ -310,7 +334,7 @@ render_compose_from_conf() {
         print "ContainerName=fedora43-ai" >> "fedora43-ai.container"
         print "Image=localhost/fedora43-ai:latest" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/.env" >> "fedora43-ai.container"
-        for (i = 1; i <= env_count; i++) print "Environment=" env_order[i] "=" env[env_order[i]] >> "fedora43-ai.container"
+        for (i = 1; i <= env_count; i++) print "Environment=" systemd_dq(env_order[i] "=" env[env_order[i]]) >> "fedora43-ai.container"
         for (i = 1; i <= port_count; i++) print "PublishPort=" ports[i] >> "fedora43-ai.container"
         print "Volume=" home "/fedora43-ai/srv:/srv" >> "fedora43-ai.container"
         for (i = 1; i <= volume_count; i++) print "Volume=" volumes[i] >> "fedora43-ai.container"
@@ -336,46 +360,49 @@ render_compose_from_conf
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 $NO_BUILD && echo "" && echo "  Staging done." && exit 0
 
-# ── Image-Quelle wählen ──────────────────────────────────────────────
+# ── Image bauen ──────────────────────────────────────────────────────
 DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
 LOCAL_IMAGE="localhost/fedora43-ai:latest"
 
-if $FRESH; then
+if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
     echo ""
-    echo "  Fresh build..."
-    podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
-    echo "  Done. Image ready: $LOCAL_IMAGE"
-    exit 0
+    echo "  Image source:"
+    echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
+    echo "    (2) Build locally"
+    echo ""
+    read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
+    IMG_CHOICE="${IMG_CHOICE:-2}"
+elif [ -z "$IMG_CHOICE" ]; then
+    IMG_CHOICE=2
 fi
-
-echo ""
-echo "  Image source:"
-echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
-echo "    (2) Build locally"
-echo ""
-read -rp "  Choose [1/2] (default: 1): " IMG_CHOICE
-IMG_CHOICE="${IMG_CHOICE:-1}"
 
 case "$IMG_CHOICE" in
     1)
         echo ""
         echo "  Pulling $DOCKER_IO_IMAGE ..."
         podman pull "$DOCKER_IO_IMAGE"
-        IMAGE_REF="$DOCKER_IO_IMAGE"
-        # Update compose.yml to use pulled image (no build)
         sed -i '/^\s*build:/,/^\s*dockerfile:/d' "$SCRIPT_DIR/compose.yml"
         sed -i "s|image: .*|image: $DOCKER_IO_IMAGE|" "$SCRIPT_DIR/compose.yml"
-        # Update quadlet .container
         sed -i "s|^Image=.*|Image=$DOCKER_IO_IMAGE|" "$SCRIPT_DIR/fedora43-ai.container"
         echo "  Done. Image ready: $DOCKER_IO_IMAGE"
         ;;
     2)
         echo ""
-        echo "  Starte Build..."
-        HOST_SRV_DIR="/srv/$INSTANCE"
-        export INSTANCE HOST_SRV_DIR
-        podman-compose \
-            -f "$SCRIPT_DIR/compose.yml" \
-            build
+        if $NO_CACHE; then
+            echo "  Building $LOCAL_IMAGE with --no-cache ..."
+            podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+        else
+            echo "  Building $LOCAL_IMAGE ..."
+            HOST_SRV_DIR="/srv/$INSTANCE"
+            export INSTANCE HOST_SRV_DIR
+            podman-compose \
+                -f "$SCRIPT_DIR/compose.yml" \
+                build
+        fi
+        echo "  Done. Image ready: $LOCAL_IMAGE"
+        ;;
+    *)
+        echo "Invalid image choice: $IMG_CHOICE" >&2
+        exit 2
         ;;
 esac

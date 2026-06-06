@@ -7,11 +7,10 @@ log() { printf '[safrano9999-routines] %s\n' "$*"; }
 gateway_port="${OPENCLAW_GATEWAY_PORT:-18789}"
 gateway_url="${OPENCLAW_GATEWAY_URL:-http://127.0.0.1:${gateway_port}}"
 timezone="${SAFRANO9999_ROUTINES_TZ:-Europe/Vienna}"
+crontab_spec="${OPENCLAW_CRONTAB:-${SAFRANO9999_ROUTINES_CRONTAB:-CET 07:00,CET 12:00,CET 15:30,CET 19:00}}"
 telegram_target="${OPENCLAW_TELEGRAM_TARGET:-}"
 telegram_token="${TELEGRAMTOKEN_OPENCLAW:-}"
-cron_dir="${OPENCLAW_CONFIG_DIR:-/root/.openclaw}/cron"
-cron_jobs="${cron_dir}/jobs.json"
-cron_state="${cron_dir}/jobs-state.json"
+openclaw_config_dir="${OPENCLAW_CONFIG_DIR:-/root/.openclaw}"
 
 auth_header=()
 if [ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
@@ -101,74 +100,21 @@ run_all() {
 
 install_crons() {
   wait_gateway || return 1
-  mkdir -p "${cron_dir}"
-  local now current tmp state_tmp message
-  now="$(date +%s%3N)"
-  message=$'/dailynews\n/calendar\n/zeroinbox\n/kachelmann status'
-
-  current="$(mktemp /tmp/safrano9999-cron-current.XXXXXX)"
-  tmp="$(mktemp /tmp/safrano9999-cron-jobs.XXXXXX)"
-  if [ -s "${cron_jobs}" ] && jq -e 'type == "object" and (.jobs | type == "array")' "${cron_jobs}" >/dev/null 2>&1; then
-    cp "${cron_jobs}" "${current}"
-  else
-    printf '{"version":1,"jobs":[]}\n' > "${current}"
+  local spec="${crontab_spec}"
+  if [ "${1:-}" = "--crontab" ]; then
+    shift
+    spec="$*"
+  elif [ "$#" -gt 0 ]; then
+    spec="$*"
   fi
-
-  if ! jq -n \
-    --argjson now "${now}" \
-    --arg tz "${timezone}" \
-    --arg text "${message}" \
-    --slurpfile current "${current}" '
-      def job($id; $name; $expr):
-        {
-          id: $id,
-          name: $name,
-          enabled: true,
-          createdAtMs: $now,
-          updatedAtMs: $now,
-          schedule: {kind: "cron", expr: $expr, tz: $tz, staggerMs: 0},
-          sessionTarget: "main",
-          wakeMode: "now",
-          payload: {kind: "systemEvent", text: $text},
-          state: {}
-        };
-      {
-        version: 1,
-        jobs: (
-          (($current[0].jobs // []) | map(select(((.id // "") | startswith("safrano9999-routines-")) | not)))
-          + [
-            job("safrano9999-routines-0000"; "safrano9999-routines-0000"; "0 0 * * *"),
-            job("safrano9999-routines-0530"; "safrano9999-routines-0530"; "30 5 * * *"),
-            job("safrano9999-routines-1200"; "safrano9999-routines-1200"; "0 12 * * *"),
-            job("safrano9999-routines-1900"; "safrano9999-routines-1900"; "0 19 * * *")
-          ]
-        )
-      }
-    ' > "${tmp}"; then
-    rm -f "${current}" "${tmp}"
-    log "WARN: OpenClaw cronjobs render failed"
-    return 1
-  fi
-
-  if ! jq -e '(.version == 1) and ((.jobs | map(select((.id // "") | startswith("safrano9999-routines-"))) | length) == 4)' "${tmp}" >/dev/null; then
-    rm -f "${current}" "${tmp}"
-    log "WARN: OpenClaw cronjobs validation failed"
-    return 1
-  fi
-
-  mv "${tmp}" "${cron_jobs}"
-  chmod 600 "${cron_jobs}"
-  rm -f "${current}"
-  if [ -f "${cron_state}" ]; then
-    state_tmp="$(mktemp /tmp/safrano9999-cron-state.XXXXXX)"
-    jq 'if .version == 1 and (.jobs | type == "object") then .jobs |= with_entries(select((.key | startswith("safrano9999-routines-")) | not)) else . end' \
-      "${cron_state}" > "${state_tmp}" && mv "${state_tmp}" "${cron_state}" || rm -f "${state_tmp}"
-  fi
-  log "OpenClaw cronjobs written: 00:00, 05:30, 12:00, 19:00 ${timezone}"
+  python3 /usr/local/bin/safrano9999_plugins.py crontab \
+    --config-dir "${openclaw_config_dir}" \
+    --tz "${timezone}" \
+    --crontab "${spec}"
 }
 
 init() {
-  install_crons || true
+  install_crons "$@" || true
   if [ "${SAFRANO9999_ROUTINES_RUN_ON_START:-1}" = "1" ]; then
     run_all || true
   fi
@@ -176,16 +122,21 @@ init() {
 
 case "${1:-run}" in
   init)
-    init
+    shift || true
+    init "$@"
     ;;
   install-crons)
-    install_crons
+    shift || true
+    install_crons "$@"
     ;;
   run)
     run_all
     ;;
+  --crontab)
+    install_crons "$@"
+    ;;
   *)
-    printf 'Usage: %s [init|install-crons|run]\n' "$0" >&2
+    printf 'Usage: %s [init|install-crons|run] [--crontab "CET 23:49,CET 12:00"]\n' "$0" >&2
     exit 2
     ;;
 esac

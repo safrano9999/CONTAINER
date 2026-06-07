@@ -4,16 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 
-# Mergt eine Datei aus allen Repos in safrano9999/*/ ohne Doubletten ins SCRIPT_DIR.
-# Leerzeilen und Kommentare (#) bleiben erhalten und werden nicht dedupliziert.
+# Merge one file from all repositories in safrano9999/*/ without duplicates.
+# Blank lines and comments (#) are preserved and are not deduplicated.
 #
 # Args:
-#   $1 = Dateiname im Repo (z.B. env.example, requirements.txt)
-#   $2 = Zielpfad
-#   $3 = Dedup-Modus:
-#          "env"          - Key vor "=" (KEY=value)
-#          "requirements" - Paketname am Zeilenanfang
-#          "line"         - komplette Zeile
+#   $1 = filename in the repository (for example env.example or requirements.txt)
+#   $2 = destination path
+#   $3 = deduplication mode:
+#          "env"          - key before "=" (KEY=value)
+#          "requirements" - package name at the start of the line
+#          "line"         - complete line
 merge_dedup_from_repos() {
     local filename="$1"
     local output="$2"
@@ -25,7 +25,7 @@ merge_dedup_from_repos() {
     done
 
     if [ ${#files[@]} -eq 0 ]; then
-        echo "  ! Keine $filename in safrano9999/*/ gefunden"
+        echo "  ! No $filename found in safrano9999/*/"
         : > "$output"
         return
     fi
@@ -53,7 +53,7 @@ merge_dedup_from_repos() {
       if (!(key in seen)) { seen[key] = 1; print }
     }' "${files[@]}" > "$output"
 
-    echo "  Merged $filename (${#files[@]} Quellen) → ${output#"$SCRIPT_DIR"/}"
+    echo "  Merged $filename (${#files[@]} sources) -> ${output#"$SCRIPT_DIR"/}"
 }
 
 merge_dedup_from_repos "env.example"      "$SCRIPT_DIR/env.example"      "env"

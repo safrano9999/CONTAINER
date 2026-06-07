@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
@@ -53,6 +54,7 @@ sync_repo() {
     local spec="$1"
     local repo="$spec"
     local branch=""
+    local before after
 
     if [[ "$spec" == *@* ]]; then
         repo="${spec%@*}"
@@ -60,29 +62,35 @@ sync_repo() {
     fi
 
     if [ -d "$SAFRANO_DIR/$repo" ]; then
+        before="$(git -C "$SAFRANO_DIR/$repo" rev-parse HEAD)"
+        echo "  [$repo] Updating..."
         if [ -n "$branch" ]; then
-            git -C "$SAFRANO_DIR/$repo" fetch --depth 1 origin "$branch"
+            git -C "$SAFRANO_DIR/$repo" fetch --quiet --depth 1 origin "$branch"
             if git -C "$SAFRANO_DIR/$repo" rev-parse --verify "$branch" >/dev/null 2>&1; then
-                git -C "$SAFRANO_DIR/$repo" checkout "$branch"
+                git -C "$SAFRANO_DIR/$repo" checkout --quiet "$branch"
             else
-                git -C "$SAFRANO_DIR/$repo" checkout -b "$branch" "origin/$branch"
+                git -C "$SAFRANO_DIR/$repo" checkout --quiet -b "$branch" "origin/$branch"
             fi
-            git -C "$SAFRANO_DIR/$repo" pull --ff-only origin "$branch"
+            git -C "$SAFRANO_DIR/$repo" pull --quiet --ff-only origin "$branch"
         else
-            git -C "$SAFRANO_DIR/$repo" pull --ff-only
+            git -C "$SAFRANO_DIR/$repo" pull --quiet --ff-only
         fi
+        after="$(git -C "$SAFRANO_DIR/$repo" rev-parse HEAD)"
+        [ "$before" = "$after" ] && echo "  [$repo] Up to date." || echo "  [$repo] Updated."
     else
         local url
         url="$(github_repo_url "$repo")"
+        echo "  [$repo] Cloning..."
         if [ -n "$branch" ]; then
-            git clone --depth 1 --branch "$branch" "$url" "$SAFRANO_DIR/$repo"
+            git clone --quiet --depth 1 --branch "$branch" "$url" "$SAFRANO_DIR/$repo"
         else
-            git clone --depth 1 "$url" "$SAFRANO_DIR/$repo"
+            git clone --quiet --depth 1 "$url" "$SAFRANO_DIR/$repo"
         fi
+        echo "  [$repo] Cloned."
     fi
 }
 
-# ── Repos klonen oder aktualisieren ──────────────────────────────────
+# Clone or update repositories.
 REPOS=(
     SCRIPTS
     CODEANALYST
@@ -108,7 +116,7 @@ ln -f "$SHARED_SCRIPTS_DIR/script/safrano9999_container.sh" "$SAFRANO_DIR/SCRIPT
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service
 
-# ── env.examples + requirements.txt dedupliziert zusammenführen ──────
+# Merge and deduplicate env examples and requirements.
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
@@ -326,7 +334,7 @@ render_compose_from_conf() {
     ' "$input"
 }
 
-# ── compose.yml + Quadlet aus merge.conf generieren ──────────────────
+# Generate compose.yml and the Quadlet from merge.conf.
 echo "  Generating compose.yml..."
 echo "  Generating fedora43-ai.container..."
 render_compose_from_conf
@@ -334,7 +342,7 @@ render_compose_from_conf
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 $NO_BUILD && echo "" && echo "  Staging done." && exit 0
 
-# ── Image bauen ──────────────────────────────────────────────────────
+# Build or pull the image.
 DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
 LOCAL_IMAGE="localhost/fedora43-ai:latest"
 

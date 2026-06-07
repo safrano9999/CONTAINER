@@ -112,6 +112,8 @@ link_shared_openclaw_helper() {
     [ -f "$src" ] || { echo "Missing shared OpenClaw helper: $src" >&2; exit 1; }
     ln -f "$src" "$dst"
   done
+  mkdir -p "$SCRIPT_DIR/script"
+  ln -f "$SHARED_SCRIPTS_DIR/script/safrano9999_container.sh" "$SCRIPT_DIR/script/safrano9999_container.sh"
 }
 
 plugin_tag() {

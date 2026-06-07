@@ -126,21 +126,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /requirements.txt
 
 COPY safrano9999/SCRIPTS /opt/safrano9999/SCRIPTS
-COPY safrano9999/CODEANALYST /opt/safrano9999/CODEANALYST
-COPY safrano9999/JUGO /opt/safrano9999/JUGO
-COPY safrano9999/CITADEL /opt/safrano9999/CITADEL
-COPY safrano9999/VikAI /opt/safrano9999/VikAI
-COPY safrano9999/PV_D-A-CH /opt/safrano9999/PV_D-A-CH
-COPY safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES /opt/safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
-COPY safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW /opt/safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
-COPY safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager /opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
-COPY safrano9999/DAILYNEWS /opt/safrano9999/DAILYNEWS
-COPY safrano9999/CALENDAR /opt/safrano9999/CALENDAR
-COPY safrano9999/ZEROINBOX /opt/safrano9999/ZEROINBOX
-COPY safrano9999/KACHELMANN /opt/safrano9999/KACHELMANN
 COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 
-RUN python3 /usr/local/bin/safrano9999_plugins.py setup-python --plugins-dir /opt/safrano9999
+RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/script/safrano9999_container.sh \
+ && . /opt/safrano9999/SCRIPTS/script/safrano9999_container.sh \
+ && safrano9999_standalone \
+      CODEANALYST JUGO CITADEL VikAI PV_D-A-CH \
+      NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
+      SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
+      NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
+ && safrano9999_OC_plugins --link --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+      DAILYNEWS CALENDAR ZEROINBOX KACHELMANN'
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \

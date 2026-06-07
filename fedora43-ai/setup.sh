@@ -101,6 +101,8 @@ REPOS=(
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
+mkdir -p "$SAFRANO_DIR/SCRIPTS/script"
+ln -f "$SHARED_SCRIPTS_DIR/script/safrano9999_container.sh" "$SAFRANO_DIR/SCRIPTS/script/safrano9999_container.sh"
 "$SHARED_SCRIPTS_DIR/relink_shared.sh" \
     config.sh merge_conf.sh python_header.py \
     openclaw-config.service openclaw.service openclaw_common.py \

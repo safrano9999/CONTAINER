@@ -67,6 +67,15 @@ def _write_key_value_file(path: Path, values: dict[str, str]) -> None:
     path.chmod(0o600)
 
 
+def _crontab_spec(env: dict[str, str]) -> str:
+    if env.get("OPENCLAW_CRONTAB") or env.get("SAFRANO9999_ROUTINES_CRONTAB"):
+        return env.get("OPENCLAW_CRONTAB") or env.get("SAFRANO9999_ROUTINES_CRONTAB", "")
+    image_default = PLUGINS_DIR / ".openclaw-crontab"
+    if image_default.exists():
+        return image_default.read_text(encoding="utf-8").strip()
+    return DEFAULT_CRONTAB_SPEC
+
+
 def main() -> None:
     env = _pid1_env()
     runtime_values = _wanted_env(env)
@@ -89,7 +98,7 @@ def main() -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     crons = install_openclaw_crontab(
         CONFIG_PATH.parent,
-        env.get("OPENCLAW_CRONTAB") or env.get("SAFRANO9999_ROUTINES_CRONTAB", DEFAULT_CRONTAB_SPEC),
+        _crontab_spec(env),
         default_tz=env.get("SAFRANO9999_ROUTINES_TZ", "Europe/Vienna"),
     )
     refresh_plugin_registry()

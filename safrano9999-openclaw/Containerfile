@@ -7,7 +7,7 @@
 #
 # Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
 # Boot:    tini -> services/entrypoint.sh    (tailscale up -> configure -> gateway)
-# Context: staged by setup.sh - ./safrano9999 holds plugin ZIPs,
+# Context: staged by setup.sh - ./script holds Containerfile helpers,
 #          ./services/ holds the entrypoint + configure helpers.
 # =============================================================================
 
@@ -45,27 +45,17 @@ RUN apt-get update \
 RUN curl -fsSL https://tailscale.com/install.sh | sh \
  && rm -rf /var/lib/apt/lists/*
 
-# --- plugins: bundle ZIPs, unpack/install dynamically, pre-bake venvs --------
+# --- plugins: clone/install dynamically, pre-bake venvs ----------------------
 ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
-COPY safrano9999/*.zip safrano9999/*.zip.sha256 ${OPENCLAW_PLUGINS_DIR}/
 COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
+COPY script/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
 
-RUN set -eux; \
+RUN bash -lc 'set -eux; \
     mkdir -p /root/.openclaw; \
-    cd "${OPENCLAW_PLUGINS_DIR}"; \
-    for checksum in *.zip.sha256; do sha256sum -c "$checksum"; done; \
-    for zip in "${OPENCLAW_PLUGINS_DIR}"/*-latest.zip; do \
-      name="$(basename "$zip" -latest.zip)"; \
-      dir="${OPENCLAW_PLUGINS_DIR}/$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')"; \
-      rm -rf "$dir"; \
-      mkdir -p "$dir"; \
-      unzip -q "$zip" -d "$dir"; \
-      [ -f "$dir/requirements.txt" ] || continue; \
-      python3 -m venv "$dir/.venv"; \
-      "$dir/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel; \
-      "$dir/.venv/bin/pip" install --no-cache-dir -r "$dir/requirements.txt" python-dotenv; \
-    done; \
-    python3 /usr/local/bin/safrano9999_plugins.py install --plugins-dir "$OPENCLAW_PLUGINS_DIR"
+    chmod +x /usr/local/lib/safrano9999_container.sh; \
+    . /usr/local/lib/safrano9999_container.sh; \
+    safrano9999_OC_plugins --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+      DAILYNEWS CALENDAR ZEROINBOX KACHELMANN'
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.
 ENV HOME=/root \

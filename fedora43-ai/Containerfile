@@ -137,7 +137,7 @@ RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/script/safrano9999_container.sh 
       NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
       SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
       NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
- && safrano9999_OC_plugins --link --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+ && safrano9999_OC_plugins --link --fullrun --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN \
  && rm -rf "$SAFRANO9999_STAGE_DIR"'
 
@@ -151,9 +151,16 @@ RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && chmod +x /opt/safrano9999/CITADEL/scan.sh
 
 COPY services/*.service /etc/systemd/system/
+COPY services/runtime-pass-environment*.conf /tmp/runtime-pass-env/
 RUN mkdir -p /etc/systemd/system/tailscale-up.service.d \
     /etc/systemd/system/openclaw-config.service.d \
     /etc/systemd/system/openclaw.service.d \
+    /etc/systemd/system/service.d \
+ && if [ -f /tmp/runtime-pass-env/runtime-pass-environment.local.conf ]; then \
+      cp /tmp/runtime-pass-env/runtime-pass-environment.local.conf /etc/systemd/system/service.d/00-runtime-pass-environment.conf; \
+    else \
+      cp /tmp/runtime-pass-env/runtime-pass-environment.conf /etc/systemd/system/service.d/00-runtime-pass-environment.conf; \
+    fi \
  && printf '%s\n' '[Service]' \
       'ExecStart=' \
       'ExecStart=/bin/bash -c '\''args=(up --authkey="$$TS_AUTHKEY" --accept-routes --accept-dns --ssh); [ -n "$$TS_HOSTNAME" ] && args+=(--hostname="$$TS_HOSTNAME"); exec /usr/bin/tailscale "$${args[@]}"'\''' \

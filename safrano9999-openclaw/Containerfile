@@ -56,7 +56,7 @@ RUN bash -lc 'set -eux; \
     mkdir -p /root/.openclaw; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
-    safrano9999_OC_plugins --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+    safrano9999_OC_plugins --fullrun --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 

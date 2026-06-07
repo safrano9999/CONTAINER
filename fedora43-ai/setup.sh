@@ -339,6 +339,12 @@ echo "  Generating compose.yml..."
 echo "  Generating fedora43-ai.container..."
 render_compose_from_conf
 
+echo "  Generating systemd runtime env header..."
+"$SHARED_SCRIPTS_DIR/systemd_pass_environment.sh" \
+    "$SCRIPT_DIR/services/runtime-pass-environment.local.conf" \
+    "$SCRIPT_DIR/.env" \
+    "$SCRIPT_DIR/config.conf"
+
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 $NO_BUILD && echo "" && echo "  Staging done." && exit 0
 

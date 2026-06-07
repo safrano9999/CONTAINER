@@ -65,8 +65,8 @@ fi
 if [ -x /usr/local/bin/safrano9999-routines ]; then
   /usr/local/bin/safrano9999-routines install-crons
 fi
-if [ -x "${SAFRANO9999_WEBHOOK_SCRIPT:-/usr/local/bin/safrano9999-webhooks}" ]; then
-  "${SAFRANO9999_WEBHOOK_SCRIPT:-/usr/local/bin/safrano9999-webhooks}" &
+if [ -x "${SAFRANO9999_FULLRUN_SCRIPT:-/usr/local/bin/safrano9999-fullrun}" ]; then
+  ( sleep "${SAFRANO9999_FULLRUN_DELAY:-100}"; "${SAFRANO9999_FULLRUN_SCRIPT:-/usr/local/bin/safrano9999-fullrun}" ) &
 fi
 
 log "starting gateway: ${OPENCLAW_BIN} ${gw_args[*]}"

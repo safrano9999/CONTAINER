@@ -16,3 +16,4 @@ config.conf_example
 fedora43-ai.container
 compose.yml
 VIDEOS/
+services/runtime-pass-environment.local.conf

@@ -21,13 +21,10 @@ if [ -n "${TS_AUTHKEY:-}" ]; then
   mkdir -p "${TS_STATE_DIR}" /run/tailscale
   tailscaled --state="${TS_STATE_DIR}/tailscaled.state" \
              --socket=/run/tailscale/tailscaled.sock >/var/log/tailscaled.log 2>&1 &
-  for _ in $(seq 1 30); do
-    tailscale status >/dev/null 2>&1 && break
-    sleep 0.5
-  done
+  sleep 1
   up_args=(up --authkey="${TS_AUTHKEY}" --accept-routes --accept-dns)
   [ -n "${TS_HOSTNAME:-}" ] && up_args+=(--hostname="${TS_HOSTNAME}")
-  if tailscale "${up_args[@]}"; then
+  if timeout 30 tailscale "${up_args[@]}"; then
     log "tailscale up: $(tailscale ip -4 2>/dev/null | head -1 || echo '?')"
   else
     log "WARN: 'tailscale up' failed - continuing without tailnet"

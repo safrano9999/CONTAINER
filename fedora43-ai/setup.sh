@@ -138,11 +138,10 @@ if ! $NO_CONFIG; then
 fi
 
 render_compose_from_conf() {
-    local input="$SCRIPT_DIR/config.conf"
-    if [ ! -f "$input" ]; then
-        input="$SCRIPT_DIR/config.conf_example"
-    fi
-    [ -f "$input" ] || { echo "No config.conf or config.conf_example" >&2; exit 1; }
+    local inputs=()
+    [ -f "$SCRIPT_DIR/config.conf_example" ] && inputs+=("$SCRIPT_DIR/config.conf_example")
+    [ -f "$SCRIPT_DIR/config.conf" ] && inputs+=("$SCRIPT_DIR/config.conf")
+    [ "${#inputs[@]}" -gt 0 ] || { echo "No config.conf or config.conf_example" >&2; exit 1; }
 
     awk -v cwd="$SCRIPT_DIR" -v home="$HOME" '
     function trim(s) {
@@ -193,6 +192,17 @@ render_compose_from_conf() {
         volumes[++volume_count] = value
         if (source !~ /^[/.$~]/ && source !~ /\//) add_named_volume(source)
     }
+    function add_disabled_named_volume(name) {
+        if (name == "" || name in disabled_named_seen) return
+        disabled_named_seen[name] = 1
+        disabled_named_volumes[++disabled_named_count] = name
+    }
+    function add_disabled_volume(value, source) {
+        if (value == "" || value in disabled_volume_seen) return
+        disabled_volume_seen[value] = 1
+        disabled_volumes[++disabled_volume_count] = value
+        if (source !~ /^[/.$~]/ && source !~ /\//) add_disabled_named_volume(source)
+    }
     function add_cap(value) {
         if (value == "" || value in cap_seen) return
         cap_seen[value] = 1
@@ -219,10 +229,17 @@ render_compose_from_conf() {
             key ~ /_CAPABILITIES$/ || key ~ /_DEVICES$/ || \
             key ~ /_VOLUMES$/ || key ~ /_GROUP_ADD$/
     }
-    /^[[:space:]]*($|#)/ { next }
+    /^[[:space:]]*$/ { next }
     {
         line = $0
         sub(/\r$/, "", line)
+        disabled = 0
+        if (line ~ /^[[:space:]]*#/) {
+            disabled = 1
+            sub(/^[[:space:]]*#[[:space:]]*/, "", line)
+        } else {
+            sub(/[[:space:]]+#.*/, "", line)
+        }
         sub(/^[[:space:]]*export[[:space:]]+/, "", line)
         if (line !~ /^[A-Za-z_][A-Za-z0-9_]*=/) next
         key = line
@@ -230,6 +247,16 @@ render_compose_from_conf() {
         value = line
         sub(/^[^=]*=/, "", value)
         value = clean_value(value)
+        if (disabled) {
+            if (key ~ /_VOLUMES$/) {
+                n = split_csv(value, items)
+                for (j = 1; j <= n; j++) {
+                    split(items[j], parts, ":")
+                    add_disabled_volume(items[j], parts[1])
+                }
+            }
+            next
+        }
         if (!(key in values)) order[++value_count] = key
         values[key] = value
         next
@@ -297,6 +324,7 @@ render_compose_from_conf() {
         print "      - " yaml_dq("${HOST_SRV_DIR:-" home "/fedora43-ai/srv}:/srv") >> "compose.yml"
         print "      - " yaml_dq("${HOST_ROOT_DIR:-root}:/root") >> "compose.yml"
         print "      - " yaml_dq("/tmp/.X11-unix:/tmp/.X11-unix") >> "compose.yml"
+        for (i = 1; i <= disabled_volume_count; i++) print "      # - " yaml_dq(disabled_volumes[i]) >> "compose.yml"
         for (i = 1; i <= volume_count; i++) print "      - " yaml_dq(volumes[i]) >> "compose.yml"
         if (group_count > 0) {
             print "    group_add:" >> "compose.yml"
@@ -313,6 +341,7 @@ render_compose_from_conf() {
         print "volumes:" >> "compose.yml"
         print "  home: {}" >> "compose.yml"
         print "  root: {}" >> "compose.yml"
+        for (i = 1; i <= disabled_named_count; i++) print "  # " disabled_named_volumes[i] ": {}" >> "compose.yml"
         for (i = 1; i <= named_count; i++) print "  " named_volumes[i] ": {}" >> "compose.yml"
 
         print "[Container]" > "fedora43-ai.container"
@@ -322,6 +351,7 @@ render_compose_from_conf() {
         for (i = 1; i <= env_count; i++) print "Environment=" systemd_dq(env_order[i] "=" env[env_order[i]]) >> "fedora43-ai.container"
         for (i = 1; i <= port_count; i++) print "PublishPort=" ports[i] >> "fedora43-ai.container"
         print "Volume=" home "/fedora43-ai/srv:/srv" >> "fedora43-ai.container"
+        for (i = 1; i <= disabled_volume_count; i++) print "# Volume=" disabled_volumes[i] >> "fedora43-ai.container"
         for (i = 1; i <= volume_count; i++) print "Volume=" volumes[i] >> "fedora43-ai.container"
         for (i = 1; i <= cap_count; i++) print "AddCapability=" caps[i] >> "fedora43-ai.container"
         for (i = 1; i <= device_count; i++) print "AddDevice=" devices[i] >> "fedora43-ai.container"
@@ -334,7 +364,7 @@ render_compose_from_conf() {
         print "[Install]" >> "fedora43-ai.container"
         print "WantedBy=default.target" >> "fedora43-ai.container"
     }
-    ' "$input"
+    ' "${inputs[@]}"
 }
 
 # Generate compose.yml and the Quadlet from merge.conf.

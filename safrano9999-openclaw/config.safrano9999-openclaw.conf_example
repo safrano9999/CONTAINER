@@ -16,6 +16,9 @@ OPENCLAW_GATEWAY_PUBLISH_PORT=18789
 # OpenClaw cron times for DAILYNEWS, CALENDAR, ZEROINBOX and KACHELMANN
 OPENCLAW_CRONTAB=CET 01:23,CET 07:00,CET 12:00,CET 15:30,CET 19:00
 
+# Run the generated fullrun webhook script once after OpenClaw startup
+SAFRANO9999_FULLRUN_ON_START=1
+
 # Docker Hub image used by setup.sh when you choose "pull".
 SAFRANO9999_OPENCLAW_DOCKER_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest
 
@@ -36,6 +39,10 @@ SAFRANO9999_OPENCLAW_CAPABILITIES=NET_ADMIN,NET_RAW
 SAFRANO9999_OPENCLAW_DEVICES=/dev/net/tun
 
 # --- persistent named volumes (comment out any line you do not need) ---------
+# Native Codex CLI auth/state (uncomment to persist direct Codex login)
+# SAFRANO9999_OPENCLAW_CODEX_CLI_AUTH_VOLUMES=safrano9999-openclaw-codex-cli-auth:/root/.codex:Z
+# OpenClaw model auth profiles + OpenClaw auth secret dir (openclaw models auth login)
+# SAFRANO9999_OPENCLAW_GPT_AUTH_VOLUMES=safrano9999-openclaw-gpt-auth-profiles:/root/.openclaw/agents:Z,safrano9999-openclaw-gpt-auth-secrets:/root/.config/openclaw:Z
 # Gateway state: token, channels, agent workspace (incl. DAILYNEWS PDFs)
 # SAFRANO9999_OPENCLAW_STATE_VOLUMES=safrano9999-openclaw-state:/root/.openclaw:Z
 # Tailscale node identity (so the tailnet name/IP survive restarts)

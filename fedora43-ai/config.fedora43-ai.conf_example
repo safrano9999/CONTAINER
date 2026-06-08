@@ -11,7 +11,10 @@ OPENCLAW_GATEWAY_PORT=18789
 OPENCLAW_GATEWAY_PUBLISH_PORT=20789
 
 # OpenClaw cron times for DAILYNEWS, CALENDAR, ZEROINBOX and KACHELMANN
-OPENCLAW_CRONTAB=CET 01:23,CET 07:00,CET 12:00,CET 15:30,CET 19:00
+OPENCLAW_CRONTAB=CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00
+
+# Run the generated fullrun webhook script once after OpenClaw startup
+SAFRANO9999_FULLRUN_ON_START=1
 
 # Hermes dashboard internal port
 HERMES_DASHBOARD_PORT=9119
@@ -51,3 +54,9 @@ NATURALGROUNDING_STATE_VOLUMES=naturalgrounding-state:/var/lib/naturalgrounding:
 
 # Fedora43 AI local init/auth volume
 FEDORA43_AI_VOLUMES=fedora43-ai:/fedora:Z
+
+# Native Codex CLI auth/state (uncomment to persist direct Codex login)
+# FEDORA43_AI_CODEX_CLI_AUTH_VOLUMES=fedora43-ai-codex-cli-auth:/root/.codex:Z
+
+# OpenClaw model auth profiles + OpenClaw auth secret dir (openclaw models auth login)
+# FEDORA43_AI_OPENCLAW_GPT_AUTH_VOLUMES=fedora43-ai-openclaw-gpt-auth-profiles:/root/.openclaw/agents:Z,fedora43-ai-openclaw-gpt-auth-secrets:/root/.config/openclaw:Z

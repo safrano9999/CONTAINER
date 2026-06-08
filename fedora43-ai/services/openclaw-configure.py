@@ -86,6 +86,10 @@ def _configure_brave(config: dict) -> bool:
     return True
 
 
+def _enable_codex_harness(config: dict) -> None:
+    config.setdefault("plugins", {}).setdefault("entries", {}).setdefault("codex", {})["enabled"] = True
+
+
 def main() -> None:
     _ensure_openclaw_config()
 
@@ -108,6 +112,7 @@ def main() -> None:
         include_binding=True,
         owner_allow=True,
     )
+    _enable_codex_harness(config)
     brave_configured = _configure_brave(config)
 
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
@@ -124,6 +129,7 @@ def main() -> None:
         print("OpenClaw Telegram command owners allowed for all Telegram senders")
     if brave_configured:
         print("OpenClaw Brave web search configured from BRAVE_API_KEY")
+    print("OpenClaw Codex harness plugin enabled")
     print("OpenClaw Control UI origins configured: " + ", ".join(origins))
     if vikai_bootstrapped:
         print("OpenClaw VikAI agents configured from TOKEN_WORKER/TOKEN_ARCHITECT/TOKEN_QC")

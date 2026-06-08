@@ -374,12 +374,18 @@ render_compose_and_quadlet() {
   local -a named_volumes=()
   local -a disabled_named_volumes=()
 
-  source_file="$(source_file_for_render)"
+  local -a source_files=()
+  [ -f "$SCRIPT_DIR/config.conf_example" ] && source_files+=("$SCRIPT_DIR/config.conf_example")
+  [ -f "$SCRIPT_DIR/config.conf" ] && source_files+=("$SCRIPT_DIR/config.conf")
+  if [ "${#source_files[@]}" -eq 0 ]; then
+    source_files+=("$(source_file_for_render)")
+  fi
   host="$(config_value HOST || true)"
   [ -n "$host" ] || host="127.0.0.1"
   compose_file="$SCRIPT_DIR/compose.yml"
   quadlet_file="$SCRIPT_DIR/${CONTAINER_NAME}.container"
 
+  for source_file in "${source_files[@]}"; do
   while IFS= read -r line || [ -n "$line" ]; do
     stripped="$(trim "$line")"
     [[ -z "$stripped" ]] && continue
@@ -435,6 +441,7 @@ render_compose_and_quadlet() {
       split_volumes_into "$value" volumes named_volumes
     fi
   done < "$source_file"
+  done
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
@@ -463,7 +470,7 @@ render_compose_and_quadlet() {
       [ -f "$SCRIPT_DIR/config.conf" ] && printf '      - %s\n' "$SCRIPT_DIR/config.conf"
       [ -f "$SCRIPT_DIR/.env" ] && printf '      - %s\n' "$SCRIPT_DIR/.env"
     fi
-    if [ "${#volumes[@]}" -gt 0 ]; then
+    if [ "${#volumes[@]}" -gt 0 ] || [ "${#disabled_volumes[@]}" -gt 0 ]; then
       printf '    volumes:\n'
       for item in "${disabled_volumes[@]}"; do printf '      # - %s\n' "$item"; done
       for item in "${volumes[@]}"; do printf '      - %s\n' "$item"; done
@@ -477,7 +484,7 @@ render_compose_and_quadlet() {
       for item in "${devices[@]}"; do printf '      - %s\n' "$item"; done
     fi
     printf '    restart: always\n'
-    if [ "${#named_volumes[@]}" -gt 0 ]; then
+    if [ "${#named_volumes[@]}" -gt 0 ] || [ "${#disabled_named_volumes[@]}" -gt 0 ]; then
       printf '\nvolumes:\n'
       for item in "${disabled_named_volumes[@]}"; do printf '  # %s: {}\n' "$item"; done
       for item in "${named_volumes[@]}"; do printf '  %s: {}\n' "$item"; done

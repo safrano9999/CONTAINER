@@ -50,6 +50,9 @@ RUN --mount=type=cache,target=/root/.npm \
 RUN --mount=type=cache,target=/root/.npm \
     openclaw plugins install @openclaw/brave-plugin
 
+RUN --mount=type=cache,target=/root/.npm \
+    openclaw plugins install clawhub:@openclaw/codex
+
 RUN curl -fL \
     https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
     -o /usr/local/bin/cloudflared \
@@ -137,7 +140,7 @@ RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_co
       NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
       SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
       NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
- && safrano9999_OC_plugins --link --fullrun --crontab "CET 01:23,CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+ && safrano9999_OC_plugins --link --fullrun --crontab "CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00" \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN \
  && rm -rf "$SAFRANO9999_STAGE_DIR"'
 

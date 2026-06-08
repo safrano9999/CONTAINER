@@ -9,25 +9,14 @@ from pathlib import Path
 
 from openclaw_common import openclaw_cmd, refresh_plugin_registry
 from safrano9999_plugins import (
-    DEFAULT_CRONTAB_SPEC,
     disable_plugin_command_auth,
     install_openclaw_plugins,
-    install_openclaw_crontab,
     register_openclaw_plugins,
 )
 
 
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
 PLUGINS_DIR = Path(os.environ.get("OPENCLAW_SAFRANO9999_DIR", "/opt/safrano9999"))
-
-
-def _crontab_spec(env: dict[str, str]) -> str:
-    if env.get("OPENCLAW_CRONTAB") or env.get("SAFRANO9999_ROUTINES_CRONTAB"):
-        return env.get("OPENCLAW_CRONTAB") or env.get("SAFRANO9999_ROUTINES_CRONTAB", "")
-    image_default = PLUGINS_DIR / ".openclaw-crontab"
-    if image_default.exists():
-        return image_default.read_text(encoding="utf-8").strip()
-    return DEFAULT_CRONTAB_SPEC
 
 
 def main() -> None:
@@ -45,16 +34,10 @@ def main() -> None:
         telegram_target=env.get("OPENCLAW_TELEGRAM_TARGET", ""),
     )
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    crons = install_openclaw_crontab(
-        CONFIG_PATH.parent,
-        _crontab_spec(env),
-        default_tz=env.get("SAFRANO9999_ROUTINES_TZ", "Europe/Vienna"),
-    )
     refresh_plugin_registry()
 
     print(f"OpenClaw safrano9999 plugins installed: {', '.join(installed)}")
     print(f"OpenClaw safrano9999 plugins registered: {', '.join(registered)}")
-    print(f"OpenClaw safrano9999 cronjobs written: {', '.join(crons)}")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ export LC_ALL=C
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SHARED_SCRIPTS_DIR="${SHARED_SCRIPTS_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)/SCRIPTS}"
+SHARED_SAFRANO_DIR="$SHARED_SCRIPTS_DIR/safrano9999"
+SHARED_IMAGE_DIR="$SHARED_SAFRANO_DIR/image"
 
 CONFIG_ONLY=false
 NO_CONFIG=false
@@ -109,9 +111,10 @@ REPOS=(
 
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
-mkdir -p "$SAFRANO_DIR/SCRIPTS/script"
-ln -f "$SHARED_SCRIPTS_DIR/script/safrano9999_container.sh" "$SAFRANO_DIR/SCRIPTS/script/safrano9999_container.sh"
-"$SHARED_SCRIPTS_DIR/relink_shared.sh" \
+mkdir -p "$SAFRANO_DIR/SCRIPTS/safrano9999/image" "$SAFRANO_DIR/SCRIPTS/safrano9999/container/openclaw"
+ln -f "$SHARED_IMAGE_DIR/safrano9999_container.sh" "$SAFRANO_DIR/SCRIPTS/safrano9999/image/safrano9999_container.sh"
+ln -f "$SHARED_SAFRANO_DIR/container/openclaw/openclaw_crontabs.sh" "$SAFRANO_DIR/SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh"
+"$SHARED_IMAGE_DIR/relink_shared.sh" \
     config.sh merge_conf.sh python_header.py \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service
@@ -120,7 +123,7 @@ ln -f "$SHARED_SCRIPTS_DIR/script/safrano9999_container.sh" "$SAFRANO_DIR/SCRIPT
 echo "  Merging env.examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
 
-bash "$SHARED_SCRIPTS_DIR/INSTALL/merge_conf.sh" \
+bash "$SHARED_IMAGE_DIR/install/merge_conf.sh" \
     "$SCRIPT_DIR" \
     "$SCRIPT_DIR/config.conf_example" \
     "$SCRIPT_DIR/config.fedora43-ai.conf_example" \
@@ -129,7 +132,7 @@ bash "$SHARED_SCRIPTS_DIR/INSTALL/merge_conf.sh" \
 
 if ! $NO_CONFIG; then
     echo ""
-    (cd "$SCRIPT_DIR" && bash "$SHARED_SCRIPTS_DIR/INSTALL/config.sh")
+    (cd "$SCRIPT_DIR" && bash "$SHARED_SAFRANO_DIR/config.sh")
     CONTAINER_NAME="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]')"
     rm -f "$SCRIPT_DIR/$CONTAINER_NAME.container" "$SCRIPT_DIR/docker-compose.yml"
 fi
@@ -340,7 +343,7 @@ echo "  Generating fedora43-ai.container..."
 render_compose_from_conf
 
 echo "  Generating systemd runtime env header..."
-"$SHARED_SCRIPTS_DIR/systemd_pass_environment.sh" \
+"$SHARED_IMAGE_DIR/systemd_pass_environment.sh" \
     "$SCRIPT_DIR/services/runtime-pass-environment.local.conf" \
     "$SCRIPT_DIR/.env" \
     "$SCRIPT_DIR/config.conf"

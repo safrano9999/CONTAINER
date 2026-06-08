@@ -12,8 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SAFCONTAINER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SHARED_SCRIPTS_DIR="${SHARED_SCRIPTS_DIR:-$SAFCONTAINER_DIR/SCRIPTS}"
-INSTALL_DIR="$SHARED_SCRIPTS_DIR/INSTALL"
-SHARED_SERVICES_DIR="$SHARED_SCRIPTS_DIR/services"
+SHARED_SAFRANO_DIR="$SHARED_SCRIPTS_DIR/safrano9999"
+SHARED_IMAGE_DIR="$SHARED_SAFRANO_DIR/image"
+SHARED_CONTAINER_DIR="$SHARED_SAFRANO_DIR/container"
+SHARED_SERVICES_DIR="$SHARED_IMAGE_DIR/services"
+INSTALL_DIR="$SHARED_IMAGE_DIR/install"
 CONTAINER_NAME="safrano9999-openclaw"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
@@ -113,7 +116,8 @@ link_shared_openclaw_helper() {
     ln -f "$src" "$dst"
   done
   mkdir -p "$SCRIPT_DIR/script"
-  ln -f "$SHARED_SCRIPTS_DIR/script/safrano9999_container.sh" "$SCRIPT_DIR/script/safrano9999_container.sh"
+  ln -f "$SHARED_IMAGE_DIR/safrano9999_container.sh" "$SCRIPT_DIR/script/safrano9999_container.sh"
+  ln -f "$SHARED_CONTAINER_DIR/openclaw/openclaw_crontabs.sh" "$SCRIPT_DIR/script/openclaw_crontabs.sh"
 }
 
 plugin_tag() {
@@ -533,7 +537,7 @@ merge_config_examples
 
 if ! $NO_CONFIG; then
   run_init_scripts
-  config_sh="$INSTALL_DIR/config.sh"
+  config_sh="$SHARED_SAFRANO_DIR/config.sh"
   [ -f "$config_sh" ] || { echo "Missing shared config.sh at $config_sh" >&2; exit 1; }
   ln -f "$config_sh" "$SCRIPT_DIR/config.sh"
   ( cd "$SCRIPT_DIR" && bash config.sh )

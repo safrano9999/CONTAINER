@@ -78,7 +78,7 @@ Generated files are intentionally ignored:
 - `merge_conf.sh`
 
 `config.sh` is not owned by this repository. `setup.sh` hardlinks it from
-`../../SCRIPTS/INSTALL/config.sh` when configuration is allowed.
+`../../SCRIPTS/safrano9999/config.sh` when configuration is allowed.
 
 ## Source Of Truth Model
 
@@ -133,7 +133,7 @@ Run:
 4. Merges all `env.example` files into the local generated `env.example`.
 5. Merges all `requirements.txt` files into the local generated
    `requirements.txt`.
-6. Hardlinks `merge_conf.sh` from `../../SCRIPTS/INSTALL/merge_conf.sh`.
+6. Hardlinks `merge_conf.sh` from `../../SCRIPTS/safrano9999/image/install/merge_conf.sh`.
 7. Merges all `config.conf_example` files into the local generated
    `config.conf_example`.
 8. Unless `--no-config` is used, hardlinks and runs `config.sh`.
@@ -1154,7 +1154,7 @@ qc
 - App repos stay in `./safrano9999/` for the container build context.
 - `env.example` is for secrets and runtime keys.
 - `config.conf_example` is for non-secret host/runtime composition.
-- `config.sh` comes from `SCRIPTS/INSTALL` and is shared infrastructure.
+- `config.sh` comes from `SCRIPTS/safrano9999/config.sh` and is shared infrastructure.
 - OpenClaw source patching and container image patching are separate:
   - upstream OpenClaw gets source and tests
   - this image gets a build-time dist patch until upstream includes it

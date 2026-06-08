@@ -56,7 +56,7 @@ RUN bash -lc 'set -eux; \
     mkdir -p /root/.openclaw; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
-    safrano9999_OC_plugins --fullrun --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+    safrano9999_OC_plugins --fullrun --crontab "CET 01:23,CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 
@@ -80,7 +80,8 @@ COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
 COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
 COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
 COPY services/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines \
+COPY script/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs \
  && mkdir -p /root/.openclaw /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.

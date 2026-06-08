@@ -130,14 +130,14 @@ COPY safrano9999 ${SAFRANO9999_STAGE_DIR}
 COPY safrano9999/SCRIPTS /opt/safrano9999/SCRIPTS
 COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 
-RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/script/safrano9999_container.sh \
- && . /opt/safrano9999/SCRIPTS/script/safrano9999_container.sh \
+RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
+ && . /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
  && safrano9999_standalone \
       CODEANALYST JUGO CITADEL VikAI PV_D-A-CH \
       NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
       SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
       NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
- && safrano9999_OC_plugins --link --fullrun --crontab "CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+ && safrano9999_OC_plugins --link --fullrun --crontab "CET 01:23,CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN \
  && rm -rf "$SAFRANO9999_STAGE_DIR"'
 
@@ -196,8 +196,9 @@ COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-
 COPY services/codex-save-auth.sh /usr/local/bin/codex-save-auth
 COPY services/fedora43-ai-init.sh /usr/local/bin/fedora43-ai-init
 COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
+COPY safrano9999/SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 
-RUN /opt/safrano9999/SCRIPTS/relink_shared.sh \
+RUN /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
     config.sh merge_conf.sh python_header.py \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service
@@ -209,6 +210,7 @@ RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-l
     /usr/local/bin/vikai-bootstrap-openclaw-agents \
     /usr/local/bin/codex-save-auth \
     /usr/local/bin/fedora43-ai-init \
+    /usr/local/bin/openclaw-crontabs \
  && chmod +x /usr/local/share/fedora43-ai/bin/*
 
 RUN /usr/local/bin/hermes-patch-ssl-verify

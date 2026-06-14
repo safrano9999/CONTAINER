@@ -37,6 +37,7 @@ Options:
   --help              Show this help and exit
 
 Without options, setup runs config, then asks interactively for pull/build.
+If pull is selected, setup asks for podman/docker and logs in to docker.io if needed.
 EOF
 }
 
@@ -124,6 +125,27 @@ docker_io_image() {
   local configured
   configured="$(config_value SAFRANO9999_OPENCLAW_DOCKER_IMAGE || true)"
   printf '%s\n' "${configured:-$DOCKER_IO_IMAGE_DEFAULT}"
+}
+
+ensure_docker_io_login() {
+  local engine="$1"
+  if "$engine" login --get-login docker.io >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "  docker.io login required for private image pull."
+  "$engine" login docker.io -u safrano9999
+}
+
+choose_pull_engine() {
+  local engine
+  echo ""
+  read -rp "  Pull engine [podman/docker] (default: podman): " engine
+  engine="${engine:-podman}"
+  case "$engine" in
+    podman|docker) command -v "$engine" >/dev/null || { echo "$engine not found" >&2; exit 2; } ;;
+    *) echo "Invalid pull engine: $engine" >&2; exit 2 ;;
+  esac
+  printf '%s\n' "$engine"
 }
 
 plugin_tag() {
@@ -560,8 +582,10 @@ fi
 case "$IMG_CHOICE" in
   1)
     echo ""
+    PULL_ENGINE="$(choose_pull_engine)"
+    ensure_docker_io_login "$PULL_ENGINE"
     echo "  Pulling $DOCKER_IO_IMAGE ..."
-    podman pull "$DOCKER_IO_IMAGE"
+    "$PULL_ENGINE" pull "$DOCKER_IO_IMAGE"
     render_compose_and_quadlet "$DOCKER_IO_IMAGE" false
     echo "  Done. Image ready: $DOCKER_IO_IMAGE"
     ;;

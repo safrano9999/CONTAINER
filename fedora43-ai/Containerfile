@@ -130,7 +130,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 ENV SAFRANO9999_STAGE_DIR=/opt/safrano9999/.stage
 COPY safrano9999 ${SAFRANO9999_STAGE_DIR}
-COPY safrano9999/SCRIPTS /opt/safrano9999/SCRIPTS
+COPY SCRIPTS /opt/safrano9999/SCRIPTS
 COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 
 RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
@@ -199,7 +199,7 @@ COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-
 COPY services/codex-save-auth.sh /usr/local/bin/codex-save-auth
 COPY services/fedora43-ai-init.sh /usr/local/bin/fedora43-ai-init
 COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
-COPY safrano9999/SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
+COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 
 RUN /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
     config.sh merge_conf.sh python_header.py \

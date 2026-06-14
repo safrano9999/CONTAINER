@@ -77,21 +77,3 @@ KACHELMANN_PORT=8077
 
 # KACHELMANN FastAPI WebUI host port
 KACHELMANN_PUBLISH_PORT=8077
-
-# config.conf_example - non-secret ZEROINBOX runtime config.
-# Account/provider blocks are written by ZEROINBOX_init.sh before config.sh.
-
-# First account provider. Additional accounts use ZEROINBOX_PROVIDER_2, etc.
-ZEROINBOX_PROVIDER=gmail
-
-
-# Runtime defaults.
-ZEROINBOX_ENV_FILE=.env
-
-ZEROINBOX_DEFAULT_DRY_RUN=true
-
-ZEROINBOX_CLASSIFIER=litellm
-
-ZEROINBOX_LOG_DIR=logs
-
-ZEROINBOX_REPORT_DIR=REPORTS

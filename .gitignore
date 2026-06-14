@@ -5,5 +5,4 @@ fedora43-ai/env.example
 fedora43-ai/fedora43-ai.container
 fedora43-ai/requirements.txt
 fedora43-ai/safrano9999/
-fedora43-ai/SCRIPTS
 __pycache__/

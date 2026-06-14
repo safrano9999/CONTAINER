@@ -1,0 +1,6 @@
+icalendar
+requests
+recurring_ical_events
+feedparser
+reportlab
+litellm>=1.70.0

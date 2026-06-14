@@ -2,9 +2,6 @@
 # The Containerfile COPYs release archives from ./safrano9999 and helpers from ./SCRIPTS.
 .env
 config.conf
-config.conf_example
-env.example
-requirements.txt
 /config.sh
 /merge_conf.sh
 *_init*

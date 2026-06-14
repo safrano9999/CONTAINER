@@ -1,0 +1,93 @@
+# config.safrano9999-openclaw.conf_example — non-secret container composition (SOT).
+# Merged with each repo's config.conf_example by setup.sh; config.sh then asks for
+# each key and renders compose.yml + the quadlet from the *_PORT / *_PUBLISH_PORT /
+# *_VOLUMES / *_CAPABILITIES / *_DEVICES conventions.
+
+# Injected process environment wins over config.conf and .env
+INJECT_OVERWRITE=true
+
+
+# Host bind address for published ports
+HOST=127.0.0.1
+
+
+# OpenClaw gateway (Control UI + API / WebSocket)
+OPENCLAW_GATEWAY_PORT=18789
+
+OPENCLAW_GATEWAY_PUBLISH_PORT=18789
+
+
+# Run the generated fullrun webhook script once after OpenClaw startup
+SAFRANO9999_FULLRUN_ON_START=1
+
+
+# Docker Hub image used by setup.sh when you choose "pull".
+SAFRANO9999_OPENCLAW_DOCKER_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest
+
+
+# Tailscale node name on your tailnet (the auth key itself is a secret in .env)
+TS_HOSTNAME=safrano9999-openclaw
+
+
+# Plugin release tag used by setup.sh when downloading the four plugin archives.
+# Default "latest" follows each repo's latest release alias; set e.g. 2026.5.31
+# for reproducible pinned builds. Per-plugin overrides use <REPO>_PLUGIN_RELEASE_TAG.
+OPENCLAW_PLUGIN_RELEASE_TAG=latest
+
+# DAILYNEWS_PLUGIN_RELEASE_TAG=
+# CALENDAR_PLUGIN_RELEASE_TAG=
+# ZEROINBOX_PLUGIN_RELEASE_TAG=
+# KACHELMANN_PLUGIN_RELEASE_TAG=
+
+# Tailscale needs a TUN device + NET_ADMIN/NET_RAW to route to your tailnet
+SAFRANO9999_OPENCLAW_CAPABILITIES=NET_ADMIN,NET_RAW
+
+SAFRANO9999_OPENCLAW_DEVICES=/dev/net/tun
+
+
+# --- persistent named volumes (comment out any line you do not need) ---------
+# Native Codex CLI auth/state (uncomment to persist direct Codex login)
+# SAFRANO9999_OPENCLAW_CODEX_CLI_AUTH_VOLUMES=safrano9999-openclaw-codex-cli-auth:/root/.codex:Z
+
+# OpenClaw model auth profiles + OpenClaw auth secret dir (openclaw models auth login)
+# SAFRANO9999_OPENCLAW_GPT_AUTH_VOLUMES=safrano9999-openclaw-gpt-auth-profiles:/root/.openclaw/agents:Z,safrano9999-openclaw-gpt-auth-secrets:/root/.config/openclaw:Z
+
+# Gateway state: token, channels, agent workspace (incl. DAILYNEWS PDFs)
+# SAFRANO9999_OPENCLAW_STATE_VOLUMES=safrano9999-openclaw-state:/root/.openclaw:Z
+
+# Tailscale node identity (so the tailnet name/IP survive restarts)
+# TAILSCALE_VOLUMES=safrano9999-openclaw-tailscale:/var/lib/tailscale:Z
+
+# ZEROINBOX reports + logs ("logs und maildirs") — not the program itself
+ZEROINBOX_VOLUMES=zeroinbox-reports:/opt/safrano9999-openclaw/ZEROINBOX/REPORTS:Z,zeroinbox-logs:/opt/safrano9999-openclaw/ZEROINBOX/logs:Z
+
+# KACHELMANN SQLite store (only used when no external DB creds are set)
+# KACHELMANN_DB_SQLITE_PATH=/var/lib/kachelmann/tilevault.sqlite3
+# KACHELMANN_VOLUMES=kachelmann-data:/var/lib/kachelmann:Z
+
+
+# KACHELMANN FastAPI WebUI internal port
+KACHELMANN_PORT=8077
+
+
+# KACHELMANN FastAPI WebUI host port
+KACHELMANN_PUBLISH_PORT=8077
+
+# config.conf_example - non-secret ZEROINBOX runtime config.
+# Account/provider blocks are written by ZEROINBOX_init.sh before config.sh.
+
+# First account provider. Additional accounts use ZEROINBOX_PROVIDER_2, etc.
+ZEROINBOX_PROVIDER=gmail
+
+
+# Runtime defaults.
+ZEROINBOX_ENV_FILE=.env
+
+ZEROINBOX_DEFAULT_DRY_RUN=true
+
+ZEROINBOX_CLASSIFIER=litellm
+
+ZEROINBOX_LOG_DIR=logs
+
+ZEROINBOX_REPORT_DIR=REPORTS
+

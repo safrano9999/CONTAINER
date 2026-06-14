@@ -22,11 +22,8 @@ DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
 PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
 
 NO_CONFIG=false
-CONFIG_ONLY=false
 NO_CACHE=false
 NO_BUILD=false
-PUSH_IMAGE=false
-BUILD_ONLY=false
 IMG_CHOICE=""
 
 show_help() {
@@ -34,27 +31,21 @@ show_help() {
 Usage: ./setup.sh [OPTIONS]
 
 Options:
-  --build-only        Skip config.sh, then ask interactively for pull/build
-  --no-cache          Use with --build-only to build with --pull=always --no-cache
-  --config-only       Stop after staging, merging, config, compose and quadlet
+  --no-cache          Build locally with --pull=always --no-cache when selected
+  --no-config         Skip init scripts and config.sh
+  --no-build          Stop after staging, merge, config and compose/quadlet rendering
   --help              Show this help and exit
 
-Without options, setup runs config + local build without --no-cache.
+Without options, setup runs config, then asks interactively for pull/build.
 EOF
 }
 
 for arg in "$@"; do
   case "$arg" in
     --help) show_help; exit 0 ;;
-    --config|--config-only) CONFIG_ONLY=true ;;
     --no-config) NO_CONFIG=true ;;
-    --build-only) BUILD_ONLY=true; NO_CONFIG=true ;;
     --no-cache) NO_CACHE=true ;;
-    --fresh) NO_CACHE=true; NO_CONFIG=true; IMG_CHOICE=2 ;;
-    --pull) IMG_CHOICE=1 ;;
-    --build) IMG_CHOICE=2 ;;
-    --push) PUSH_IMAGE=true; IMG_CHOICE=2 ;;
-    --no-build|--stage-only) NO_BUILD=true; NO_CONFIG=true ;;
+    --no-build) NO_BUILD=true ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -529,19 +520,6 @@ render_compose_and_quadlet() {
   echo "  Written: $quadlet_file"
 }
 
-publish_local_image() {
-  local docker_image="$1"
-  local version_tag repo
-
-  repo="${docker_image%:*}"
-  version_tag="${IMAGE_VERSION_TAG:-$(date +%Y.%-m.%-d)}"
-  echo "  Tagging Docker Hub image: $repo:$version_tag and $repo:latest"
-  podman tag "$LOCAL_IMAGE" "$repo:$version_tag"
-  podman tag "$LOCAL_IMAGE" "$repo:latest"
-  podman push "$repo:$version_tag"
-  podman push "$repo:latest"
-}
-
 echo "  Staging plugin release archives -> safrano9999/"
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
@@ -565,12 +543,11 @@ fi
 
 render_compose_and_quadlet "$LOCAL_IMAGE" true
 
-$CONFIG_ONLY && { echo "  Config done."; exit 0; }
 $NO_BUILD && { echo "  Staging done."; exit 0; }
 
 DOCKER_IO_IMAGE="$(docker_io_image)"
 
-if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
+if [ -z "$IMG_CHOICE" ]; then
   echo ""
   echo "  Image source:"
   echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
@@ -578,8 +555,6 @@ if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
   echo ""
   read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
   IMG_CHOICE="${IMG_CHOICE:-2}"
-elif [ -z "$IMG_CHOICE" ]; then
-  IMG_CHOICE=2
 fi
 
 case "$IMG_CHOICE" in
@@ -598,9 +573,6 @@ case "$IMG_CHOICE" in
     else
       echo "  Building $LOCAL_IMAGE ..."
       podman build -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
-    fi
-    if $PUSH_IMAGE; then
-      publish_local_image "$DOCKER_IO_IMAGE"
     fi
     echo "  Done. Image ready: $LOCAL_IMAGE"
     ;;

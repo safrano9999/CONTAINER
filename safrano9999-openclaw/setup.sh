@@ -10,13 +10,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
-SAFCONTAINER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SHARED_SCRIPTS_DIR="${SHARED_SCRIPTS_DIR:-$SAFCONTAINER_DIR/SCRIPTS}"
-SHARED_SAFRANO_DIR="$SHARED_SCRIPTS_DIR/safrano9999"
-SHARED_IMAGE_DIR="$SHARED_SAFRANO_DIR/image"
-SHARED_CONTAINER_DIR="$SHARED_SAFRANO_DIR/container"
-SHARED_SERVICES_DIR="$SHARED_IMAGE_DIR/services"
-INSTALL_DIR="$SHARED_IMAGE_DIR/install"
+SCRIPTS_DIR="$SCRIPT_DIR/SCRIPTS"
+SAFRANO_SCRIPTS_DIR="$SCRIPTS_DIR/safrano9999"
+IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
+CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
+INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
+DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
 CONTAINER_NAME="safrano9999-openclaw"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
@@ -60,6 +59,35 @@ for arg in "$@"; do
   esac
 done
 
+relink_dev_scripts() {
+  local path source target
+  local -a paths=(
+    safrano9999/config.sh
+    safrano9999/container/openclaw/openclaw_allow_all.mjs
+    safrano9999/container/openclaw/openclaw_crontabs.conf
+    safrano9999/container/openclaw/openclaw_crontabs.sh
+    safrano9999/container/safrano9999-openclaw/entrypoint.sh
+    safrano9999/container/safrano9999-openclaw/openclaw-configure.py
+    safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh
+    safrano9999/image/install/github_auth.sh
+    safrano9999/image/install/merge_conf.sh
+    safrano9999/image/safrano9999_container.sh
+    safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh
+    safrano9999/image/services/openclaw/openclaw_common.py
+    safrano9999/image/services/openclaw/safrano9999_plugins.py
+  )
+
+  [ -d "$DEV_SCRIPTS_DIR/.git" ] || return 0
+  for path in "${paths[@]}"; do
+    source="$DEV_SCRIPTS_DIR/$path"
+    target="$SCRIPTS_DIR/$path"
+    [ -f "$source" ] || { echo "Missing SOT file: $source" >&2; exit 1; }
+    mkdir -p "$(dirname "$target")"
+    [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
+  done
+}
+
+relink_dev_scripts
 "$INSTALL_DIR/github_auth.sh" safrano9999
 
 trim() {
@@ -105,21 +133,6 @@ docker_io_image() {
   local configured
   configured="$(config_value SAFRANO9999_OPENCLAW_DOCKER_IMAGE || true)"
   printf '%s\n' "${configured:-$DOCKER_IO_IMAGE_DEFAULT}"
-}
-
-link_shared_openclaw_helper() {
-  local name src dst
-
-  mkdir -p "$SCRIPT_DIR/services"
-  for name in openclaw_common.py safrano9999_plugins.py openclaw-patch-deterministic.sh; do
-    src="$SHARED_SERVICES_DIR/openclaw/$name"
-    dst="$SCRIPT_DIR/services/$name"
-    [ -f "$src" ] || { echo "Missing shared OpenClaw helper: $src" >&2; exit 1; }
-    ln -f "$src" "$dst"
-  done
-  mkdir -p "$SCRIPT_DIR/script"
-  ln -f "$SHARED_IMAGE_DIR/safrano9999_container.sh" "$SCRIPT_DIR/script/safrano9999_container.sh"
-  ln -f "$SHARED_CONTAINER_DIR/openclaw/openclaw_crontabs.sh" "$SCRIPT_DIR/script/openclaw_crontabs.sh"
 }
 
 plugin_tag() {
@@ -236,8 +249,7 @@ merge_config_examples() {
   shopt -u nullglob
 
   if [ -f "$merge_conf" ]; then
-    ln -f "$merge_conf" "$SCRIPT_DIR/merge_conf.sh"
-    bash "$SCRIPT_DIR/merge_conf.sh" \
+    bash "$merge_conf" \
       "$SCRIPT_DIR" \
       "$output" \
       "$container_example" \
@@ -531,7 +543,6 @@ publish_local_image() {
 }
 
 echo "  Staging plugin release archives -> safrano9999/"
-link_shared_openclaw_helper
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"
@@ -546,10 +557,9 @@ merge_config_examples
 
 if ! $NO_CONFIG; then
   run_init_scripts
-  config_sh="$SHARED_SAFRANO_DIR/config.sh"
-  [ -f "$config_sh" ] || { echo "Missing shared config.sh at $config_sh" >&2; exit 1; }
-  ln -f "$config_sh" "$SCRIPT_DIR/config.sh"
-  ( cd "$SCRIPT_DIR" && bash config.sh )
+  config_sh="$SAFRANO_SCRIPTS_DIR/config.sh"
+  [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
+  ( cd "$SCRIPT_DIR" && bash "$config_sh" )
   rm -f "$SCRIPT_DIR/${CONTAINER_NAME}.container" "$SCRIPT_DIR/compose.yml" "$SCRIPT_DIR/docker-compose.yml"
 fi
 

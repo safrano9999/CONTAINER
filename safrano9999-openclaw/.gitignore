@@ -10,7 +10,7 @@ merge_conf.sh
 compose.yml
 docker-compose.yml
 *.container
-safrano9999/
+/safrano9999/
 plugin-zips/
 *.zip
 *.sha256

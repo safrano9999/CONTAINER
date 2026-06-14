@@ -8,9 +8,8 @@
 # Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
 # Patch:   /app dist replaced by the safrano9999 fork build (PR #91217,
 #          deterministic dummy/dummy default model, set at image build).
-# Boot:    tini -> services/entrypoint.sh    (tailscale up -> configure -> gateway)
-# Context: staged by setup.sh - ./script holds Containerfile helpers,
-#          ./services/ holds the entrypoint + configure helpers.
+# Boot:    tini -> SCRIPTS/.../entrypoint.sh (tailscale up -> configure -> gateway)
+# Context: all build and runtime helpers live below ./SCRIPTS.
 # =============================================================================
 
 ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
@@ -50,15 +49,15 @@ RUN curl -fsSL https://tailscale.com/install.sh | sh \
 # --- patched OpenClaw: deterministic dummy/dummy gateway model ---------------
 # Install the checksum-verified fork dist (upstream PR #91217) before plugin
 # setup so the CI build does not compile the complete OpenClaw monorepo.
-COPY services/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
+COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
 RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
  && /usr/local/bin/openclaw-patch-deterministic
 
 # --- plugins: clone/install dynamically, pre-bake venvs ----------------------
 ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
 ENV SAFRANO9999_STAGE_DIR=${OPENCLAW_PLUGINS_DIR}/.stage
-COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
-COPY script/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
+COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
+COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
 COPY safrano9999 ${SAFRANO9999_STAGE_DIR}
 
 RUN bash -lc 'set -eux; \
@@ -90,13 +89,13 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 
 # --- runtime config + entrypoint --------------------------------------------
 # Keep these final so service-only edits rebuild only the small tail layers.
-COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
-COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
-COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
-COPY services/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
-COPY script/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
-COPY script/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
-COPY script/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
+COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/bin/openclaw_common.py
+COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local/bin/safrano9999-openclaw-entrypoint
+COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
+COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
+COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
+COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
  && mkdir -p /root/.openclaw /var/lib/tailscale
 

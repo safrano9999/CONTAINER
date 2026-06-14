@@ -1,5 +1,5 @@
-# Keep secrets and generated/hardlinked host files out of the build context.
-# The Containerfile only COPYs ./safrano9999 and ./services.
+# Keep secrets and generated host files out of the build context.
+# The Containerfile COPYs release archives from ./safrano9999 and helpers from ./SCRIPTS.
 .env
 config.conf
 config.conf_example

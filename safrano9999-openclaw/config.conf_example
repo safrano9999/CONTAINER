@@ -21,6 +21,11 @@ OPENCLAW_GATEWAY_PUBLISH_PORT=18789
 SAFRANO9999_FULLRUN_ON_START=1
 
 
+# OpenClaw cron times for the safrano9999 fullrun webhooks.
+# Format: comma-separated CET HH:MM entries.
+OPENCLAW_CRONTABS=CET 07:00,CET 12:00,CET 15:30,CET 19:00
+
+
 # Docker Hub image used by setup.sh when you choose "pull".
 SAFRANO9999_OPENCLAW_DOCKER_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest
 
@@ -90,4 +95,3 @@ ZEROINBOX_CLASSIFIER=litellm
 ZEROINBOX_LOG_DIR=logs
 
 ZEROINBOX_REPORT_DIR=REPORTS
-

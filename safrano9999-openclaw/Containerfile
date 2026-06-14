@@ -14,19 +14,6 @@
 # =============================================================================
 
 ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
-
-# --- patched OpenClaw build stage ----------------------------------------
-# Builds the safrano9999 fork (stable + PR openclaw/openclaw#91217:
-# deterministic dummy/dummy gateway model). Only dist + launcher are copied
-# into the final image, so build tooling stays out of the gateway image.
-FROM node:24-bookworm-slim AS openclaw-patch
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates python3 make g++ \
- && rm -rf /var/lib/apt/lists/*
-COPY services/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
-RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
- && /usr/local/bin/openclaw-patch-deterministic
-
 FROM ${OPENCLAW_IMAGE}
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
@@ -61,10 +48,11 @@ RUN curl -fsSL https://tailscale.com/install.sh | sh \
  && rm -rf /var/lib/apt/lists/*
 
 # --- patched OpenClaw: deterministic dummy/dummy gateway model ---------------
-# Replace the stock dist with the patched build (upstream PR #91217) before
-# plugin install so plugin metadata registers against the patched runtime.
-COPY --from=openclaw-patch /opt/openclaw-patch-src/dist /app/dist
-COPY --from=openclaw-patch /opt/openclaw-patch-src/openclaw.mjs /app/openclaw.mjs
+# Install the checksum-verified fork dist (upstream PR #91217) before plugin
+# setup so the CI build does not compile the complete OpenClaw monorepo.
+COPY services/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
+RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
+ && /usr/local/bin/openclaw-patch-deterministic
 
 # --- plugins: clone/install dynamically, pre-bake venvs ----------------------
 ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw

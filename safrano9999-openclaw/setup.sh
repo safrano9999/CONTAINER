@@ -36,8 +36,7 @@ Options:
   --no-build          Stop after staging, merge, config and compose/quadlet rendering
   --help              Show this help and exit
 
-Without options, setup runs config, then asks interactively for pull/build.
-If pull is selected, setup asks for podman/docker and logs in to docker.io if needed.
+Without options, setup runs config, then opens the interactive image menu.
 EOF
 }
 

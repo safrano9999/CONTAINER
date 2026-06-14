@@ -137,7 +137,7 @@ ensure_docker_io_login() {
 
 choose_pull_engine() {
   local engine
-  echo ""
+  echo "" >&2
   read -rp "  Pull engine [podman/docker] (default: podman): " engine
   engine="${engine:-podman}"
   case "$engine" in

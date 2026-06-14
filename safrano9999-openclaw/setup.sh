@@ -109,7 +109,7 @@ link_shared_openclaw_helper() {
   local name src dst
 
   mkdir -p "$SCRIPT_DIR/services"
-  for name in openclaw_common.py safrano9999_plugins.py; do
+  for name in openclaw_common.py safrano9999_plugins.py openclaw-patch-deterministic.sh; do
     src="$SHARED_SERVICES_DIR/openclaw/$name"
     dst="$SCRIPT_DIR/services/$name"
     [ -f "$src" ] || { echo "Missing shared OpenClaw helper: $src" >&2; exit 1; }
@@ -161,7 +161,7 @@ download_plugin_zip() {
     fi
   fi
   if [ "$downloaded" != "true" ]; then
-    [ -n "$token" ] && curl_auth=(-H "Authorization: Bearer $token")
+    [ -n "${GH_TOKEN:-}" ] && curl_auth=(-H "Authorization: Bearer ${GH_TOKEN}")
     curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip" -o "$zip_path"
     curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip.sha256" -o "$sha_path"
   fi

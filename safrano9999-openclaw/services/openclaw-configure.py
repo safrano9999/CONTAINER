@@ -88,26 +88,27 @@ def _ensure_openclaw_config() -> None:
 
 def _apply_container_only_command_aliases() -> None:
     for repo, (command_name, alias) in CONTAINER_ONLY_COMMAND_ALIASES.items():
-        plugin_file = PLUGINS_DIR / repo / "index.js"
-        if not plugin_file.exists():
-            continue
-
-        source = plugin_file.read_text(encoding="utf-8")
-        source = source.replace(f'      nativeNames: {{ telegram: "{alias}" }},\n', "")
-        if f'name: "{alias}"' in source:
+        plugin_id = command_name
+        candidates = (
+            PLUGINS_DIR / repo / "index.js",
+            CONFIG_PATH.parent / "extensions" / plugin_id / "index.js",
+        )
+        for plugin_file in candidates:
+            if not plugin_file.exists():
+                continue
+            source = plugin_file.read_text(encoding="utf-8")
+            source = source.replace(f'      nativeNames: {{ telegram: "{alias}" }},\n', "")
+            if f'name: "{alias}"' not in source:
+                needle = f'      name: "{command_name}",\n'
+                command_start = source.find(needle)
+                command_end = source.find("    });\n", command_start)
+                alias_block = CONTAINER_ONLY_ALIAS_BLOCKS.get(repo)
+                if command_start == -1 or command_end == -1 or not alias_block:
+                    print(f"OpenClaw container alias skipped: /{alias} ({plugin_file})")
+                    continue
+                insert_at = command_end + len("    });\n")
+                source = source[:insert_at] + alias_block + source[insert_at:]
             plugin_file.write_text(source, encoding="utf-8")
-            continue
-
-        needle = f'      name: "{command_name}",\n'
-        command_start = source.find(needle)
-        command_end = source.find("    });\n", command_start)
-        alias_block = CONTAINER_ONLY_ALIAS_BLOCKS.get(repo)
-        if command_start == -1 or command_end == -1 or not alias_block:
-            print(f"OpenClaw container alias skipped: /{alias}")
-            continue
-
-        insert_at = command_end + len("    });\n")
-        plugin_file.write_text(source[:insert_at] + alias_block + source[insert_at:], encoding="utf-8")
         print(f"OpenClaw container alias enabled: /{alias} -> /{command_name}")
 
 

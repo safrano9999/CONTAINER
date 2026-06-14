@@ -6,12 +6,27 @@
 # configured with a model provider in this image.
 #
 # Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
+# Patch:   /app dist replaced by the safrano9999 fork build (PR #91217,
+#          deterministic dummy/dummy default model, set at image build).
 # Boot:    tini -> services/entrypoint.sh    (tailscale up -> configure -> gateway)
 # Context: staged by setup.sh - ./script holds Containerfile helpers,
 #          ./services/ holds the entrypoint + configure helpers.
 # =============================================================================
 
 ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
+
+# --- patched OpenClaw build stage ----------------------------------------
+# Builds the safrano9999 fork (stable + PR openclaw/openclaw#91217:
+# deterministic dummy/dummy gateway model). Only dist + launcher are copied
+# into the final image, so build tooling stays out of the gateway image.
+FROM node:24-bookworm-slim AS openclaw-patch
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates python3 make g++ \
+ && rm -rf /var/lib/apt/lists/*
+COPY services/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
+RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
+ && /usr/local/bin/openclaw-patch-deterministic
+
 FROM ${OPENCLAW_IMAGE}
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
@@ -45,6 +60,12 @@ RUN apt-get update \
 RUN curl -fsSL https://tailscale.com/install.sh | sh \
  && rm -rf /var/lib/apt/lists/*
 
+# --- patched OpenClaw: deterministic dummy/dummy gateway model ---------------
+# Replace the stock dist with the patched build (upstream PR #91217) before
+# plugin install so plugin metadata registers against the patched runtime.
+COPY --from=openclaw-patch /opt/openclaw-patch-src/dist /app/dist
+COPY --from=openclaw-patch /opt/openclaw-patch-src/openclaw.mjs /app/openclaw.mjs
+
 # --- plugins: clone/install dynamically, pre-bake venvs ----------------------
 ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
 ENV SAFRANO9999_STAGE_DIR=${OPENCLAW_PLUGINS_DIR}/.stage
@@ -56,7 +77,7 @@ RUN bash -lc 'set -eux; \
     mkdir -p /root/.openclaw; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
-    safrano9999_OC_plugins --fullrun --crontab "CET 01:23,CET 07:00,CET 12:00,CET 15:30,CET 19:00" \
+    safrano9999_OC_plugins --fullrun \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 
@@ -67,6 +88,11 @@ ENV HOME=/root \
     OPENCLAW_GATEWAY_PORT=18789 \
     TS_STATE_DIR=/var/lib/tailscale \
     OPENCLAW_DISABLE_BONJOUR=1
+
+# Deterministic gateway default: dummy/dummy needs no provider credentials
+# (https://docs.openclaw.ai/cli/models). openclaw-configure leaves it as is.
+RUN openclaw models set dummy/dummy \
+ && openclaw config get agents.defaults.model.primary
 
 EXPOSE 18789
 
@@ -81,7 +107,9 @@ COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
 COPY services/entrypoint.sh         /usr/local/bin/safrano9999-openclaw-entrypoint
 COPY services/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
 COPY script/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs \
+COPY script/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
+COPY script/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
  && mkdir -p /root/.openclaw /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.

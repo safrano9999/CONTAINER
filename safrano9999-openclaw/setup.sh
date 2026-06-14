@@ -60,6 +60,8 @@ for arg in "$@"; do
   esac
 done
 
+"$INSTALL_DIR/github_auth.sh" safrano9999
+
 trim() {
   local value="$1"
   value="${value#"${value%%[![:space:]]*}"}"

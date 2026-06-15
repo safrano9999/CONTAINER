@@ -390,6 +390,8 @@ render_compose_and_quadlet() {
   local image="$1"
   local include_build="$2"
   local source_file host compose_file quadlet_file line stripped entry key value disabled
+  local network
+  local publish_ports=true
   local prefix internal_key internal_port publish_port publish_host map source
   local first_port=""
   local -a ports=()
@@ -408,6 +410,10 @@ render_compose_and_quadlet() {
   fi
   host="$(config_value HOST || true)"
   [ -n "$host" ] || host="127.0.0.1"
+  network="$(config_value SAFRANO9999_OPENCLAW_NETWORK || true)"
+  network="$(trim "$network")"
+  [ "$network" = "default" ] && network=""
+  [[ "$network" == "host" || "$network" == "none" ]] && publish_ports=false
   compose_file="$SCRIPT_DIR/compose.yml"
   quadlet_file="$SCRIPT_DIR/${CONTAINER_NAME}.container"
 
@@ -487,7 +493,8 @@ render_compose_and_quadlet() {
     printf '    image: %s\n' "$image"
     printf '    container_name: %s\n' "$CONTAINER_NAME"
     printf '    hostname: %s\n' "$CONTAINER_NAME"
-    if [ "${#ports[@]}" -gt 0 ]; then
+    [ -n "$network" ] && printf '    network_mode: %s\n' "$(yaml_dq "$network")"
+    if $publish_ports && [ "${#ports[@]}" -gt 0 ]; then
       printf '    ports:\n'
       for item in "${ports[@]}"; do printf '      - %s\n' "$(yaml_dq "$item")"; done
     fi
@@ -524,9 +531,12 @@ render_compose_and_quadlet() {
     printf '[Container]\n'
     printf 'ContainerName=%s\n' "$CONTAINER_NAME"
     printf 'Image=%s\n' "$image"
+    [ -n "$network" ] && printf 'Network=%s\n' "$network"
     [ -f "$SCRIPT_DIR/config.conf" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/config.conf"
     [ -f "$SCRIPT_DIR/.env" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/.env"
-    for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
+    if $publish_ports; then
+      for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
+    fi
     for item in "${disabled_volumes[@]}"; do printf '# Volume=%s\n' "$item"; done
     for item in "${volumes[@]}"; do printf 'Volume=%s\n' "$item"; done
     for item in "${caps[@]}"; do printf 'AddCapability=%s\n' "$item"; done

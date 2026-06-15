@@ -11,6 +11,11 @@ INJECT_OVERWRITE=true
 HOST=127.0.0.1
 
 
+# Container network. Leave empty/default for the Podman default network.
+# Examples: podman, caddy-network, host, none
+SAFRANO9999_OPENCLAW_NETWORK=
+
+
 # OpenClaw gateway (Control UI + API / WebSocket)
 OPENCLAW_GATEWAY_PORT=18789
 

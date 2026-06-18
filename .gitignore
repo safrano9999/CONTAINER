@@ -6,3 +6,5 @@ fedora43-ai/fedora43-ai.container
 fedora43-ai/requirements.txt
 fedora43-ai/safrano9999/
 __pycache__/
+**/__pycache__/
+*.pyc

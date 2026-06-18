@@ -491,6 +491,8 @@ render_compose_and_quadlet() {
       printf '      dockerfile: Containerfile\n'
     fi
     printf '    image: %s\n' "$image"
+    printf '    labels:\n'
+    printf '      - "io.containers.autoupdate=registry"\n'
     printf '    container_name: %s\n' "$CONTAINER_NAME"
     printf '    hostname: %s\n' "$CONTAINER_NAME"
     [ -n "$network" ] && printf '    network_mode: %s\n' "$(yaml_dq "$network")"
@@ -541,7 +543,7 @@ render_compose_and_quadlet() {
     for item in "${volumes[@]}"; do printf 'Volume=%s\n' "$item"; done
     for item in "${caps[@]}"; do printf 'AddCapability=%s\n' "$item"; done
     for item in "${devices[@]}"; do printf 'AddDevice=%s\n' "$item"; done
-    printf '#AutoUpdate=registry\n\n'
+    printf 'AutoUpdate=registry\n\n'
     printf '[Service]\n'
     printf 'Restart=always\n'
     printf 'TimeoutStartSec=30\n\n'

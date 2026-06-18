@@ -54,6 +54,7 @@ relink_dev_scripts() {
   local path source target
   local -a paths=(
     safrano9999/config.sh
+    safrano9999/legacy.sh
     safrano9999/container/openclaw/openclaw_allow_all.mjs
     safrano9999/container/openclaw/openclaw_crontabs.conf
     safrano9999/container/openclaw/openclaw_crontabs.sh
@@ -572,6 +573,7 @@ if ! $NO_CONFIG; then
   [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
   ( cd "$SCRIPT_DIR" && bash "$config_sh" )
   rm -f "$SCRIPT_DIR/${CONTAINER_NAME}.container" "$SCRIPT_DIR/compose.yml" "$SCRIPT_DIR/docker-compose.yml"
+  ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR" )
 fi
 
 render_compose_and_quadlet "$LOCAL_IMAGE" true

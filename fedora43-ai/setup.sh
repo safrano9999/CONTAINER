@@ -145,6 +145,7 @@ if ! $NO_CONFIG; then
     (cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/config.sh")
     CONTAINER_NAME="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]')"
     rm -f "$SCRIPT_DIR/$CONTAINER_NAME.container" "$SCRIPT_DIR/docker-compose.yml"
+    (cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR")
 fi
 
 render_compose_from_conf() {

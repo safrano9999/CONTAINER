@@ -567,6 +567,8 @@ bash "$SCRIPT_DIR/merge.sh"
 echo "  Merging config.conf_example ..."
 merge_config_examples
 
+DOCKER_IO_IMAGE="$(docker_io_image)"
+
 if ! $NO_CONFIG; then
   run_init_scripts
   config_sh="$SAFRANO_SCRIPTS_DIR/config.sh"
@@ -576,11 +578,13 @@ if ! $NO_CONFIG; then
   ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR" )
 fi
 
-render_compose_and_quadlet "$LOCAL_IMAGE" true
+EXISTING_IMAGE="$(read_kv_file "$SCRIPT_DIR/${CONTAINER_NAME}.container" Image || true)"
+RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
+RENDER_BUILD=false
+[ "$RENDER_IMAGE" = "$LOCAL_IMAGE" ] && RENDER_BUILD=true
+render_compose_and_quadlet "$RENDER_IMAGE" "$RENDER_BUILD"
 
 $NO_BUILD && { echo "  Staging done."; exit 0; }
-
-DOCKER_IO_IMAGE="$(docker_io_image)"
 
 if [ -z "$IMG_CHOICE" ]; then
   echo ""
@@ -611,6 +615,7 @@ case "$IMG_CHOICE" in
       echo "  Building $LOCAL_IMAGE ..."
       podman build -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     fi
+    render_compose_and_quadlet "$LOCAL_IMAGE" true
     echo "  Done. Image ready: $LOCAL_IMAGE"
     ;;
   *)

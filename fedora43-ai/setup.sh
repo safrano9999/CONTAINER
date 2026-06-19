@@ -149,12 +149,14 @@ if ! $NO_CONFIG; then
 fi
 
 render_compose_from_conf() {
+    local image="$1"
+    local include_build="$2"
     local inputs=()
     [ -f "$SCRIPT_DIR/config.conf_example" ] && inputs+=("$SCRIPT_DIR/config.conf_example")
     [ -f "$SCRIPT_DIR/config.conf" ] && inputs+=("$SCRIPT_DIR/config.conf")
     [ "${#inputs[@]}" -gt 0 ] || { echo "No config.conf or config.conf_example" >&2; exit 1; }
 
-    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" '
+    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" -v image="$image" -v include_build="$include_build" '
     function trim(s) {
         sub(/^[[:space:]]+/, "", s)
         sub(/[[:space:]]+$/, "", s)
@@ -319,10 +321,12 @@ render_compose_from_conf() {
 
         print "services:" > "compose.yml"
         print "  fedora43-ai:" >> "compose.yml"
-        print "    build:" >> "compose.yml"
-        print "      context: ." >> "compose.yml"
-        print "      dockerfile: Containerfile" >> "compose.yml"
-        print "    image: localhost/fedora43-ai:latest" >> "compose.yml"
+        if (include_build == "true") {
+            print "    build:" >> "compose.yml"
+            print "      context: ." >> "compose.yml"
+            print "      dockerfile: Containerfile" >> "compose.yml"
+        }
+        print "    image: " image >> "compose.yml"
         print "    labels:" >> "compose.yml"
         print "      - " yaml_dq("io.containers.autoupdate=registry") >> "compose.yml"
         print "    container_name: ${INSTANCE:-fedora43-ai}" >> "compose.yml"
@@ -359,7 +363,7 @@ render_compose_from_conf() {
 
         print "[Container]" > "fedora43-ai.container"
         print "ContainerName=fedora43-ai" >> "fedora43-ai.container"
-        print "Image=localhost/fedora43-ai:latest" >> "fedora43-ai.container"
+        print "Image=" image >> "fedora43-ai.container"
         print "AutoUpdate=registry" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/.env" >> "fedora43-ai.container"
         for (i = 1; i <= env_count; i++) print "Environment=" systemd_dq(env_order[i] "=" env[env_order[i]]) >> "fedora43-ai.container"
@@ -381,10 +385,17 @@ render_compose_from_conf() {
     ' "${inputs[@]}"
 }
 
+DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
+LOCAL_IMAGE="localhost/fedora43-ai:latest"
+EXISTING_IMAGE="$(awk -F= '$1 == "Image" { print substr($0, index($0, "=") + 1); exit }' "$SCRIPT_DIR/fedora43-ai.container" 2>/dev/null || true)"
+RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
+RENDER_BUILD=false
+[ "$RENDER_IMAGE" = "$LOCAL_IMAGE" ] && RENDER_BUILD=true
+
 # Generate compose.yml and the Quadlet from merge.conf.
 echo "  Generating compose.yml..."
 echo "  Generating fedora43-ai.container..."
-render_compose_from_conf
+render_compose_from_conf "$RENDER_IMAGE" "$RENDER_BUILD"
 
 echo "  Generating systemd runtime env header..."
 "$IMAGE_SCRIPTS_DIR/systemd_pass_environment.sh" \
@@ -394,10 +405,6 @@ echo "  Generating systemd runtime env header..."
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 $NO_BUILD && echo "" && echo "  Staging done." && exit 0
-
-# Build or pull the image.
-DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
-LOCAL_IMAGE="localhost/fedora43-ai:latest"
 
 if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
     echo ""
@@ -416,13 +423,12 @@ case "$IMG_CHOICE" in
         echo ""
         echo "  Pulling $DOCKER_IO_IMAGE ..."
         podman pull "$DOCKER_IO_IMAGE"
-        sed -i '/^\s*build:/,/^\s*dockerfile:/d' "$SCRIPT_DIR/compose.yml"
-        sed -i "s|image: .*|image: $DOCKER_IO_IMAGE|" "$SCRIPT_DIR/compose.yml"
-        sed -i "s|^Image=.*|Image=$DOCKER_IO_IMAGE|" "$SCRIPT_DIR/fedora43-ai.container"
+        render_compose_from_conf "$DOCKER_IO_IMAGE" false
         echo "  Done. Image ready: $DOCKER_IO_IMAGE"
         ;;
     2)
         echo ""
+        render_compose_from_conf "$LOCAL_IMAGE" true
         if $NO_CACHE; then
             echo "  Building $LOCAL_IMAGE with --no-cache ..."
             podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"

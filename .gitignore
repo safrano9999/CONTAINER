@@ -8,3 +8,4 @@ fedora43-ai/safrano9999/
 __pycache__/
 **/__pycache__/
 *.pyc
+tag.sh

@@ -4,6 +4,7 @@ ARG ELECTRUM_VERSION=4.7.2
 ARG LND_VERSION=v0.20.1-beta
 ARG GETH_VERSION=1.17.2
 ARG GETH_COMMIT=be4dc0c4
+ARG WEBHOOK_VERSION=2.8.3
 
 # DNF Cache Mount: Behält heruntergeladene RPMs über Builds hinweg,
 # falls der Layer neu gebaut werden muss.
@@ -58,6 +59,18 @@ RUN curl -fL \
     -o /usr/local/bin/cloudflared \
  && chmod +x /usr/local/bin/cloudflared \
  && cloudflared --version
+
+RUN set -eux; \
+    case "$(uname -m)" in \
+      x86_64) webhook_arch=amd64 ;; \
+      aarch64|arm64) webhook_arch=arm64 ;; \
+      armv7l|armv6l) webhook_arch=arm ;; \
+      i386|i686) webhook_arch=386 ;; \
+      *) echo "Unsupported webhook architecture" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/adnanh/webhook/releases/download/${WEBHOOK_VERSION}/webhook-linux-${webhook_arch}.tar.gz" \
+        | tar -xz --strip-components=1 -C /usr/local/bin "webhook-linux-${webhook_arch}/webhook"; \
+    webhook -version
 
 # systemd für Container-Betrieb: unnötige Units entfernen
 RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \

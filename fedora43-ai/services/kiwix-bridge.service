@@ -1,0 +1,15 @@
+[Unit]
+Description=KIWIX_BRIDGE
+After=network.target tailscale-up.service
+Wants=tailscale-up.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/safrano9999/KIWIX_BRIDGE
+PassEnvironment=HOST KIWIX_BRIDGE_PORT KIWIX_URL KIWIX_VERIFY_SSL LITELLM_URL LITELLM_PORT LITELLM_API_KEY KIWIX_BRIDGE_LITELLM_MODEL KIWIX_BRIDGE_MODELS
+Environment=KIWIX_BRIDGE_PORT=11008
+ExecStart=python3 bin/web.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -26,6 +26,7 @@ At a high level the image includes:
   - `CITADEL`
   - `VikAI`
   - `PV_D-A-CH`
+  - `KIWIX_BRIDGE`
   - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
   - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
   - `NaturalGrounding-Tiktok-Ying-Video-Manager`
@@ -62,6 +63,7 @@ At a high level the image includes:
     ├── CODEANALYST/
     ├── JUGO/
     ├── CITADEL/
+    ├── KIWIX_BRIDGE/
     └── VikAI/
 ```
 
@@ -126,6 +128,7 @@ Run:
    - `CITADEL`
    - `VikAI`
    - `PV_D-A-CH`
+   - `KIWIX_BRIDGE`
    - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
    - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
    - `NaturalGrounding-Tiktok-Ying-Video-Manager` from `feature/webui-db-backend-dual`
@@ -222,6 +225,7 @@ The generated config maps published ports from `config.conf`.
 | PV_D-A-CH | `11003` | `11003` | PV/QGIS workflow UI |
 | Napoleon | `11004` | `11004` | Napoleon Hill mastermind UI |
 | NaturalGrounding | `11005` | `11005` | TikTok video manager UI |
+| KIWIX_BRIDGE | `11008` | `11008` | Local Kiwix/Wikipedia RAG UI |
 | OpenClaw Gateway | `18789` | `20789` | OpenClaw gateway and Control UI |
 | Hermes Dashboard | `9119` | `19119` | Hermes dashboard |
 | Hermes API Server | `8642` | `18642` | Optional OpenAI compatible `/v1` API |
@@ -351,6 +355,7 @@ Inside the container, systemd manages the runtime.
 | `citadel.service` | simple | Runs CITADEL FastAPI UI |
 | `citadel-scan.service` | oneshot | Runs CITADEL `scan.sh` after a delay |
 | `bip39.service` | simple | Serves the offline BIP39 HTML page |
+| `kiwix-bridge.service` | simple | Runs KIWIX_BRIDGE local Kiwix/Wikipedia RAG UI |
 | `fedora43-ai.service` | oneshot | Runs local init scripts from `/fedora/bin` |
 | `openclaw-config.service` | oneshot | Writes OpenClaw runtime config before gateway start |
 | `openclaw.service` | simple | Starts OpenClaw Gateway on internal port `18789` |
@@ -794,6 +799,46 @@ CITADEL-related container privileges are generated from config:
 CITADEL_CAPABILITIES=NET_ADMIN,NET_RAW
 CITADEL_DEVICES=/dev/net/tun
 CITADEL_VOLUMES=tailscale:/var/lib/tailscale
+```
+
+### KIWIX_BRIDGE
+
+KIWIX_BRIDGE runs from:
+
+```text
+/opt/safrano9999/KIWIX_BRIDGE
+```
+
+Service:
+
+```text
+kiwix-bridge.service
+```
+
+Command:
+
+```bash
+python3 bin/web.py
+```
+
+Default port:
+
+```text
+11008
+```
+
+The app searches a local Kiwix/Wikipedia server and sends grounded prompts to
+the OpenAI-compatible LiteLLM proxy. Runtime values come from the merged
+`env.example` and `config.conf_example` flow:
+
+```env
+KIWIX_URL=https://127.0.0.1:450
+KIWIX_BRIDGE_PORT=11008
+KIWIX_BRIDGE_PUBLISH_PORT=11008
+LITELLM_URL=
+LITELLM_PORT=
+LITELLM_API_KEY=
+KIWIX_BRIDGE_LITELLM_MODEL=
 ```
 
 ### NaturalGrounding

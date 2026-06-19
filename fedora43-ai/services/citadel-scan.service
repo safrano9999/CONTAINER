@@ -1,7 +1,7 @@
 [Unit]
 Description=CITADEL initial scan
-After=codeanalyst.service jugo.service bip39.service pvdach.service napoleon.service naturalgrounding.service citadel.service openclaw.service hermes-dashboard.service hermes.service
-Wants=codeanalyst.service jugo.service bip39.service pvdach.service napoleon.service naturalgrounding.service citadel.service openclaw.service hermes-dashboard.service hermes.service
+After=codeanalyst.service jugo.service bip39.service pvdach.service kiwix-bridge.service napoleon.service naturalgrounding.service citadel.service openclaw.service hermes-dashboard.service hermes.service
+Wants=codeanalyst.service jugo.service bip39.service pvdach.service kiwix-bridge.service napoleon.service naturalgrounding.service citadel.service openclaw.service hermes-dashboard.service hermes.service
 
 [Service]
 Type=oneshot

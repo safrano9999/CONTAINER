@@ -100,6 +100,7 @@ REPOS=(
     CITADEL
     VikAI
     PV_D-A-CH
+    KIWIX_BRIDGE
     NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
     SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
     NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual

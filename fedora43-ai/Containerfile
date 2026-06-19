@@ -149,7 +149,7 @@ COPY services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
  && . /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
  && safrano9999_standalone \
-      CODEANALYST JUGO CITADEL VikAI PV_D-A-CH \
+      CODEANALYST JUGO CITADEL VikAI PV_D-A-CH KIWIX_BRIDGE \
       NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
       SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
       NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
@@ -196,7 +196,7 @@ RUN mkdir -p /etc/systemd/system/tailscale-up.service.d \
       > /etc/systemd/system/openclaw.service.d/20-safrano9999.conf
 COPY services/fedora-bin/* /usr/local/share/fedora43-ai/bin/
 
-RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service napoleon.service naturalgrounding.service \
+RUN systemctl enable codeanalyst.service jugo.service citadel.service pvdach.service kiwix-bridge.service napoleon.service naturalgrounding.service \
     citadel-setup.service citadel-scan.service bip39.service fedora43-ai.service \
     tailscaled.service tailscale-up.service openclaw-config.service openclaw-safrano9999.service openclaw.service hermes.service \
     hermes-dashboard.service

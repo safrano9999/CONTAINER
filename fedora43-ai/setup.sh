@@ -28,7 +28,7 @@ Options:
   --help              Show this help and exit
 
 INSTANCE defaults to fedora43-ai and is used by compose build metadata.
-Without options, setup runs config + local build without --no-cache.
+Without options, setup runs the complete config flow and then asks whether to pull or build.
 EOF
 }
 
@@ -407,7 +407,7 @@ echo "  Generating systemd runtime env header..."
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 $NO_BUILD && echo "" && echo "  Staging done." && exit 0
 
-if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
+if [ -z "$IMG_CHOICE" ]; then
     echo ""
     echo "  Image source:"
     echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
@@ -415,8 +415,6 @@ if $BUILD_ONLY && [ -z "$IMG_CHOICE" ]; then
     echo ""
     read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
     IMG_CHOICE="${IMG_CHOICE:-2}"
-elif [ -z "$IMG_CHOICE" ]; then
-    IMG_CHOICE=2
 fi
 
 case "$IMG_CHOICE" in

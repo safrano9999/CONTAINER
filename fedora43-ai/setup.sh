@@ -108,6 +108,7 @@ REPOS=(
     CALENDAR
     ZEROINBOX
     KACHELMANN
+    SPANKER
 )
 
 relink_dev_scripts() {
@@ -194,6 +195,11 @@ render_compose_from_conf() {
         if (value == "" || value in port_seen) return
         port_seen[value] = 1
         ports[++port_count] = value
+    }
+    function add_disabled_port(value) {
+        if (value == "" || value in disabled_port_seen) return
+        disabled_port_seen[value] = 1
+        disabled_ports[++disabled_port_count] = value
     }
     function add_named_volume(name) {
         if (name == "" || name in named_seen) return
@@ -294,9 +300,13 @@ render_compose_from_conf() {
             if (port == "") port = values[key]
             host = values[prefix "_PUBLISH_HOST"]
             if (host == "") host = default_publish_host
-            add_port(host ":" values[key] ":" port)
-            add_env(prefix "_PUBLISH_HOST", host)
-            add_env(prefix "_PUBLISH_PORT", values[key])
+            if (values[key] == "" || port == "") {
+                add_disabled_port(key "=")
+            } else {
+                add_port(host ":" values[key] ":" port)
+                add_env(prefix "_PUBLISH_HOST", host)
+                add_env(prefix "_PUBLISH_PORT", values[key])
+            }
         }
 
         for (i = 1; i <= value_count; i++) {
@@ -332,11 +342,11 @@ render_compose_from_conf() {
         print "      - " yaml_dq("io.containers.autoupdate=registry") >> "compose.yml"
         print "    container_name: ${INSTANCE:-fedora43-ai}" >> "compose.yml"
         print "    ports:" >> "compose.yml"
+        for (i = 1; i <= disabled_port_count; i++) print "      # " disabled_ports[i] >> "compose.yml"
         for (i = 1; i <= port_count; i++) print "      - " yaml_dq(ports[i]) >> "compose.yml"
         print "    env_file:" >> "compose.yml"
+        print "      - config.conf" >> "compose.yml"
         print "      - .env" >> "compose.yml"
-        print "    environment:" >> "compose.yml"
-        for (i = 1; i <= env_count; i++) print "      - " yaml_dq(env_order[i] "=" env[env_order[i]]) >> "compose.yml"
         print "    volumes:" >> "compose.yml"
         print "      - " yaml_dq("${HOST_HOME_DIR:-home}:/home") >> "compose.yml"
         print "      - " yaml_dq("${HOST_SRV_DIR:-" home "/fedora43-ai/srv}:/srv") >> "compose.yml"
@@ -366,8 +376,9 @@ render_compose_from_conf() {
         print "ContainerName=fedora43-ai" >> "fedora43-ai.container"
         print "Image=" image >> "fedora43-ai.container"
         print "AutoUpdate=registry" >> "fedora43-ai.container"
+        print "EnvironmentFile=" cwd "/config.conf" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/.env" >> "fedora43-ai.container"
-        for (i = 1; i <= env_count; i++) print "Environment=" systemd_dq(env_order[i] "=" env[env_order[i]]) >> "fedora43-ai.container"
+        for (i = 1; i <= disabled_port_count; i++) print "# " disabled_ports[i] >> "fedora43-ai.container"
         for (i = 1; i <= port_count; i++) print "PublishPort=" ports[i] >> "fedora43-ai.container"
         print "Volume=" home "/fedora43-ai/srv:/srv" >> "fedora43-ai.container"
         for (i = 1; i <= disabled_volume_count; i++) print "# Volume=" disabled_volumes[i] >> "fedora43-ai.container"

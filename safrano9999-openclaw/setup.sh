@@ -409,7 +409,7 @@ render_compose_and_quadlet() {
   if [ "${#source_files[@]}" -eq 0 ]; then
     source_files+=("$(source_file_for_render)")
   fi
-  host="$(config_value HOST || true)"
+  host="$(config_value FASTAPI_HOST || true)"
   [ -n "$host" ] || host="127.0.0.1"
   network="$(config_value SAFRANO9999_OPENCLAW_NETWORK || true)"
   network="$(trim "$network")"

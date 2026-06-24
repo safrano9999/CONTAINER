@@ -244,8 +244,7 @@ render_compose_from_conf() {
         return n
     }
     function skip_env_key(key) {
-        return key == "INJECT_OVERWRITE" || \
-            key ~ /_PUBLISH_HOST$/ || key ~ /_PUBLISH_PORT$/ || \
+        return key ~ /_PUBLISH_HOST$/ || key ~ /_PUBLISH_PORT$/ || \
             key ~ /_CAPABILITIES$/ || key ~ /_DEVICES$/ || \
             key ~ /_VOLUMES$/ || key ~ /_GROUP_ADD$/
     }
@@ -282,7 +281,7 @@ render_compose_from_conf() {
         next
     }
     END {
-        default_publish_host = values["HOST"]
+        default_publish_host = values["FASTAPI_HOST"]
         if (default_publish_host == "") default_publish_host = "127.0.0.1"
 
         for (i = 1; i <= value_count; i++) {

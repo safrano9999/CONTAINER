@@ -6,7 +6,7 @@ Wants=tailscale-up.service
 [Service]
 Type=simple
 WorkingDirectory=/opt/safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
-PassEnvironment=HOST NAPOLEON_PORT LITELLM_URL LITELLM_PORT LITELLM_API_KEY NAPOLEON_LITELLM_MODEL
+PassEnvironment=FASTAPI_HOST NAPOLEON_PORT LITELLM_URL LITELLM_PORT LITELLM_API_KEY NAPOLEON_LITELLM_MODEL
 Environment=NAPOLEON_PORT=11004
 ExecStart=uvicorn webui:app --host 0.0.0.0 --port ${NAPOLEON_PORT}
 Restart=on-failure

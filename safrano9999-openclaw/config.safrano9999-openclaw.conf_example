@@ -3,11 +3,8 @@
 # each key and renders compose.yml + the quadlet from the *_PORT / *_PUBLISH_PORT /
 # *_VOLUMES / *_CAPABILITIES / *_DEVICES conventions.
 
-# Injected process environment wins over config.conf and .env
-INJECT_OVERWRITE=true
-
-# Host bind address for published ports
-HOST=127.0.0.1
+# FastAPI bind address for published ports
+FASTAPI_HOST=127.0.0.1
 
 # Container network. Leave empty/default for the Podman default network.
 # Examples: podman, caddy-network, host, none

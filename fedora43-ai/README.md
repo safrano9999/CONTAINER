@@ -230,7 +230,7 @@ The generated config maps published ports from `config.conf`.
 | Hermes Dashboard | `9119` | `19119` | Hermes dashboard |
 | Hermes API Server | `8642` | `18642` | Optional OpenAI compatible `/v1` API |
 
-`HOST` in `config.conf` controls the host-side publish address. The default is
+`FASTAPI_HOST` in `config.conf` controls the host-side publish address. The default is
 `127.0.0.1`, so the services are bound to localhost unless explicitly changed.
 Inside the container, web services bind to `0.0.0.0`; host reachability is
 controlled by the generated compose/Quadlet port mapping.
@@ -271,7 +271,7 @@ entries:
 
 | Variable | Purpose |
 |---|---|
-| `HOST` | Host-side bind address for published ports |
+| `FASTAPI_HOST` | Host-side bind address for published ports |
 | `*_PORT` | Internal service port |
 | `*_PUBLISH_PORT` | Host-side published port |
 | `CITADEL_SUBNET_IP` | Subnet IP CITADEL should use when producing service links |
@@ -284,10 +284,6 @@ entries:
 | `VIKAI_DEFAULT_TRANSPORT` | Default VikAI transport, currently `cli` |
 | `VIKAI_DEFAULT_TARGET` | Default VikAI target, for example `openclaw-tui` |
 
-`INJECT_OVERWRITE=true` documents the intended precedence: injected process
-environment wins over config/env files when the application runtime supports
-that behavior.
-
 ## Generated Compose And Quadlet
 
 `setup.sh` renders both `compose.yml` and `fedora43-ai.container` from
@@ -296,7 +292,7 @@ that behavior.
 The renderer supports:
 
 - published ports via `*_PUBLISH_PORT`
-- host bind address via `HOST` or `*_PUBLISH_HOST`
+- host bind address via `FASTAPI_HOST` or `*_PUBLISH_HOST`
 - regular environment variables
 - capabilities via `*_CAPABILITIES`
 - devices via `*_DEVICES`
@@ -441,8 +437,8 @@ The gateway internal port is `18789`. The default host mapping is `20789`.
 OpenClaw rejects Control UI browser origins that are not explicitly allowed.
 `openclaw-configure.py` writes allowed origins for:
 
-- `HOST:18789`
-- `HOST:20789`
+- `FASTAPI_HOST:18789`
+- `FASTAPI_HOST:20789`
 - Tailscale DNS name on both ports, when detectable
 - Tailscale IPs on both ports, when detectable
 - `TS_HOSTNAME` on both ports, when it looks like a DNS name
@@ -1122,7 +1118,7 @@ podman exec fedora43-ai jq '.gateway.controlUi.allowedOrigins' /root/.openclaw/o
 
 Then check:
 
-- `HOST` in `config.conf`
+- `FASTAPI_HOST` in `config.conf`
 - `OPENCLAW_GATEWAY_PUBLISH_PORT`
 - `TS_HOSTNAME`
 - Tailscale status inside the container

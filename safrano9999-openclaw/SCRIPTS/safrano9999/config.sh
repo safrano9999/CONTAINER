@@ -10,7 +10,19 @@ fi
 
 PROJECT_NAME="$(basename "$DIR")"
 CONTAINER_NAME="${PROJECT_NAME,,}"
-CONFIG_SHOW="${1:-}"
+CONFIG_SHOW=""
+NO_CONTAINER=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --show) CONFIG_SHOW="--show" ;;
+        --no-container) NO_CONTAINER=true ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            exit 2
+            ;;
+    esac
+done
 
 trim() {
     local value="$1"
@@ -47,7 +59,16 @@ config_value() {
     local key="$1"
     local file
 
-    for file in "$DIR/container.conf" "$DIR/config.conf" "$DIR/.env" "$DIR/container.example" "$DIR/config.conf_example" "$DIR/env.example"; do
+    if [ "$NO_CONTAINER" != "true" ]; then
+        read_kv_file "$DIR/container.conf" "$key" && return 0
+    fi
+    for file in "$DIR/config.conf" "$DIR/.env"; do
+        read_kv_file "$file" "$key" && return 0
+    done
+    if [ "$NO_CONTAINER" != "true" ]; then
+        read_kv_file "$DIR/container.example" "$key" && return 0
+    fi
+    for file in "$DIR/config.conf_example" "$DIR/env.example"; do
         read_kv_file "$file" "$key" && return 0
     done
     return 1
@@ -147,6 +168,85 @@ add_unique() {
         [ "$existing" = "$value" ] && return 0
     done
     target+=("$value")
+}
+
+normalize_volume_item() {
+    local item="$1"
+    local source rest normalized_source
+
+    if [[ "$item" != *:* ]]; then
+        printf '%s\n' "$item"
+        return 0
+    fi
+
+    source="${item%%:*}"
+    rest="${item#*:}"
+    normalized_source="$source"
+    if [[ "$source" == "." || "$source" == ./* || "$source" == ../* || ( "$source" != /* && "$source" == */* ) ]]; then
+        normalized_source="$(cd "$DIR" && realpath -m -- "$source")"
+    fi
+    printf '%s:%s\n' "$normalized_source" "$rest"
+}
+
+add_repo_bind_mount() {
+    local rel="$1"
+    local source target
+
+    rel="$(trim "$rel")"
+    [ -n "$rel" ] || return 0
+    [[ "$rel" == /* || "$rel" == ../* ]] && return 0
+    rel="${rel#./}"
+    [ -n "$rel" ] || return 0
+
+    source="$(cd "$DIR" && realpath -m -- "$rel")"
+    mkdir -p "$source"
+    target="/opt/safrano9999/$PROJECT_NAME/$rel"
+    add_unique "${source}:${target}:Z" volumes
+}
+
+add_repo_file_bind_mount() {
+    local rel="$1"
+    local source target
+
+    rel="$(trim "$rel")"
+    [ -n "$rel" ] || return 0
+    [[ "$rel" == /* || "$rel" == ../* || "$rel" == */* ]] && return 0
+
+    source="$(cd "$DIR" && realpath -m -- "$rel")"
+    touch "$source"
+    target="/opt/safrano9999/$PROJECT_NAME/$rel"
+    add_unique "${source}:${target}:Z" volumes
+}
+
+add_repo_sot_file_mounts() {
+    local line entry
+
+    [ -f "$DIR/.gitignore" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        entry="$(trim "${line%%#*}")"
+        [[ "$entry" == *_SOT.md ]] || continue
+        add_repo_file_bind_mount "$entry"
+    done < "$DIR/.gitignore"
+}
+
+sqlite_backend_enabled() {
+    local file line stripped entry key value
+
+    for file in "$DIR/config.conf" "$DIR/.env" "$DIR/config.conf_example" "$DIR/env.example"; do
+        [ -f "$file" ] || continue
+        while IFS= read -r line || [ -n "$line" ]; do
+            stripped="$(trim "$line")"
+            [[ -z "$stripped" || "$stripped" == \#* ]] && continue
+            entry="${line%%#*}"
+            entry="$(trim "$entry")"
+            [[ "$entry" == *=* ]] || continue
+            key="$(trim "${entry%%=*}")"
+            [[ "$key" == *_DB_BACKEND ]] || continue
+            value="$(config_value "$key" || true)"
+            [ "${value,,}" = "sqlite" ] && return 0
+        done < "$file"
+    done
+    return 1
 }
 
 rewrite_config_with_comments() {
@@ -407,10 +507,12 @@ config_source_files() {
     elif [ -f "$DIR/config.conf_example" ]; then
         printf '%s\n' "$DIR/config.conf_example"
     fi
-    if [ -f "$DIR/container.conf" ]; then
-        printf '%s\n' "$DIR/container.conf"
-    elif [ -f "$DIR/container.example" ]; then
-        printf '%s\n' "$DIR/container.example"
+    if [ "$NO_CONTAINER" != "true" ]; then
+        if [ -f "$DIR/container.conf" ]; then
+            printf '%s\n' "$DIR/container.conf"
+        elif [ -f "$DIR/container.example" ]; then
+            printf '%s\n' "$DIR/container.example"
+        fi
     fi
 }
 
@@ -418,6 +520,7 @@ generate_container_files() {
     local source_file host image compose_file quadlet_file line stripped entry key value
     local prefix internal_key internal_port publish_port publish_host map
     local first_port="" command_host="0.0.0.0"
+    local sqlite_backend_seen=0
     local -a ports=()
     local -a volumes=()
     local -a devices=()
@@ -443,6 +546,14 @@ generate_container_files() {
 
             key="$(trim "${entry%%=*}")"
             value="$(config_value "$key" || true)"
+
+            if [[ "$key" == *_VIDEOS_DIR ]]; then
+                add_repo_bind_mount "$value"
+            fi
+
+            if [[ "$key" == *_DB_BACKEND && "${value,,}" == "sqlite" ]]; then
+                sqlite_backend_seen=1
+            fi
 
             if [[ "$key" == *_PUBLISH_PORT ]]; then
                 prefix="${key%_PUBLISH_PORT}"
@@ -479,8 +590,9 @@ generate_container_files() {
                 IFS=',' read -ra items <<< "$value"
                 for item in "${items[@]}"; do
                     item="$(trim "$item")"
-                    add_unique "$item" volumes
                     source="${item%%:*}"
+                    item="$(normalize_volume_item "$item")"
+                    add_unique "$item" volumes
                     if [[ "$source" != /* && "$source" != .* && "$source" != *"/"* ]]; then
                         add_unique "$source" named_volumes
                     fi
@@ -489,6 +601,11 @@ generate_container_files() {
             fi
         done < "$source_file"
     done < <(config_source_files)
+
+    if [ "$sqlite_backend_seen" -eq 1 ] || sqlite_backend_enabled; then
+        add_repo_bind_mount "STATE"
+    fi
+    add_repo_sot_file_mounts
 
     if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
         add_unique "${host}:${first_port}:${first_port}" ports
@@ -538,7 +655,7 @@ generate_container_files() {
             printf '    command: uvicorn webui:app --host %s --port %s\n' "$command_host" "$first_port"
         fi
         if [ "${#volumes[@]}" -gt 0 ]; then
-            printf '    # Volume mappings from *_VOLUMES in config.conf\n'
+            printf '    # Bind mounts and named volumes from runtime config\n'
             printf '    volumes:\n'
             for item in "${volumes[@]}"; do printf '      - %s\n' "$item"; done
         fi
@@ -581,7 +698,7 @@ generate_container_files() {
             printf '# Container-internal bind address; published host is controlled by FASTAPI_HOST\n'
             printf 'Exec=uvicorn webui:app --host %s --port %s\n' "$command_host" "$first_port"
         fi
-        [ "${#volumes[@]}" -gt 0 ] && printf '# Volume mappings from *_VOLUMES in config.conf\n'
+        [ "${#volumes[@]}" -gt 0 ] && printf '# Bind mounts and named volumes from runtime config\n'
         for item in "${volumes[@]}"; do printf 'Volume=%s\n' "$item"; done
         [ "${#caps[@]}" -gt 0 ] && printf '# Linux capabilities from *_CAPABILITIES in config.conf\n'
         for item in "${caps[@]}"; do printf 'AddCapability=%s\n' "$item"; done
@@ -607,7 +724,9 @@ echo "  Configuring $PROJECT_NAME"
 
 configure_from_example "$DIR/env.example" "$DIR/.env" ".env"
 configure_from_example "$DIR/config.conf_example" "$DIR/config.conf" "config.conf"
-configure_from_example "$DIR/container.example" "$DIR/container.conf" "container.conf"
-generate_container_files
+if [ "$NO_CONTAINER" != "true" ]; then
+    configure_from_example "$DIR/container.example" "$DIR/container.conf" "container.conf"
+    generate_container_files
+fi
 
 echo ""

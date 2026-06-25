@@ -12,7 +12,17 @@ Sie enthaelt jede Variable genau einmal.
 Doppelte Variablen werden in der Liste ausgelassen.
 Die Nummerierung bleibt global und fortlaufend.
 
-Das Format jeder Zeile ist exakt:
+Jedes Repo beginnt mit exakt einer GitHub-URL-Zeile.
+Darunter werden die Dateiabschnitte mit diesen Blockzeilen getrennt:
+#env_example
+#config.conf_example
+#container_example
+
+Unter den Blockzeilen stehen die Variablen aus der jeweiligen Example-Datei.
+Wenn eine Example-Datei fuer ein Repo keine Variablen enthaelt, bleibt der Block leer.
+Zwischen GitHub-URL, Blockzeilen und Variablen stehen keine Kommentare.
+
+Das Format jeder Variablenzeile ist exakt:
 NUMMER. VARNAME<TAB>ERKLAERUNG
 
 Nach der Nummer steht nur der Varname.

@@ -186,9 +186,9 @@ https://github.com/safrano9999/SPANKER
 
 https://github.com/safrano9999/CONTAINER/tree/main/fedora43-ai
 #env_example
-113. DISPLAY	autodetect prompt; fills GUI env if missing
-114. NO_AT_BRIDGE	autofill if missing; never overwrite
-115. XDG_RUNTIME_DIR	autofill if missing; never overwrite
+113. DISPLAY	required; autodetect prompt; fills GUI env if missing
+114. NO_AT_BRIDGE	required; autofill if missing; never overwrite
+115. XDG_RUNTIME_DIR	required; autofill if missing; never overwrite
 116. OPENCLAW_START	
 117. HERMES_START	
 118. HERMES_HOME	

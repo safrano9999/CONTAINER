@@ -172,13 +172,13 @@ https://github.com/safrano9999/KACHELMANN
 
 https://github.com/safrano9999/SPANKER
 #env_example
-104. SPANKER_DB_BACKEND	
-105. SPANKER_DB_NAME	
-106. SPANKER_DB_USER	
-107. SPANKER_DB_PW	
-108. SPANKER_DB_URL	
-109. SPANKER_DB_PORT	required
-110. SPANKER_DB_PREFIX	
+104. SPANKER_DB_BACKEND	required
+105. SPANKER_DB_NAME	required; autofill blank if SPANKER_DB_BACKEND=sqlite
+106. SPANKER_DB_USER	required; autofill blank if SPANKER_DB_BACKEND=sqlite
+107. SPANKER_DB_PW	required; autofill blank if SPANKER_DB_BACKEND=sqlite
+108. SPANKER_DB_URL	required; autofill blank if SPANKER_DB_BACKEND=sqlite
+109. SPANKER_DB_PORT	required; autofill blank if SPANKER_DB_BACKEND=sqlite
+110. SPANKER_DB_PREFIX	required; autofill blank if SPANKER_DB_BACKEND=sqlite
 #config.conf_example
 103. SPANKER_PORT	required
 #container_example

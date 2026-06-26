@@ -120,8 +120,8 @@ https://github.com/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
 80. NATURALGROUNDING_DB_URL	required; autofill blank if NATURALGROUNDING_DB_BACKEND=sqlite
 81. NATURALGROUNDING_DB_PORT	required; autofill blank if NATURALGROUNDING_DB_BACKEND=sqlite
 82. NATURALGROUNDING_DJANGO_SECRET_KEY	required; default preset example: openssl rand -hex 32
-83. NATURALGROUNDING_ADMIN_EMAIL	
-84. NATURALGROUNDING_ADMIN_PASSWORD	
+83. NATURALGROUNDING_ADMIN_EMAIL	required; default preset foo@bar.com
+84. NATURALGROUNDING_ADMIN_PASSWORD	required; default preset example: openssl rand -hex 32
 #config.conf_example
 73. NATURALGROUNDING_PORT	required
 74. NATURALGROUNDING_VIDEOS_DIR	

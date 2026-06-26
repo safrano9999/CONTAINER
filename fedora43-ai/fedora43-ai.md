@@ -135,9 +135,9 @@ https://github.com/safrano9999/DAILYNEWS
 
 https://github.com/safrano9999/CALENDAR
 #env_example
-86. CALENDAR_URL	
-87. CALENDAR_USER	
-88. CALENDAR_PASSWORD	
+86. CALENDAR_URL	required; default preset https:/domain.tld:port/remote.php/dav/principals/users/username/
+87. CALENDAR_USER	required
+88. CALENDAR_PASSWORD	required
 #config.conf_example
 #container_example
 

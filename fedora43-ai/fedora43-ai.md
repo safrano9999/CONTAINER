@@ -157,14 +157,14 @@ https://github.com/safrano9999/ZEROINBOX
 
 https://github.com/safrano9999/KACHELMANN
 #env_example
-94. KACHELMANN_DB_BACKEND	
-95. KACHELMANN_DB_URL	
-96. KACHELMANN_DB_PORT	required
-97. KACHELMANN_DB_NAME	
-98. KACHELMANN_DB_USER	
-99. KACHELMANN_DB_PW	
-100. KACHELMANN_DB_PREFIX	
-101. KACHELMANN_EDITOR_TOKEN	
+94. KACHELMANN_DB_BACKEND	required
+95. KACHELMANN_DB_URL	required; autofill blank if KACHELMANN_DB_BACKEND=sqlite
+96. KACHELMANN_DB_PORT	required; autofill blank if KACHELMANN_DB_BACKEND=sqlite
+97. KACHELMANN_DB_NAME	required; autofill blank if KACHELMANN_DB_BACKEND=sqlite
+98. KACHELMANN_DB_USER	required; autofill blank if KACHELMANN_DB_BACKEND=sqlite
+99. KACHELMANN_DB_PW	required; autofill blank if KACHELMANN_DB_BACKEND=sqlite
+100. KACHELMANN_DB_PREFIX	required; autofill blank if KACHELMANN_DB_BACKEND=sqlite
+101. KACHELMANN_EDITOR_TOKEN	required
 #config.conf_example
 93. KACHELMANN_PORT	required
 #container_example

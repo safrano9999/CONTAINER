@@ -144,10 +144,14 @@ https://github.com/safrano9999/CALENDAR
 
 https://github.com/safrano9999/ZEROINBOX
 #env_example
-89. ZEROINBOX_PROVIDER	
-90. ZEROINBOX_EMAIL	
-91. ZEROINBOX_APP_PASSWORD	
-92. ZEROINBOX_OPENAI_V1_DEFAULT_LLM
+89. ZEROINBOX_PROVIDER	required; default preset gmail
+90. ZEROINBOX_EMAIL	required
+91. ZEROINBOX_APP_PASSWORD	required
+92. ZEROINBOX_OPENAI_V1_DEFAULT_LLM	required; default preset gemini/gemini-flash-lite-latest
+112. OPENAI_V1_PROVIDER	optional
+16. OPENAI_V1_URL	required
+17. OPENAI_V1_PORT	required
+18. OPENAI_V1_KEY	required
 #config.conf_example
 #container_example
 

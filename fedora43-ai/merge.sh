@@ -14,12 +14,18 @@ SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 #          "env"          - key before "=" (KEY=value)
 #          "requirements" - package name at the start of the line
 #          "line"         - complete line
+#   $4... optional base files merged before repository files.
 merge_dedup_from_repos() {
     local filename="$1"
     local output="$2"
     local mode="$3"
+    shift 3
 
     local -a files=()
+    local base_file
+    for base_file in "$@"; do
+        [ -f "$base_file" ] && files+=("$base_file")
+    done
     for repo_dir in "$SAFRANO_DIR"/*/; do
         [ -f "$repo_dir$filename" ] && files+=("$repo_dir$filename")
     done
@@ -56,6 +62,5 @@ merge_dedup_from_repos() {
     echo "  Merged $filename (${#files[@]} sources) -> ${output#"$SCRIPT_DIR"/}"
 }
 
-merge_dedup_from_repos "env.example"      "$SCRIPT_DIR/env.example"      "env"
+merge_dedup_from_repos "env.example"      "$SCRIPT_DIR/env.example"      "env" "$SCRIPT_DIR/env.fedora43-ai.example"
 merge_dedup_from_repos "requirements.txt" "$SCRIPT_DIR/requirements.txt" "requirements"
-cat "$SCRIPT_DIR/env.fedora43-ai.example" >> "$SCRIPT_DIR/env.example"

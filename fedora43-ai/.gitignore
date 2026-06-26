@@ -10,6 +10,8 @@ merge_conf.sh
 config.sh
 config.conf
 config.conf_example
+container.conf
+container.example
 .agents/
 .codex/
 .claude/

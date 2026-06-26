@@ -142,6 +142,13 @@ bash "$IMAGE_SCRIPTS_DIR/install/merge_conf.sh" \
     "$SCRIPT_DIR/safrano9999" \
     "config.conf_example"
 
+bash "$IMAGE_SCRIPTS_DIR/install/merge_conf.sh" \
+    "$SCRIPT_DIR" \
+    "$SCRIPT_DIR/container.example" \
+    "$SCRIPT_DIR/container.fedora43-ai.example" \
+    "$SCRIPT_DIR/safrano9999" \
+    "container.example"
+
 if ! $NO_CONFIG; then
     echo ""
     (cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/config.sh")
@@ -153,12 +160,18 @@ fi
 render_compose_from_conf() {
     local image="$1"
     local include_build="$2"
+    local has_container_conf=false
     local inputs=()
     [ -f "$SCRIPT_DIR/config.conf_example" ] && inputs+=("$SCRIPT_DIR/config.conf_example")
+    [ -f "$SCRIPT_DIR/container.example" ] && inputs+=("$SCRIPT_DIR/container.example")
     [ -f "$SCRIPT_DIR/config.conf" ] && inputs+=("$SCRIPT_DIR/config.conf")
-    [ "${#inputs[@]}" -gt 0 ] || { echo "No config.conf or config.conf_example" >&2; exit 1; }
+    if [ -f "$SCRIPT_DIR/container.conf" ]; then
+        inputs+=("$SCRIPT_DIR/container.conf")
+        has_container_conf=true
+    fi
+    [ "${#inputs[@]}" -gt 0 ] || { echo "No config/container example or conf files" >&2; exit 1; }
 
-    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" -v image="$image" -v include_build="$include_build" '
+    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" -v image="$image" -v include_build="$include_build" -v has_container_conf="$has_container_conf" '
     function trim(s) {
         sub(/^[[:space:]]+/, "", s)
         sub(/[[:space:]]+$/, "", s)
@@ -345,6 +358,7 @@ render_compose_from_conf() {
         for (i = 1; i <= port_count; i++) print "      - " yaml_dq(ports[i]) >> "compose.yml"
         print "    env_file:" >> "compose.yml"
         print "      - config.conf" >> "compose.yml"
+        if (has_container_conf == "true") print "      - container.conf" >> "compose.yml"
         print "      - .env" >> "compose.yml"
         print "    volumes:" >> "compose.yml"
         print "      - " yaml_dq("${HOST_HOME_DIR:-home}:/home") >> "compose.yml"
@@ -376,6 +390,7 @@ render_compose_from_conf() {
         print "Image=" image >> "fedora43-ai.container"
         print "AutoUpdate=registry" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/config.conf" >> "fedora43-ai.container"
+        if (has_container_conf == "true") print "EnvironmentFile=" cwd "/container.conf" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/.env" >> "fedora43-ai.container"
         for (i = 1; i <= disabled_port_count; i++) print "# " disabled_ports[i] >> "fedora43-ai.container"
         for (i = 1; i <= port_count; i++) print "PublishPort=" ports[i] >> "fedora43-ai.container"
@@ -412,7 +427,8 @@ echo "  Generating systemd runtime env header..."
 "$IMAGE_SCRIPTS_DIR/systemd_pass_environment.sh" \
     "$SCRIPT_DIR/services/runtime-pass-environment.local.conf" \
     "$SCRIPT_DIR/.env" \
-    "$SCRIPT_DIR/config.conf"
+    "$SCRIPT_DIR/config.conf" \
+    "$SCRIPT_DIR/container.conf"
 
 $CONFIG_ONLY && echo "" && echo "  Config done." && exit 0
 $NO_BUILD && echo "" && echo "  Staging done." && exit 0

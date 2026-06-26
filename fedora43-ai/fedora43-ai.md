@@ -124,7 +124,7 @@ https://github.com/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
 84. NATURALGROUNDING_ADMIN_PASSWORD	required; default preset example: openssl rand -hex 32
 #config.conf_example
 73. NATURALGROUNDING_PORT	required
-74. NATURALGROUNDING_VIDEOS_DIR	
+74. NATURALGROUNDING_VIDEOS_DIR	required; mount-bind absolute path
 #container_example
 85. NATURALGROUNDING_PUBLISH_PORT	required
 

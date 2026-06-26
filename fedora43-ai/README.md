@@ -2,8 +2,8 @@
 
 `fedora43-ai` is a Fedora 43 based all-in-one AI/dev/crypto container profile. It
 builds a systemd-enabled container image that bundles several local
-`safrano9999` applications, AI CLIs, OpenClaw, Hermes Agent, LiteLLM-facing
-configuration, Tailscale access, and selected crypto utilities.
+`safrano9999` applications, AI CLIs, OpenClaw, Hermes Agent, OpenAI-compatible
+v1 provider configuration, Tailscale access, and selected crypto utilities.
 
 The repository is intentionally a container orchestrator, not the source of every
 application it runs. `setup.sh` pulls the application repositories into
@@ -18,7 +18,7 @@ At a high level the image includes:
 - OpenClaw gateway and OpenClaw CLI.
 - Hermes Agent gateway, dashboard, Telegram integration, and optional OpenAI
   compatible API endpoint.
-- LiteLLM wiring for both OpenClaw and Hermes.
+- Shared OpenAI-compatible v1 provider wiring for OpenClaw and Hermes.
 - Codex CLI, Claude Code CLI, OpenClaw, and the OpenClaw Brave plugin.
 - The local `safrano9999` app stack:
   - `CODEANALYST`
@@ -56,7 +56,7 @@ At a high level the image includes:
 │   ├── *.service
 │   ├── openclaw-configure.py
 │   ├── openclaw-patch-models-command.py
-│   ├── hermes-configure-litellm.py
+│   ├── hermes-configure-openai-v1.py
 │   ├── hermes-patch-ssl-verify.py
 │   └── vikai-bootstrap-openclaw-agents.py
 └── safrano9999/
@@ -242,12 +242,13 @@ Important entries:
 
 | Variable | Used By | Purpose |
 |---|---|---|
-| `LITELLM_URL` | OpenClaw, Hermes | LiteLLM base URL without the container port appended |
-| `LITELLM_PORT` | OpenClaw, Hermes | LiteLLM port |
-| `LITELLM_API_KEY` | OpenClaw, Hermes | Bearer key for LiteLLM |
+| `OPENAI_V1_PROVIDER` | OpenClaw, Hermes | Provider identifier, default `litellm` |
+| `OPENAI_V1_URL` | OpenClaw, Hermes | OpenAI-compatible endpoint URL |
+| `OPENAI_V1_PORT` | OpenClaw, Hermes | Endpoint port when it is not already part of the URL |
+| `OPENAI_V1_KEY` | OpenClaw, Hermes | Bearer key for the endpoint |
 | `OPENCLAW_GATEWAY_TOKEN` | OpenClaw | Gateway token for OpenClaw auth |
-| `OPENCLAW_LITELLM_MODEL` | OpenClaw | Default model, for example `deepseek-v4-flash` |
-| `HERMES_LITELLM_MODEL` | Hermes | Default Hermes model |
+| `OPENCLAW_OPENAI_V1_DEFAULT_LLM` | OpenClaw | Default model |
+| `HERMES_OPENAI_V1_DEFAULT_LLM` | Hermes | Default Hermes model |
 | `HERMES_API_SERVER_KEY` | Hermes | Optional key for Hermes OpenAI compatible API |
 | `TELEGRAMTOKEN_OPENCLAW` | OpenClaw | Telegram bot token routed to `agent:main:main` |
 | `TELEGRAMTOKEN_HERMES` | Hermes | Telegram bot token for Hermes |
@@ -397,16 +398,15 @@ the gateway starts. The source file is `services/openclaw-configure.py`.
 It does the following:
 
 - Ensures `/root/.openclaw/openclaw.json` exists.
-- Runs non-interactive OpenClaw onboarding when needed.
-- Normalizes the LiteLLM base URL from:
-  - `LITELLM_URL`
-  - `LITELLM_PORT`
-- Discovers models through LiteLLM `/v1/models`.
+- Creates a minimal config when no OpenClaw config exists yet.
+- Reads one or more `OPENAI_V1_*` provider groups.
+- Accepts numeric suffixes such as `_2`, `_02`, and further indexes.
+- Normalizes each provider URL and discovers models through `/v1/models`.
 - Configures OpenClaw model mode as `merge`.
-- Configures the `litellm` provider.
-- Stores `LITELLM_API_KEY` as an environment-backed secret reference, not as a
-  plaintext config value.
-- Configures the default model from `OPENCLAW_LITELLM_MODEL`.
+- Configures one OpenClaw provider entry per endpoint.
+- Stores each `OPENAI_V1_KEY*` as an environment-backed secret reference, not
+  as a plaintext config value.
+- Configures the default model from `OPENCLAW_OPENAI_V1_DEFAULT_LLM`.
 - Creates or updates `agent:main:main`.
 - Removes agent model allowlists so agents can use the full available model
   catalog.
@@ -482,7 +482,8 @@ The behavior:
 - Provider wildcard configs still use the full catalog path.
 - Runtime auth discovery is disabled for the normal visible catalog path.
 
-This patch exists because large LiteLLM catalogs can contain hundreds of models.
+This patch exists because large OpenAI-compatible catalogs can contain hundreds
+of models.
 Without the fast path, Telegram `/models` pagination can become very slow.
 
 ## Hermes Agent
@@ -507,16 +508,16 @@ Runtime is split into:
 - `hermes.service`
 - `hermes-dashboard.service`
 
-### Hermes LiteLLM Configuration
+### Hermes OpenAI v1 Configuration
 
 `hermes.service` runs two pre-start scripts:
 
 ```text
 /usr/local/bin/hermes-patch-ssl-verify
-/usr/local/bin/hermes-configure-litellm
+/usr/local/bin/hermes-configure-openai-v1
 ```
 
-`services/hermes-configure-litellm.py` writes:
+`services/hermes-configure-openai-v1.py` writes:
 
 ```text
 /root/.hermes/config.yaml
@@ -524,16 +525,16 @@ Runtime is split into:
 
 It configures Hermes to use:
 
-- provider: `litellm`
-- default model: `HERMES_LITELLM_MODEL`, falling back to
-  `OPENCLAW_LITELLM_MODEL`, then `deepseek-v4-flash`
-- base URL: normalized from `LITELLM_URL` and `LITELLM_PORT`
-- key env: `LITELLM_API_KEY`
-- discovered models from LiteLLM `/v1/models`, when available
+- all configured `OPENAI_V1_*` provider groups
+- default model from `HERMES_OPENAI_V1_DEFAULT_LLM`
+- normalized base URLs with `/v1`
+- environment-backed key references such as `OPENAI_V1_KEY` and
+  `OPENAI_V1_KEY_2`
+- discovered models from each provider's `/v1/models`, when available
 - `ssl_verify: false`
 
-The LiteLLM key is referenced through environment, not written as plaintext into
-the Hermes config.
+Provider keys are referenced through environment and are not written as
+plaintext into the Hermes config.
 
 ### Hermes Gateway
 
@@ -543,12 +544,9 @@ the Hermes config.
 hermes gateway run --replace
 ```
 
-It exports:
-
-- `OPENAI_API_KEY=$LITELLM_API_KEY`
-- `OPENAI_BASE_URL=<normalized LiteLLM URL>/v1`
-- `TELEGRAM_BOT_TOKEN` from `TELEGRAMTOKEN_HERMES`, when a real token is set
-- `API_SERVER_*` variables when `HERMES_API_SERVER_KEY` is set
+It exports `TELEGRAM_BOT_TOKEN` from `TELEGRAMTOKEN_HERMES`, when a real token
+is set, and the `API_SERVER_*` variables when `HERMES_API_SERVER_KEY` is set.
+Provider selection comes from the generated Hermes config.
 
 The service intentionally does not force a custom provider/model through
 `HERMES_INFERENCE_PROVIDER` or `HERMES_INFERENCE_MODEL`; Hermes should use the
@@ -588,28 +586,29 @@ It runs:
 
 Running it twice is safe because the script is marker-based and idempotent.
 
-## LiteLLM Integration
+## OpenAI v1 Providers
 
-LiteLLM is external to this container. The container expects a reachable LiteLLM
-proxy through:
+The container expects at least one reachable OpenAI-compatible v1 endpoint:
 
 ```env
-LITELLM_URL=
-LITELLM_PORT=
-LITELLM_API_KEY=
+OPENAI_V1_PROVIDER=litellm
+OPENAI_V1_URL=http://litellm
+OPENAI_V1_PORT=4000
+OPENAI_V1_KEY=
 ```
 
-Both OpenClaw and Hermes normalize the base URL the same way:
+Both OpenClaw and Hermes use the shared `python_header.py` provider parser. It:
 
-1. strip trailing slash
-2. strip trailing `/v1` if present
-3. append `:$LITELLM_PORT/v1`
+1. adds `http://` when no scheme is present
+2. removes a trailing `/v1`
+3. adds the port only when the URL has no port
+4. appends `/v1`
 
 Example:
 
 ```text
-LITELLM_URL=https://example.local
-LITELLM_PORT=888
+OPENAI_V1_URL=https://example.local
+OPENAI_V1_PORT=888
 ```
 
 becomes:
@@ -622,11 +621,21 @@ Both services query:
 
 ```text
 GET /v1/models
-Authorization: Bearer $LITELLM_API_KEY
+Authorization: Bearer $OPENAI_V1_KEY
 ```
 
-OpenClaw writes discovered models into the `litellm` provider in
-`openclaw.json`. Hermes writes discovered models into `/root/.hermes/config.yaml`.
+Additional providers use a numeric suffix:
+
+```env
+OPENAI_V1_PROVIDER_2=openai
+OPENAI_V1_URL_2=https://api.openai.com
+OPENAI_V1_PORT_2=443
+OPENAI_V1_KEY_2=
+```
+
+Zero-padded forms such as `_02` are accepted as the same provider index.
+OpenClaw writes discovered models into `openclaw.json`; Hermes writes them into
+`/root/.hermes/config.yaml`.
 
 ## VikAI
 
@@ -752,7 +761,7 @@ Default port:
 ```
 
 JUGO is a language-learning UI with translation, TTS, chat, and console flows.
-It can use provider keys from `.env` and LiteLLM settings.
+It uses the shared OpenAI-compatible v1 provider settings.
 
 ### CITADEL
 
@@ -824,17 +833,17 @@ Default port:
 ```
 
 The app searches a local Kiwix/Wikipedia server and sends grounded prompts to
-the OpenAI-compatible LiteLLM proxy. Runtime values come from the merged
+an OpenAI-compatible v1 endpoint. Runtime values come from the merged
 `env.example` and `config.conf_example` flow:
 
 ```env
 KIWIX_URL=https://127.0.0.1:450
 KIWIX_BRIDGE_PORT=11008
 KIWIX_BRIDGE_PUBLISH_PORT=11008
-LITELLM_URL=
-LITELLM_PORT=
-LITELLM_API_KEY=
-KIWIX_BRIDGE_LITELLM_MODEL=
+OPENAI_V1_PROVIDER=litellm
+OPENAI_V1_URL=http://litellm
+OPENAI_V1_PORT=4000
+OPENAI_V1_KEY=
 ```
 
 ### NaturalGrounding
@@ -998,9 +1007,9 @@ bc
 Token handling is deliberately environment-based:
 
 - `.env` contains secrets.
-- OpenClaw stores `LITELLM_API_KEY`, `TELEGRAMTOKEN_OPENCLAW`, and
+- OpenClaw stores `OPENAI_V1_KEY*`, `TELEGRAMTOKEN_OPENCLAW`, and
   `BRAVE_API_KEY` as environment-backed references.
-- Hermes stores the LiteLLM key env name, not the key value.
+- Hermes stores provider key environment names, not key values.
 - VikAI writes each agent token into that agent's workspace `.vikunjaenv`.
 - Codex login is persisted by `/fedora/codex-auth/auth.json`; run
   `codex-save-auth` after an interactive container login.
@@ -1130,25 +1139,26 @@ podman exec fedora43-ai systemctl restart openclaw-config.service
 podman exec fedora43-ai systemctl restart openclaw.service
 ```
 
-### LiteLLM returns 401
+### An OpenAI v1 provider returns 401
 
 Check:
 
-- `LITELLM_API_KEY`
-- whether the key exists in the LiteLLM token database
-- `LITELLM_URL`
-- `LITELLM_PORT`
+- `OPENAI_V1_KEY`
+- whether the key is valid for the configured provider
+- `OPENAI_V1_URL`
+- `OPENAI_V1_PORT`
 - whether `/v1/models` works with the same bearer key
 
 Example:
 
 ```bash
-curl -H "Authorization: Bearer $LITELLM_API_KEY" "$LITELLM_URL:$LITELLM_PORT/v1/models"
+./modelcheck.sh
 ```
 
 ### Hermes uses the wrong provider
 
-Hermes should use the generated config and `provider: litellm`. Check:
+Hermes should use the generated provider selected for
+`HERMES_OPENAI_V1_DEFAULT_LLM`. Check:
 
 ```bash
 podman exec fedora43-ai sed -n '1,200p' /root/.hermes/config.yaml

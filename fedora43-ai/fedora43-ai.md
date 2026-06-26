@@ -192,8 +192,12 @@ https://github.com/safrano9999/CONTAINER/tree/main/fedora43-ai
 116. OPENCLAW_START	required; default preset 1
 117. HERMES_START	required; default preset 1
 118. OPENCLAW_GATEWAY_TOKEN	required; generate openssl or enter manually
-119. OPENCLAW_LITELLM_MODEL
-120. HERMES_LITELLM_MODEL
+112. OPENAI_V1_PROVIDER	default preset litellm
+16. OPENAI_V1_URL	required; default preset http://litellm
+17. OPENAI_V1_PORT	required; default preset 4000
+18. OPENAI_V1_KEY	required
+119. OPENCLAW_OPENAI_V1_DEFAULT_LLM	required; default preset gemini/gemini-3.5-flash
+120. HERMES_OPENAI_V1_DEFAULT_LLM	required; default preset gemini/gemini-3.5-flash
 121. HERMES_API_SERVER_KEY
 122. TELEGRAMTOKEN_OPENCLAW
 123. OPENCLAW_TELEGRAM_TARGET

@@ -8,16 +8,15 @@ from pathlib import Path
 
 from openclaw_common import (
     configure_gateway,
-    configure_litellm_provider,
+    configure_openai_v1_providers,
     configure_telegram_main,
     env_ref,
     ensure_main_agent,
-    litellm_base_url,
 )
 
 
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
-DEFAULT_MODEL = "deepseek-v4-flash"
+DEFAULT_MODEL = "gemini/gemini-3.5-flash"
 OPENCLAW_GATEWAY_INTERNAL_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PORT", "18789") or "18789")
 OPENCLAW_GATEWAY_HOST_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PUBLISH_PORT", "20789") or "20789")
 VIKAI_BOOTSTRAP_SCRIPT = Path("/usr/local/bin/vikai-bootstrap-openclaw-agents")
@@ -28,28 +27,8 @@ def _ensure_openclaw_config() -> None:
     if CONFIG_PATH.exists() and CONFIG_PATH.stat().st_size > 0:
         return
 
-    api_key = os.environ.get("LITELLM_API_KEY", "").strip()
-    base_url = litellm_base_url()
-    if not api_key or not base_url:
-        raise SystemExit("OpenClaw onboarding needs LITELLM_API_KEY, LITELLM_URL, and LITELLM_PORT")
-
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "openclaw",
-            "onboard",
-            "--non-interactive",
-            "--accept-risk",
-            "--skip-health",
-            "--auth-choice",
-            "litellm-api-key",
-            "--litellm-api-key",
-            api_key,
-            "--custom-base-url",
-            base_url,
-        ],
-        check=True,
-    )
+    CONFIG_PATH.write_text("{}\n", encoding="utf-8")
 
 
 def _maybe_bootstrap_vikai_agents() -> bool:
@@ -106,7 +85,7 @@ def main() -> None:
         host_port=OPENCLAW_GATEWAY_HOST_PORT,
         include_tailscale_origins=True,
     )
-    litellm = configure_litellm_provider(config, default_model=DEFAULT_MODEL)
+    openai_v1 = configure_openai_v1_providers(config, default_model=DEFAULT_MODEL)
     telegram_configured = configure_telegram_main(
         config,
         include_binding=True,
@@ -118,11 +97,12 @@ def main() -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     vikai_bootstrapped = _maybe_bootstrap_vikai_agents()
 
-    print(f"OpenClaw LiteLLM model configured: {litellm['full_model']}")
-    if litellm["discovered"]:
+    print(f"OpenClaw OpenAI v1 model configured: {openai_v1['full_model']}")
+    print(f"OpenClaw OpenAI v1 providers configured: {openai_v1['provider_count']}")
+    if openai_v1["discovered"]:
         print(
-            "OpenClaw LiteLLM models discovered: "
-            f"{litellm['discovered_count']}; models written: {litellm['written_count']}"
+            "OpenClaw OpenAI v1 models discovered: "
+            f"{openai_v1['discovered_count']}; models written: {openai_v1['written_count']}"
         )
     if telegram_configured:
         print("OpenClaw Telegram configured for default account -> main agent")

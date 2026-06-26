@@ -183,13 +183,13 @@ RUN mkdir -p /etc/systemd/system/tailscale-up.service.d \
       'ExecStartPost=-/usr/bin/tailscale set --ssh' \
       > /etc/systemd/system/tailscale-up.service.d/10-tailscale-ssh.conf \
  && printf '%s\n' '[Service]' \
-      'PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL OPENCLAW_LITELLM_MODEL_NAME OPENCLAW_LITELLM_CONTEXT_WINDOW OPENCLAW_LITELLM_MAX_TOKENS BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \
-      'ExecCondition=/bin/bash -c '\''[ -n "$$LITELLM_API_KEY" ] && [ -n "$$LITELLM_URL" ] && [ -n "$$LITELLM_PORT" ]'\''' \
-      > /etc/systemd/system/openclaw-config.service.d/10-fedora-litellm.conf \
+      'PassEnvironment=OPENAI_V1_PROVIDER OPENAI_V1_URL OPENAI_V1_PORT OPENAI_V1_KEY OPENCLAW_OPENAI_V1_DEFAULT_LLM BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \
+      'ExecCondition=/bin/bash -c '\''[ -n "$$OPENAI_V1_KEY" ] && [ -n "$$OPENAI_V1_URL" ] && [ -n "$$OPENAI_V1_PORT" ]'\''' \
+      > /etc/systemd/system/openclaw-config.service.d/10-fedora-openai-v1.conf \
  && printf '%s\n' '[Service]' \
-      'PassEnvironment=LITELLM_API_KEY LITELLM_URL LITELLM_PORT OPENCLAW_LITELLM_MODEL OPENCLAW_LITELLM_MODEL_NAME OPENCLAW_LITELLM_CONTEXT_WINDOW OPENCLAW_LITELLM_MAX_TOKENS BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \
-      'ExecCondition=/bin/bash -c '\''[ -n "$$LITELLM_API_KEY" ] && [ -n "$$LITELLM_URL" ] && [ -n "$$LITELLM_PORT" ]'\''' \
-      > /etc/systemd/system/openclaw.service.d/10-fedora-litellm.conf \
+      'PassEnvironment=OPENAI_V1_PROVIDER OPENAI_V1_URL OPENAI_V1_PORT OPENAI_V1_KEY OPENCLAW_OPENAI_V1_DEFAULT_LLM BRAVE_API_KEY VIKUNJA_HOST VIKUNJA_URL TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC' \
+      'ExecCondition=/bin/bash -c '\''[ -n "$$OPENAI_V1_KEY" ] && [ -n "$$OPENAI_V1_URL" ] && [ -n "$$OPENAI_V1_PORT" ]'\''' \
+      > /etc/systemd/system/openclaw.service.d/10-fedora-openai-v1.conf \
  && printf '%s\n' '[Unit]' \
       'Requires=openclaw-safrano9999.service' \
       'After=openclaw-safrano9999.service' \
@@ -205,13 +205,15 @@ RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
 
 COPY services/openclaw-configure.py /usr/local/bin/openclaw-configure
 COPY services/openclaw-safrano9999.py /usr/local/bin/openclaw-safrano9999
-COPY services/hermes-configure-litellm.py /usr/local/bin/hermes-configure-litellm
+COPY services/hermes-configure-openai-v1.py /usr/local/bin/hermes-configure-openai-v1
 COPY services/hermes-patch-ssl-verify.py /usr/local/bin/hermes-patch-ssl-verify
 COPY services/openclaw-patch-models-command.py /usr/local/bin/openclaw-patch-models-command
 COPY services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
 COPY services/codex-save-auth.sh /usr/local/bin/codex-save-auth
 COPY services/fedora43-ai-init.sh /usr/local/bin/fedora43-ai-init
+COPY services/fedora43-ai-entrypoint.sh /usr/local/bin/fedora43-ai-entrypoint
 COPY services/openclaw_common.py /usr/local/bin/openclaw_common.py
+COPY SCRIPTS/safrano9999/python_header.py /usr/local/bin/python_header.py
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 
 RUN /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
@@ -219,13 +221,14 @@ RUN /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service
 
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-litellm \
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-openai-v1 \
     /usr/local/bin/openclaw-safrano9999 \
     /usr/local/bin/hermes-patch-ssl-verify \
     /usr/local/bin/openclaw-patch-models-command \
     /usr/local/bin/vikai-bootstrap-openclaw-agents \
     /usr/local/bin/codex-save-auth \
     /usr/local/bin/fedora43-ai-init \
+    /usr/local/bin/fedora43-ai-entrypoint \
     /usr/local/bin/openclaw-crontabs \
  && chmod +x /usr/local/share/fedora43-ai/bin/*
 
@@ -233,4 +236,4 @@ RUN /usr/local/bin/hermes-patch-ssl-verify
 #RUN /usr/local/bin/openclaw-patch-models-command
 
 STOPSIGNAL SIGRTMIN+3
-CMD ["/sbin/init"]
+CMD ["/usr/local/bin/fedora43-ai-entrypoint"]

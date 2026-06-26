@@ -16,6 +16,7 @@ https://github.com/safrano9999/JUGO
 13. JUGO_DB_PW	required; autofill blank if JUGO_DB_BACKEND=sqlite
 14. JUGO_DB_PREFIX	required; autofill blank if JUGO_DB_BACKEND=sqlite
 15. DEEPL_API_KEY	optional
+112. OPENAI_V1_PROVIDER	optional
 16. OPENAI_V1_URL	required
 17. OPENAI_V1_PORT	required
 18. OPENAI_V1_KEY	required
@@ -74,7 +75,7 @@ https://github.com/safrano9999/PV_D-A-CH
 57. PV_DACH_QGIS_WEBHOOK_CLIENT_TOKEN	required
 #config.conf_example
 43. PV_DACH_PORT	required
-44. PV_DACH_OPENAI_V1_MODEL	required; default model
+44. PV_DACH_OPENAI_V1_DEFAULT_LLM	required; default model
 45. PV_DACH_QGIS_WEBHOOK_SERVER_ON	optional
 46. PV_DACH_QGIS_WEBHOOK_SERVER_PORT	required
 47. PV_DACH_QGIS_WEBHOOK_CLIENT_URL	optional
@@ -146,7 +147,7 @@ https://github.com/safrano9999/ZEROINBOX
 89. ZEROINBOX_PROVIDER	
 90. ZEROINBOX_EMAIL	
 91. ZEROINBOX_APP_PASSWORD	
-92. ZEROINBOX_MODEL	
+92. ZEROINBOX_OPENAI_V1_DEFAULT_LLM
 #config.conf_example
 #container_example
 

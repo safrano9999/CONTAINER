@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CODEX_AUTH_DIR="${CODEX_AUTH_DIR:-/fedora/codex-auth}"
+CODEX_AUTH_DIR="${CODEX_AUTH_DIR:-/persistent/codex-auth}"
 AUTH_FILE="/root/.codex/auth.json"
 
 if [ ! -f "$AUTH_FILE" ]; then

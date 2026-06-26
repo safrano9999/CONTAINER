@@ -250,8 +250,8 @@ Important entries:
 | `OPENCLAW_OPENAI_V1_DEFAULT_LLM` | OpenClaw | Default model |
 | `HERMES_OPENAI_V1_DEFAULT_LLM` | Hermes | Default Hermes model |
 | `HERMES_API_SERVER_KEY` | Hermes | Optional key for Hermes OpenAI compatible API |
-| `TELEGRAMTOKEN_OPENCLAW` | OpenClaw | Telegram bot token routed to `agent:main:main` |
-| `TELEGRAMTOKEN_HERMES` | Hermes | Telegram bot token for Hermes |
+| `OPENCLAW_TELEGRAMTOKEN` | OpenClaw | Telegram bot token routed to `agent:main:main` |
+| `HERMES_TELEGRAMTOKEN` | Hermes | Telegram bot token for Hermes |
 | `BRAVE_API_KEY` | OpenClaw | Enables Brave search plugin config |
 | `TOKEN_WORKER` | VikAI/OpenClaw | Vikunja API token for worker agent |
 | `TOKEN_ARCHITECT` | VikAI/OpenClaw | Vikunja API token for architect agent |
@@ -353,7 +353,7 @@ Inside the container, systemd manages the runtime.
 | `citadel-scan.service` | oneshot | Runs CITADEL `scan.sh` after a delay |
 | `bip39.service` | simple | Serves the offline BIP39 HTML page |
 | `kiwix-bridge.service` | simple | Runs KIWIX_BRIDGE local Kiwix/Wikipedia RAG UI |
-| `fedora43-ai.service` | oneshot | Runs local init scripts from `/fedora/bin` |
+| `fedora43-ai.service` | oneshot | Runs local init scripts from `/persistent/bin` |
 | `openclaw-config.service` | oneshot | Writes OpenClaw runtime config before gateway start |
 | `openclaw.service` | simple | Starts OpenClaw Gateway on internal port `18789` |
 | `hermes.service` | simple | Starts Hermes Agent gateway |
@@ -410,7 +410,7 @@ It does the following:
 - Creates or updates `agent:main:main`.
 - Removes agent model allowlists so agents can use the full available model
   catalog.
-- Routes `TELEGRAMTOKEN_OPENCLAW` to the `main` agent.
+- Routes `OPENCLAW_TELEGRAMTOKEN` to the `main` agent.
 - Enables Brave web search when `BRAVE_API_KEY` is present.
 - Adds localhost/host/Tailscale origins to OpenClaw Control UI allowed origins.
 - Bootstraps VikAI worker/architect/QC agents when all three VikAI tokens are
@@ -447,7 +447,7 @@ This keeps host access explicit while still supporting Tailscale URLs.
 
 ### OpenClaw Telegram Routing
 
-`TELEGRAMTOKEN_OPENCLAW` belongs to the plain `main` agent. The VikAI agents are
+`OPENCLAW_TELEGRAMTOKEN` belongs to the plain `main` agent. The VikAI agents are
 separate and do not need Telegram tokens.
 
 The config service writes a binding equivalent to:
@@ -544,7 +544,7 @@ plaintext into the Hermes config.
 hermes gateway run --replace
 ```
 
-It exports `TELEGRAM_BOT_TOKEN` from `TELEGRAMTOKEN_HERMES`, when a real token
+It exports `TELEGRAM_BOT_TOKEN` from `HERMES_TELEGRAMTOKEN`, when a real token
 is set, and the `API_SERVER_*` variables when `HERMES_API_SERVER_KEY` is set.
 Provider selection comes from the generated Hermes config.
 
@@ -872,16 +872,16 @@ Default port:
 11005
 ```
 
-The app uses SQLAlchemy with Postgres or MariaDB/MySQL. DB credentials come
-from `NATURALGROUNDING_DB_*` settings. The video archive path is configured by:
+The app uses SQLAlchemy with SQLite, Postgres, or MariaDB/MySQL. Database
+settings come from `NATURALGROUNDING_DB_*`. The video archive path is configured
+in the NaturalGrounding repository:
 
 ```env
 NATURALGROUNDING_VIDEOS_DIR=VIDEOS
-NATURALGROUNDING_VOLUMES=./VIDEOS:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS:Z
 ```
 
-`NATURALGROUNDING_VOLUMES` is rendered into both generated compose and Quadlet
-container files by the existing `*_VOLUMES` config convention.
+Its mount directive automatically renders the absolute bind mount into Compose
+and Quadlet. SQLite similarly mounts the repository's `STATE` directory.
 
 ## Tailscale
 
@@ -1007,11 +1007,11 @@ bc
 Token handling is deliberately environment-based:
 
 - `.env` contains secrets.
-- OpenClaw stores `OPENAI_V1_KEY*`, `TELEGRAMTOKEN_OPENCLAW`, and
+- OpenClaw stores `OPENAI_V1_KEY*`, `OPENCLAW_TELEGRAMTOKEN`, and
   `BRAVE_API_KEY` as environment-backed references.
 - Hermes stores provider key environment names, not key values.
 - VikAI writes each agent token into that agent's workspace `.vikunjaenv`.
-- Codex login is persisted by `/fedora/codex-auth/auth.json`; run
+- Codex login is persisted by `/persistent/codex-auth/auth.json`; run
   `codex-save-auth` after an interactive container login.
 
 Do not commit `.env`, `config.conf`, generated compose, or generated Quadlet

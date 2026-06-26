@@ -1,32 +1,16 @@
-# BIP39 web UI host port
 BIP39_PUBLISH_PORT=11002
 
-# OpenClaw Gateway host port
 OPENCLAW_GATEWAY_PUBLISH_PORT=20789
 
-# Hermes dashboard host port
 HERMES_DASHBOARD_PUBLISH_PORT=19119
 
-# Hermes OpenAI compatible API host port
 HERMES_API_SERVER_PUBLISH_PORT=18642
 
-# KACHELMANN WebUI host port for fedora43-ai
 KACHELMANN_PUBLISH_PORT=11006
 
-# Mount-bind Volume for NaturalGrounding videos
-NATURALGROUNDING_VOLUMES=/vol/VIDEOS:/vol/VIDEOS:Z
+#default-preset: fedora43-ai-persistent:/persistent:Z
+FEDORA43_AI_VOLUMES=fedora43-ai-persistent:/persistent:Z
 
-# NaturalGrounding rootless Podman group passthrough for writable shared videos
-NATURALGROUNDING_GROUP_ADD=keep-groups
-
-# NaturalGrounding persistent Django identity and billing volume
-NATURALGROUNDING_STATE_VOLUMES=naturalgrounding-state:/var/lib/naturalgrounding:Z
-
-# Fedora43 AI local init/auth volume
-FEDORA43_AI_VOLUMES=fedora43-ai:/fedora:Z
-
-# Native Codex CLI auth/state
 # FEDORA43_AI_CODEX_CLI_AUTH_VOLUMES=fedora43-ai-codex-cli-auth:/root/.codex:Z
 
-# OpenClaw model auth profiles + OpenClaw auth secret dir
 # FEDORA43_AI_OPENCLAW_GPT_AUTH_VOLUMES=fedora43-ai-openclaw-gpt-auth-profiles:/root/.openclaw/agents:Z,fedora43-ai-openclaw-gpt-auth-secrets:/root/.config/openclaw:Z

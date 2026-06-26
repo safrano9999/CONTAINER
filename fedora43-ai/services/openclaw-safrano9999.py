@@ -31,7 +31,7 @@ def main() -> None:
     registered = register_openclaw_plugins(
         config,
         PLUGINS_DIR,
-        telegram_target=env.get("OPENCLAW_TELEGRAM_TARGET", ""),
+        telegram_target=env.get("OPENCLAW_TELEGRAM_CHAT_ID", ""),
     )
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     refresh_plugin_registry()

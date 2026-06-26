@@ -2,4 +2,4 @@
 set -euo pipefail
 
 mkdir -p /root/.codex
-[ ! -f /fedora/codex-auth/auth.json ] || install -m 600 /fedora/codex-auth/auth.json /root/.codex/auth.json
+[ ! -f /persistent/codex-auth/auth.json ] || install -m 600 /persistent/codex-auth/auth.json /root/.codex/auth.json

@@ -70,7 +70,7 @@ https://github.com/safrano9999/PV_D-A-CH
 53. PV_DACH_DB_PW	required; autofill blank if PV_DACH_DB_BACKEND=sqlite
 54. PV_DACH_DB_PREFIX	required; autofill blank if PV_DACH_DB_BACKEND=sqlite
 55. TS_AUTHKEY	required
-56. PV_DACH_QGIS_WEBHOOK_SERVER_TOKEN	required
+56. PV_DACH_QGIS_WEBHOOK_SERVER_TOKEN	required; default preset example: openssl rand -hex 32
 57. PV_DACH_QGIS_WEBHOOK_CLIENT_TOKEN	required
 #config.conf_example
 43. PV_DACH_PORT	required
@@ -119,7 +119,7 @@ https://github.com/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager
 79. NATURALGROUNDING_DB_PW	required; autofill blank if NATURALGROUNDING_DB_BACKEND=sqlite
 80. NATURALGROUNDING_DB_URL	required; autofill blank if NATURALGROUNDING_DB_BACKEND=sqlite
 81. NATURALGROUNDING_DB_PORT	required; autofill blank if NATURALGROUNDING_DB_BACKEND=sqlite
-82. NATURALGROUNDING_DJANGO_SECRET_KEY	
+82. NATURALGROUNDING_DJANGO_SECRET_KEY	required; default preset example: openssl rand -hex 32
 83. NATURALGROUNDING_ADMIN_EMAIL	
 84. NATURALGROUNDING_ADMIN_PASSWORD	
 #config.conf_example

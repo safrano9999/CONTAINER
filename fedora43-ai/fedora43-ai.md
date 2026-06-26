@@ -189,9 +189,9 @@ https://github.com/safrano9999/CONTAINER/tree/main/fedora43-ai
 113. DISPLAY	required; autodetect prompt; fills GUI env if missing
 114. NO_AT_BRIDGE	required; autofill if missing; never overwrite
 115. XDG_RUNTIME_DIR	required; autofill if missing; never overwrite
-116. OPENCLAW_START
-117. HERMES_START
-118. OPENCLAW_GATEWAY_TOKEN
+116. OPENCLAW_START	required; default preset 1
+117. HERMES_START	required; default preset 1
+118. OPENCLAW_GATEWAY_TOKEN	required; generate openssl or enter manually
 119. OPENCLAW_LITELLM_MODEL
 120. HERMES_LITELLM_MODEL
 121. HERMES_API_SERVER_KEY

@@ -12,7 +12,7 @@ import yaml
 
 
 DEFAULT_MODEL = "deepseek-v4-flash"
-DEFAULT_HOME = "/root/hermes-home"
+DEFAULT_HOME = "/root/.hermes"
 DEFAULT_INSTALL_DIR = "/usr/local/lib/hermes-agent"
 DISCOVERY_TIMEOUT_SECONDS = 5
 

@@ -519,7 +519,7 @@ Runtime is split into:
 `services/hermes-configure-litellm.py` writes:
 
 ```text
-/root/hermes-home/config.yaml
+/root/.hermes/config.yaml
 ```
 
 It configures Hermes to use:
@@ -626,7 +626,7 @@ Authorization: Bearer $LITELLM_API_KEY
 ```
 
 OpenClaw writes discovered models into the `litellm` provider in
-`openclaw.json`. Hermes writes discovered models into `hermes-home/config.yaml`.
+`openclaw.json`. Hermes writes discovered models into `/root/.hermes/config.yaml`.
 
 ## VikAI
 
@@ -1151,7 +1151,7 @@ curl -H "Authorization: Bearer $LITELLM_API_KEY" "$LITELLM_URL:$LITELLM_PORT/v1/
 Hermes should use the generated config and `provider: litellm`. Check:
 
 ```bash
-podman exec fedora43-ai sed -n '1,200p' /root/hermes-home/config.yaml
+podman exec fedora43-ai sed -n '1,200p' /root/.hermes/config.yaml
 ```
 
 The service should not force `HERMES_INFERENCE_PROVIDER=custom` or

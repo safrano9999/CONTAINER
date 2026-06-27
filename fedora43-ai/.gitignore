@@ -15,7 +15,8 @@ container.example
 .agents/
 .codex/
 .claude/
-fedora43-ai.container
+/*.container
+/*-compose.yml
 compose.yml
 VIDEOS/
 services/runtime-pass-environment.local.conf

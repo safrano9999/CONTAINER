@@ -157,11 +157,29 @@ if ! $NO_CONFIG; then
     (cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR")
 fi
 
+configured_container_name() {
+    local value=""
+
+    for file in "$SCRIPT_DIR/config.conf" "$SCRIPT_DIR/config.fedora43-ai.conf_example"; do
+        [ -f "$file" ] || continue
+        value="$(awk -F= '$1 == "CONTAINER_NAME" { print substr($0, index($0, "=") + 1); exit }' "$file")"
+        [ -n "$value" ] && break
+    done
+    [ -n "$value" ] || value="fedora43-ai"
+    if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+        echo "Invalid CONTAINER_NAME: $value" >&2
+        return 1
+    fi
+    printf '%s\n' "$value"
+}
+
 render_compose_from_conf() {
     local image="$1"
     local include_build="$2"
+    local runtime_name
     local has_container_conf=false
     local inputs=()
+    runtime_name="$(configured_container_name)"
     [ -f "$SCRIPT_DIR/config.conf_example" ] && inputs+=("$SCRIPT_DIR/config.conf_example")
     [ -f "$SCRIPT_DIR/container.example" ] && inputs+=("$SCRIPT_DIR/container.example")
     [ -f "$SCRIPT_DIR/config.conf" ] && inputs+=("$SCRIPT_DIR/config.conf")
@@ -171,7 +189,9 @@ render_compose_from_conf() {
     fi
     [ "${#inputs[@]}" -gt 0 ] || { echo "No config/container example or conf files" >&2; exit 1; }
 
-    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" -v image="$image" -v include_build="$include_build" -v has_container_conf="$has_container_conf" '
+    (
+    cd "$SCRIPT_DIR"
+    awk -v cwd="$SCRIPT_DIR" -v home="$HOME" -v image="$image" -v include_build="$include_build" -v has_container_conf="$has_container_conf" -v configured_name="$runtime_name" '
     function trim(s) {
         sub(/^[[:space:]]+/, "", s)
         sub(/[[:space:]]+$/, "", s)
@@ -197,6 +217,13 @@ render_compose_from_conf() {
         gsub(/\\/, "\\\\", t)
         gsub(/"/, "\\\"", t)
         return "\"" t "\""
+    }
+    function expand_container_name(s, name,    token, pos) {
+        token = "${CONTAINER_NAME}"
+        while ((pos = index(s, token)) > 0) {
+            s = substr(s, 1, pos - 1) name substr(s, pos + length(token))
+        }
+        return s
     }
     function add_env(key, value) {
         if (key == "" || value == "") return
@@ -294,6 +321,10 @@ render_compose_from_conf() {
         next
     }
     END {
+        runtime_name = configured_name
+        volume_prefix = runtime_name
+        gsub(/[^A-Za-z0-9_.-]/, "-", volume_prefix)
+
         default_publish_host = values["FASTAPI_HOST"]
         if (default_publish_host == "") default_publish_host = "127.0.0.1"
 
@@ -331,6 +362,7 @@ render_compose_from_conf() {
                 n = split_csv(value, items)
                 for (j = 1; j <= n; j++) add_device(items[j])
             } else if (key ~ /_VOLUMES$/) {
+                value = expand_container_name(value, volume_prefix)
                 n = split_csv(value, items)
                 for (j = 1; j <= n; j++) {
                     split(items[j], parts, ":")
@@ -342,6 +374,10 @@ render_compose_from_conf() {
             }
         }
 
+        add_volume(volume_prefix "-codex-cli-auth:/root/.codex:Z", volume_prefix "-codex-cli-auth")
+        add_volume(volume_prefix "-openclaw-gpt-auth-profiles:/root/.openclaw/agents:Z", volume_prefix "-openclaw-gpt-auth-profiles")
+        add_volume(volume_prefix "-openclaw-gpt-auth-secrets:/root/.config/openclaw:Z", volume_prefix "-openclaw-gpt-auth-secrets")
+
         print "services:" > "compose.yml"
         print "  fedora43-ai:" >> "compose.yml"
         if (include_build == "true") {
@@ -352,7 +388,7 @@ render_compose_from_conf() {
         print "    image: " image >> "compose.yml"
         print "    labels:" >> "compose.yml"
         print "      - " yaml_dq("io.containers.autoupdate=registry") >> "compose.yml"
-        print "    container_name: ${INSTANCE:-fedora43-ai}" >> "compose.yml"
+        print "    container_name: " yaml_dq(runtime_name) >> "compose.yml"
         print "    ports:" >> "compose.yml"
         for (i = 1; i <= disabled_port_count; i++) print "      # " disabled_ports[i] >> "compose.yml"
         for (i = 1; i <= port_count; i++) print "      - " yaml_dq(ports[i]) >> "compose.yml"
@@ -386,7 +422,7 @@ render_compose_from_conf() {
         for (i = 1; i <= named_count; i++) print "  " named_volumes[i] ": {}" >> "compose.yml"
 
         print "[Container]" > "fedora43-ai.container"
-        print "ContainerName=fedora43-ai" >> "fedora43-ai.container"
+        print "ContainerName=" runtime_name >> "fedora43-ai.container"
         print "Image=" image >> "fedora43-ai.container"
         print "AutoUpdate=registry" >> "fedora43-ai.container"
         print "EnvironmentFile=" cwd "/config.conf" >> "fedora43-ai.container"
@@ -409,18 +445,26 @@ render_compose_from_conf() {
         print "WantedBy=default.target" >> "fedora43-ai.container"
     }
     ' "${inputs[@]}"
+    if [ "$runtime_name" != "fedora43-ai" ]; then
+        mv -f fedora43-ai.container "$runtime_name.container"
+    fi
+    mv -f compose.yml "$runtime_name-compose.yml"
+    )
 }
 
 DOCKER_IO_IMAGE="docker.io/safrano9999/fedora43-ai:latest"
 LOCAL_IMAGE="localhost/fedora43-ai:latest"
-EXISTING_IMAGE="$(awk -F= '$1 == "Image" { print substr($0, index($0, "=") + 1); exit }' "$SCRIPT_DIR/fedora43-ai.container" 2>/dev/null || true)"
+RUNTIME_CONTAINER_NAME="$(configured_container_name)"
+COMPOSE_FILE="$SCRIPT_DIR/$RUNTIME_CONTAINER_NAME-compose.yml"
+QUADLET_FILE="$SCRIPT_DIR/$RUNTIME_CONTAINER_NAME.container"
+EXISTING_IMAGE="$(awk -F= '$1 == "Image" { print substr($0, index($0, "=") + 1); exit }' "$QUADLET_FILE" 2>/dev/null || true)"
 RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
 RENDER_BUILD=false
 [ "$RENDER_IMAGE" = "$LOCAL_IMAGE" ] && RENDER_BUILD=true
 
-# Generate compose.yml and the Quadlet from merge.conf.
-echo "  Generating compose.yml..."
-echo "  Generating fedora43-ai.container..."
+# Generate the named compose file and Quadlet from merged config.
+echo "  Generating $(basename "$COMPOSE_FILE")..."
+echo "  Generating $(basename "$QUADLET_FILE")..."
 render_compose_from_conf "$RENDER_IMAGE" "$RENDER_BUILD"
 
 echo "  Generating systemd runtime env header..."
@@ -462,7 +506,7 @@ case "$IMG_CHOICE" in
             HOST_SRV_DIR="/srv/$INSTANCE"
             export INSTANCE HOST_SRV_DIR
             podman-compose \
-                -f "$SCRIPT_DIR/compose.yml" \
+                -f "$COMPOSE_FILE" \
                 build
         fi
         echo "  Done. Image ready: $LOCAL_IMAGE"

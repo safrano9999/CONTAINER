@@ -8,9 +8,5 @@ HERMES_API_SERVER_PUBLISH_PORT=18642
 
 KACHELMANN_PUBLISH_PORT=11006
 
-#default-preset: fedora43-ai-persistent:/persistent:Z
-FEDORA43_AI_VOLUMES=fedora43-ai-persistent:/persistent:Z
-
-# FEDORA43_AI_CODEX_CLI_AUTH_VOLUMES=fedora43-ai-codex-cli-auth:/root/.codex:Z
-
-# FEDORA43_AI_OPENCLAW_GPT_AUTH_VOLUMES=fedora43-ai-openclaw-gpt-auth-profiles:/root/.openclaw/agents:Z,fedora43-ai-openclaw-gpt-auth-secrets:/root/.config/openclaw:Z
+#default-preset: ${CONTAINER_NAME}-persistent:/persistent:Z
+FEDORA43_AI_VOLUMES=${CONTAINER_NAME}-persistent:/persistent:Z

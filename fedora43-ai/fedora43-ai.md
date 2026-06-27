@@ -207,6 +207,7 @@ https://github.com/safrano9999/CONTAINER/tree/main/fedora43-ai
 127. CLAUDE_CODE_OAUTH_TOKEN
 49. PV_DACH_DB_HOST	required; autofill blank if PV_DACH_DB_BACKEND=sqlite
 #config.conf_example
+139. CONTAINER_NAME	required; default preset fedora43-ai
 128. BIP39_PORT	required
 129. OPENCLAW_GATEWAY_PORT	required
 130. OPENCLAW_CRONTAB	required; default preset CET 07:00,CET 13:00,CET 19:00
@@ -219,6 +220,4 @@ https://github.com/safrano9999/CONTAINER/tree/main/fedora43-ai
 136. HERMES_DASHBOARD_PUBLISH_PORT	required
 137. HERMES_API_SERVER_PUBLISH_PORT	required
 102. KACHELMANN_PUBLISH_PORT	required
-138. FEDORA43_AI_VOLUMES	optional; default preset fedora43-ai-persistent:/persistent:Z
-139. FEDORA43_AI_CODEX_CLI_AUTH_VOLUMES
-140. FEDORA43_AI_OPENCLAW_GPT_AUTH_VOLUMES
+138. FEDORA43_AI_VOLUMES	optional; default preset ${CONTAINER_NAME}-persistent:/persistent:Z

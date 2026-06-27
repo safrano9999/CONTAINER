@@ -74,8 +74,8 @@ Generated files are intentionally ignored:
 - `requirements.txt`
 - `config.conf`
 - `config.conf_example`
-- `compose.yml`
-- `fedora43-ai.container`
+- `<CONTAINER_NAME>-compose.yml`
+- `<CONTAINER_NAME>.container`
 - `config.sh`
 - `merge_conf.sh`
 
@@ -101,11 +101,11 @@ This setup separates secrets from non-secret runtime decisions:
 - `config.conf`
   is the filled local runtime config. It is ignored and should not be committed.
 
-- `compose.yml`
+- `<CONTAINER_NAME>-compose.yml`
   is generated from `config.conf` or, if that does not exist,
   `config.conf_example`.
 
-- `fedora43-ai.container`
+- `<CONTAINER_NAME>.container`
   is the generated Podman Quadlet unit.
 
 The examples are source-of-truth inputs. The generated runtime files are local
@@ -140,8 +140,8 @@ Run:
 7. Merges all `config.conf_example` files into the local generated
    `config.conf_example`.
 8. Unless `--no-config` is used, hardlinks and runs `config.sh`.
-9. Renders `compose.yml`.
-10. Renders `fedora43-ai.container`.
+9. Renders `<CONTAINER_NAME>-compose.yml`.
+10. Renders `<CONTAINER_NAME>.container`.
 11. Asks whether to pull the image from Docker Hub or build locally.
 
 Options:
@@ -150,8 +150,8 @@ Options:
 ./setup.sh --config
 ```
 
-Only update repos, merge examples, run config, render `compose.yml` and
-`fedora43-ai.container`, then exit.
+Only update repos, merge examples, run config, render the named Compose and
+Quadlet files, then exit.
 
 ```bash
 ./setup.sh --no-config
@@ -165,11 +165,8 @@ Update repos and regenerate runtime files without running `config.sh`.
 
 Skip config and run a local `podman build --pull=always --no-cache`.
 
-```bash
-./setup.sh my-instance-name
-```
-
-Use another compose project/container instance name for local compose builds.
+`CONTAINER_NAME` controls the container name, generated filenames, and Fedora
+named-volume prefixes. Its default is `fedora43-ai`.
 
 ## Build And Run
 
@@ -187,13 +184,13 @@ When prompted, choose:
 To start with generated compose:
 
 ```bash
-./up_rootless.sh fedora43-ai
+./up_rootless.sh
 ```
 
 or:
 
 ```bash
-INSTANCE=fedora43-ai podman-compose -f compose.yml up -d
+podman-compose -f fedora43-ai-compose.yml up -d
 ```
 
 To use the generated Quadlet:
@@ -205,7 +202,7 @@ systemctl --user daemon-reload
 systemctl --user start fedora43-ai
 ```
 
-If `fedora43-ai.container` changes, reload systemd before restart:
+If the generated Quadlet changes, reload systemd before restart:
 
 ```bash
 systemctl --user daemon-reload
@@ -287,8 +284,8 @@ entries:
 
 ## Generated Compose And Quadlet
 
-`setup.sh` renders both `compose.yml` and `fedora43-ai.container` from
-`config.conf`.
+`setup.sh` renders `<CONTAINER_NAME>-compose.yml` and
+`<CONTAINER_NAME>.container` from `config.conf`.
 
 The renderer supports:
 

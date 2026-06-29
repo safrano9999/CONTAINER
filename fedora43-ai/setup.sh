@@ -121,33 +121,20 @@ relink_dev_scripts() {
         mkdir -p "$(dirname "$target")"
         [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
     done < <(find "$DEV_SCRIPTS_DIR/safrano9999" -type f -print0)
+    ln -f "$SAFRANO_SCRIPTS_DIR/merge.sh" "$SCRIPT_DIR/merge.sh"
 }
 
 relink_dev_scripts
 mkdir -p "$SAFRANO_DIR"
 for repo in "${REPOS[@]}"; do sync_repo "$repo"; done
 "$IMAGE_SCRIPTS_DIR/relink_shared.sh" \
-    config.sh merge_conf.sh python_header.py \
+    config.sh python_header.py \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service
 
-# Merge and deduplicate env examples and requirements.
-echo "  Merging env.examples + requirements.txt..."
+# Merge and deduplicate every example class and requirements.
+echo "  Merging examples + requirements.txt..."
 bash "$SCRIPT_DIR/merge.sh"
-
-bash "$IMAGE_SCRIPTS_DIR/install/merge_conf.sh" \
-    "$SCRIPT_DIR" \
-    "$SCRIPT_DIR/config.conf_example" \
-    "$SCRIPT_DIR/config.fedora43-ai.conf_example" \
-    "$SCRIPT_DIR/safrano9999" \
-    "config.conf_example"
-
-bash "$IMAGE_SCRIPTS_DIR/install/merge_conf.sh" \
-    "$SCRIPT_DIR" \
-    "$SCRIPT_DIR/container.example" \
-    "$SCRIPT_DIR/container.fedora43-ai.example" \
-    "$SCRIPT_DIR/safrano9999" \
-    "container.example"
 
 if ! $NO_CONFIG; then
     echo ""

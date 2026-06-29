@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SQLITE_PERSISTENCE="$SCRIPT_DIR/sqlite_persistence.sh"
+OPTIONAL_PERSISTENCE="$SCRIPT_DIR/optional_persistence.sh"
 if [ -f "$SCRIPT_DIR/env.example" ] || [ -f "$SCRIPT_DIR/config.conf_example" ] || [ -f "$SCRIPT_DIR/container.example" ]; then
     DIR="$SCRIPT_DIR"
 else
@@ -108,6 +110,7 @@ provider_file_for_example() {
             printf '%s\n' "$candidate"
             return 0
         fi
+        return 1
     fi
     for candidate in "$DIR"/safrano9999/*-provider.conf; do
         [ -f "$candidate" ] || continue
@@ -304,6 +307,57 @@ add_repo_sot_file_mounts() {
         [[ "$entry" == *_SOT.md ]] || continue
         add_repo_file_bind_mount "$entry"
     done < "$DIR/.gitignore"
+}
+
+initialize_sqlite_persistence() {
+    [ -x "$SQLITE_PERSISTENCE" ] || return 0
+    if find "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
+        "$SQLITE_PERSISTENCE" init --repo-root "$DIR/safrano9999" --config-dir "$DIR"
+    else
+        "$SQLITE_PERSISTENCE" init --repo "$DIR" --config-dir "$DIR"
+    fi
+}
+
+add_sqlite_volume_mounts() {
+    local item source
+    [ -x "$SQLITE_PERSISTENCE" ] || return 0
+
+    if find "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
+        while IFS= read -r item || [ -n "$item" ]; do
+            [ -n "$item" ] || continue
+            source="${item%%:*}"
+            add_unique "$item" volumes
+            add_unique "$source" named_volumes
+        done < <("$SQLITE_PERSISTENCE" mounts --repo-root "$DIR/safrano9999" --config-dir "$DIR" --container "$CONTAINER_NAME")
+    elif find "$DIR/safrano9999" -maxdepth 1 -type f -name '*-latest.zip' -print -quit 2>/dev/null | grep -q .; then
+        while IFS= read -r item || [ -n "$item" ]; do
+            [ -n "$item" ] || continue
+            source="${item%%:*}"
+            add_unique "$item" volumes
+            add_unique "$source" named_volumes
+        done < <("$SQLITE_PERSISTENCE" mounts --zip-root "$DIR/safrano9999" --config-dir "$DIR" --container "$CONTAINER_NAME")
+    else
+        while IFS= read -r item || [ -n "$item" ]; do
+            [ -n "$item" ] || continue
+            source="${item%%:*}"
+            add_unique "$item" volumes
+            add_unique "$source" named_volumes
+        done < <("$SQLITE_PERSISTENCE" mounts --repo "$DIR" --config-dir "$DIR" --container "$CONTAINER_NAME")
+    fi
+}
+
+add_optional_persistence_mounts() {
+    local item source key path
+    [ -x "$OPTIONAL_PERSISTENCE" ] || return 0
+    while IFS= read -r item || [ -n "$item" ]; do
+        [ -n "$item" ] || continue
+        source="${item%%:*}"
+        add_unique "$item" volumes
+        add_unique "$source" named_volumes
+    done < <("$OPTIONAL_PERSISTENCE" mounts --config-dir "$DIR" --container "$CONTAINER_NAME")
+    while IFS=$'\t' read -r key path; do
+        add_unique "$key=$path" persistent_envs
+    done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$DIR")
 }
 
 rewrite_config_with_comments() {
@@ -600,7 +654,7 @@ configure_from_example() {
                     write_config_value "$target" "$db_key" "blank"
                 fi
             done
-            echo "    ${#db_backend_keys[@]} backends configured as sqlite in ./STATE"
+            echo "    ${#db_backend_keys[@]} backends configured as sqlite in ./sqlite"
             return 0
         fi
 
@@ -1006,6 +1060,7 @@ generate_container_files() {
     local -a devices=()
     local -a caps=()
     local -a named_volumes=()
+    local -a persistent_envs=()
     local item source
 
     host_key="$(publish_host_key || true)"
@@ -1115,6 +1170,8 @@ generate_container_files() {
     done < <(config_source_files)
 
     add_repo_sot_file_mounts
+    add_sqlite_volume_mounts
+    add_optional_persistence_mounts
 
     if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
         add_unique "${host}:${first_port}:${first_port}" ports
@@ -1159,6 +1216,10 @@ generate_container_files() {
             [ -f "$DIR/container.conf" ] && printf '      - %s\n' "$DIR/container.conf"
             [ -f "$DIR/.env" ] && printf '      - %s\n' "$DIR/.env"
         fi
+        if [ "${#persistent_envs[@]}" -gt 0 ]; then
+            printf '    environment:\n'
+            for item in "${persistent_envs[@]}"; do printf '      - "%s"\n' "$item"; done
+        fi
         if [ -f "$DIR/webui.py" ]; then
             printf '    # Container-internal bind address; published host is controlled by config\n'
             printf '    command: uvicorn webui:app --host %s --port %s\n' "$command_host" "$first_port"
@@ -1201,6 +1262,7 @@ generate_container_files() {
         [ -f "$DIR/config.conf" ] && printf 'EnvironmentFile=%s\n' "$DIR/config.conf"
         [ -f "$DIR/container.conf" ] && printf 'EnvironmentFile=%s\n' "$DIR/container.conf"
         [ -f "$DIR/.env" ] && printf 'EnvironmentFile=%s\n' "$DIR/.env"
+        for item in "${persistent_envs[@]}"; do printf 'Environment=%s\n' "$item"; done
         [ "${#ports[@]}" -gt 0 ] && printf '# Port mappings: publish host:PUBLISH_PORT:PORT from config.conf/container.conf\n'
         for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
         if [ -f "$DIR/webui.py" ]; then
@@ -1236,7 +1298,10 @@ for example in "$DIR"/env*example; do configure_from_example "$example" "$DIR/.e
 for example in "$DIR"/config*example; do configure_from_example "$example" "$DIR/config.conf" "config.conf"; done
 if [ "$NO_CONTAINER" != "true" ]; then
     for example in "$DIR"/container*example "$DIR"/config*.container; do configure_from_example "$example" "$DIR/container.conf" "container.conf"; done
+    initialize_sqlite_persistence
     generate_container_files
+else
+    initialize_sqlite_persistence
 fi
 
 echo ""

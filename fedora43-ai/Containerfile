@@ -217,7 +217,7 @@ COPY SCRIPTS/safrano9999/python_header.py /usr/local/bin/python_header.py
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 
 RUN /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
-    config.sh merge_conf.sh python_header.py \
+    config.sh python_header.py \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service
 

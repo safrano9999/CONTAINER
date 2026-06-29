@@ -76,11 +76,8 @@ Generated files are intentionally ignored:
 - `config.conf_example`
 - `<CONTAINER_NAME>-compose.yml`
 - `<CONTAINER_NAME>.container`
-- `config.sh`
-- `merge_conf.sh`
 
-`config.sh` is not owned by this repository. `setup.sh` hardlinks it from
-`../../SCRIPTS/safrano9999/config.sh` when configuration is allowed.
+`config.sh` and `merge.sh` are hardlinked from `../../SCRIPTS/safrano9999/`.
 
 ## Source Of Truth Model
 
@@ -132,17 +129,13 @@ Run:
    - `NAPOLEON_HILLS_AI_MASTERMIND_CLASSES`
    - `SOLANA_AIRGAPPED_DEBIAN_WORKFLOW`
    - `NaturalGrounding-Tiktok-Ying-Video-Manager` from `feature/webui-db-backend-dual`
-3. Runs `merge.sh`.
-4. Merges all `env.example` files into the local generated `env.example`.
-5. Merges all `requirements.txt` files into the local generated
-   `requirements.txt`.
-6. Hardlinks `merge_conf.sh` from `../../SCRIPTS/safrano9999/image/install/merge_conf.sh`.
-7. Merges all `config.conf_example` files into the local generated
-   `config.conf_example`.
-8. Unless `--no-config` is used, hardlinks and runs `config.sh`.
-9. Renders `<CONTAINER_NAME>-compose.yml`.
-10. Renders `<CONTAINER_NAME>.container`.
-11. Asks whether to pull the image from Docker Hub or build locally.
+3. Hardlinks the shared SOT scripts, including `config.sh` and `merge.sh`.
+4. Runs `merge.sh` once for `env.example`, `config.conf_example`,
+   `container.example`, and `requirements.txt`.
+5. Unless `--no-config` is used, runs `config.sh`.
+6. Renders `<CONTAINER_NAME>-compose.yml`.
+7. Renders `<CONTAINER_NAME>.container`.
+8. Asks whether to pull the image from Docker Hub or build locally.
 
 Options:
 

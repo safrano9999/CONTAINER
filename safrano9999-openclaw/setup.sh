@@ -395,6 +395,11 @@ render_compose_and_quadlet() {
   done < "$source_file"
   done
 
+  if [ "$(config_value KACHELMANN_DB_BACKEND || true)" = "sqlite" ]; then
+    add_volume_item "${CONTAINER_NAME}-kachelmann-sqlite:/opt/safrano9999-openclaw/KACHELMANN/sqlite:Z" volumes named_volumes
+    add_volume_item "${CONTAINER_NAME}-kachelmann-sqlite:/root/.openclaw/extensions/kachelmann/sqlite:Z" volumes named_volumes
+  fi
+
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
   fi

@@ -15,6 +15,7 @@ docker-compose.yml
 *.container
 /safrano9999/
 /tmp/
+/sqlite/
 *.bak
 plugin-zips/
 *.zip

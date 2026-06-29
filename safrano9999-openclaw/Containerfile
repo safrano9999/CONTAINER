@@ -14,6 +14,7 @@
 
 ARG OPENCLAW_IMAGE
 FROM ${OPENCLAW_IMAGE}
+ARG OPENCLAW_CONFIG_DIR
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
       org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN and CITADEL with localhost and Tailscale providers."
@@ -53,18 +54,19 @@ RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
  && /usr/local/bin/openclaw-patch-deterministic
 
 # --- plugins: clone/install dynamically, pre-bake venvs ----------------------
-ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
-ENV SAFRANO9999_STAGE_DIR=${OPENCLAW_PLUGINS_DIR}/.stage
+ENV OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
+ENV OPENCLAW_PLUGINS_DIR=${OPENCLAW_CONFIG_DIR}/extensions
+ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
-COPY safrano9999 ${SAFRANO9999_STAGE_DIR}
+COPY safrano9999/*.zip safrano9999/*.zip.sha256 ${SAFRANO9999_STAGE_DIR}/
 
 RUN bash -lc 'set -eux; \
-    mkdir -p /root/.openclaw; \
+    mkdir -p "$OPENCLAW_CONFIG_DIR"; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
     safrano9999_OC_plugins CITADEL; \
-    for root in "$OPENCLAW_PLUGINS_DIR/CITADEL" /root/.openclaw/extensions/citadel; do \
+    for root in "$OPENCLAW_PLUGINS_DIR/citadel"; do \
       [ -d "$root/extensions/enabled" ] || continue; \
       mkdir -p "$root/extensions/disabled"; \
       for provider in cloudflare subnet; do \
@@ -78,8 +80,7 @@ RUN bash -lc 'set -eux; \
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.
 ENV HOME=/root \
-    OPENCLAW_CONFIG=/root/.openclaw/openclaw.json \
-    OPENCLAW_CONFIG_DIR=/root/.openclaw \
+    OPENCLAW_CONFIG=${OPENCLAW_CONFIG_DIR}/openclaw.json \
     OPENCLAW_GATEWAY_PORT=18789 \
     TS_STATE_DIR=/var/lib/tailscale \
     OPENCLAW_DISABLE_BONJOUR=1
@@ -105,7 +106,7 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
- && mkdir -p /root/.openclaw /var/lib/tailscale
+ && mkdir -p "$OPENCLAW_CONFIG_DIR" /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.
 ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]

@@ -402,7 +402,8 @@ render_compose_and_quadlet() {
   done < <("$SQLITE_PERSISTENCE" mounts \
     --zip-root "$SAFRANO_DIR" \
     --config-dir "$SCRIPT_DIR" \
-    --container "$CONTAINER_NAME")
+    --container "$CONTAINER_NAME" \
+    --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
@@ -420,6 +421,7 @@ render_compose_and_quadlet() {
       printf '      dockerfile: Containerfile\n'
       printf '      args:\n'
       printf '        OPENCLAW_IMAGE: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_IMAGE")"
+      printf '        OPENCLAW_CONFIG_DIR: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_CONFIG_DIR")"
     fi
     printf '    image: %s\n' "$image"
     printf '    labels:\n'
@@ -508,6 +510,8 @@ fi
 DOCKER_IO_IMAGE="$(docker_io_image)"
 OPENCLAW_BUILD_IMAGE="$(config_value OPENCLAW_IMAGE || true)"
 [ -n "$OPENCLAW_BUILD_IMAGE" ] || { echo "Missing OPENCLAW_IMAGE in build.conf" >&2; exit 1; }
+OPENCLAW_BUILD_CONFIG_DIR="$(config_value OPENCLAW_CONFIG_DIR || true)"
+[ -n "$OPENCLAW_BUILD_CONFIG_DIR" ] || { echo "Missing OPENCLAW_CONFIG_DIR in build.conf" >&2; exit 1; }
 
 EXISTING_IMAGE="$(read_kv_file "$SCRIPT_DIR/${CONTAINER_NAME}.container" Image || true)"
 RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
@@ -543,11 +547,13 @@ case "$IMG_CHOICE" in
       echo "  Building $LOCAL_IMAGE with --no-cache ..."
       podman build --pull=always --no-cache \
         --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
+        --build-arg "OPENCLAW_CONFIG_DIR=$OPENCLAW_BUILD_CONFIG_DIR" \
         -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     else
       echo "  Building $LOCAL_IMAGE ..."
       podman build \
         --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
+        --build-arg "OPENCLAW_CONFIG_DIR=$OPENCLAW_BUILD_CONFIG_DIR" \
         -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     fi
     render_compose_and_quadlet "$LOCAL_IMAGE" true

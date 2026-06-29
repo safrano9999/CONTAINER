@@ -1,0 +1,8 @@
+#default-preset: ghcr.io/openclaw/openclaw:2026.6.10
+OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.6.10
+
+#default-preset: docker.io/safrano9999/safrano9999-openclaw:latest
+SAFRANO9999_OPENCLAW_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest
+
+#default-preset: latest
+OPENCLAW_PLUGIN_RELEASE_TAG=latest

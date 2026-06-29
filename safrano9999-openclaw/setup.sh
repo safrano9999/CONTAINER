@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # setup.sh - orchestrate the safrano9999-openclaw container.
 #
-# Mirrors CONTAINER/fedora43-ai/setup.sh:
 #   1) stage plugin release archives into ./safrano9999
 #   2) merge env.example / requirements.txt / config.conf_example
 #   3) run shared config.sh, delete generated compose/quadlet, render them here
@@ -19,7 +18,8 @@ DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
 CONTAINER_NAME="safrano9999-openclaw"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/${CONTAINER_NAME}:latest"
-PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
+PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN CITADEL)
+CONFIG_PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN)
 
 NO_CONFIG=false
 NO_CACHE=false
@@ -52,31 +52,20 @@ done
 
 relink_dev_scripts() {
   local path source target
-  local -a paths=(
-    safrano9999/config.sh
-    safrano9999/legacy.sh
-    safrano9999/container/openclaw/openclaw_allow_all.mjs
-    safrano9999/container/openclaw/openclaw_crontabs.conf
-    safrano9999/container/openclaw/openclaw_crontabs.sh
-    safrano9999/container/safrano9999-openclaw/entrypoint.sh
-    safrano9999/container/safrano9999-openclaw/openclaw-configure.py
-    safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh
-    safrano9999/image/install/github_auth.sh
-    safrano9999/image/install/merge_conf.sh
-    safrano9999/image/safrano9999_container.sh
-    safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh
-    safrano9999/image/services/openclaw/openclaw_common.py
-    safrano9999/image/services/openclaw/safrano9999_plugins.py
-  )
 
   [ -d "$DEV_SCRIPTS_DIR/.git" ] || return 0
-  for path in "${paths[@]}"; do
-    source="$DEV_SCRIPTS_DIR/$path"
+  while IFS= read -r -d '' source; do
+    path="${source#"$DEV_SCRIPTS_DIR/"}"
     target="$SCRIPTS_DIR/$path"
-    [ -f "$source" ] || { echo "Missing SOT file: $source" >&2; exit 1; }
     mkdir -p "$(dirname "$target")"
     [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
-  done
+  done < <(
+    find "$DEV_SCRIPTS_DIR/safrano9999" -type f \
+      ! -path '*/__pycache__/*' \
+      ! -name '*.pyc' \
+      -print0
+  )
+  ln -f "$SAFRANO_SCRIPTS_DIR/merge.sh" "$SCRIPT_DIR/merge.sh"
 }
 
 relink_dev_scripts
@@ -115,7 +104,15 @@ config_value() {
   local key="$1"
   local file
 
-  for file in "$SCRIPT_DIR/config.conf" "$SCRIPT_DIR/config.conf_example" "$SCRIPT_DIR/.env" "$SCRIPT_DIR/env.example"; do
+  for file in \
+    "$SCRIPT_DIR/build.conf" \
+    "$SCRIPT_DIR/container.conf" \
+    "$SCRIPT_DIR/config.conf" \
+    "$SCRIPT_DIR/.env" \
+    "$SCRIPT_DIR/safrano9999-openclaw.build.conf_example" \
+    "$SCRIPT_DIR/container.example" \
+    "$SCRIPT_DIR/config.conf_example" \
+    "$SCRIPT_DIR/env.example"; do
     read_kv_file "$file" "$key" && return 0
   done
   return 1
@@ -123,7 +120,7 @@ config_value() {
 
 docker_io_image() {
   local configured
-  configured="$(config_value SAFRANO9999_OPENCLAW_DOCKER_IMAGE || true)"
+  configured="$(config_value SAFRANO9999_OPENCLAW_IMAGE || true)"
   printf '%s\n' "${configured:-$DOCKER_IO_IMAGE_DEFAULT}"
 }
 
@@ -240,86 +237,6 @@ run_init_scripts() {
   shopt -u nullglob
 }
 
-merge_config_examples() {
-  local merge_conf="$INSTALL_DIR/merge_conf.sh"
-  local output="$SCRIPT_DIR/config.conf_example"
-  local container_example="$SCRIPT_DIR/config.safrano9999-openclaw.conf_example"
-  local tmp_sources
-
-  tmp_sources="$(mktemp -d "${TMPDIR:-/tmp}/safrano9999-openclaw-config.XXXXXX")"
-
-  shopt -s nullglob
-  for zip_path in "$SAFRANO_DIR"/*-latest.zip; do
-    local base dst
-    if ! unzip -Z1 "$zip_path" | grep -qx 'config.conf_example'; then
-      continue
-    fi
-    base="$(basename "$zip_path" -latest.zip)"
-    dst="$tmp_sources/${base^^}"
-    mkdir -p "$dst"
-    unzip -p "$zip_path" config.conf_example > "$dst/config.conf_example"
-  done
-  shopt -u nullglob
-
-  if [ -f "$merge_conf" ]; then
-    bash "$merge_conf" \
-      "$SCRIPT_DIR" \
-      "$output" \
-      "$container_example" \
-      "$tmp_sources" \
-      "config.conf_example"
-    rm -rf "$tmp_sources"
-    return 0
-  fi
-
-  echo "  merge_conf.sh not found; using setup.sh fallback merger"
-  shopt -s nullglob
-  local -a config_files=("$tmp_sources"/*/config.conf_example)
-  shopt -u nullglob
-  if [ "${#config_files[@]}" -eq 0 ]; then
-    cp "$container_example" "$output"
-    rm -rf "$tmp_sources"
-    return 0
-  fi
-  awk '
-    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
-    function parse_key(line,    entry, key) {
-      entry = line
-      sub(/#.*/, "", entry)
-      entry = trim(entry)
-      if (entry !~ /^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/) return ""
-      key = entry
-      sub(/[[:space:]]*=.*/, "", key)
-      return trim(key)
-    }
-    FNR == 1 {
-      pending = ""
-      label = FILENAME
-      sub(/^.*\//, "", label)
-      pending = pending "\n# --- " label " ---\n"
-    }
-    {
-      raw = $0
-      stripped = trim(raw)
-      if (stripped == "" || substr(stripped, 1, 1) == "#") {
-        pending = pending raw "\n"
-        next
-      }
-      key = parse_key(raw)
-      if (key == "") {
-        pending = ""
-        next
-      }
-      if (!(key in seen)) {
-        printf "%s%s\n", pending, raw
-        seen[key] = 1
-      }
-      pending = ""
-    }
-  ' "$container_example" "${config_files[@]}" > "$output"
-  rm -rf "$tmp_sources"
-}
-
 add_unique() {
   local value="$1"
   local array_name="$2"
@@ -405,7 +322,9 @@ render_compose_and_quadlet() {
 
   local -a source_files=()
   [ -f "$SCRIPT_DIR/config.conf_example" ] && source_files+=("$SCRIPT_DIR/config.conf_example")
+  [ -f "$SCRIPT_DIR/container.example" ] && source_files+=("$SCRIPT_DIR/container.example")
   [ -f "$SCRIPT_DIR/config.conf" ] && source_files+=("$SCRIPT_DIR/config.conf")
+  [ -f "$SCRIPT_DIR/container.conf" ] && source_files+=("$SCRIPT_DIR/container.conf")
   if [ "${#source_files[@]}" -eq 0 ]; then
     source_files+=("$(source_file_for_render)")
   fi
@@ -490,6 +409,8 @@ render_compose_and_quadlet() {
       printf '    build:\n'
       printf '      context: .\n'
       printf '      dockerfile: Containerfile\n'
+      printf '      args:\n'
+      printf '        OPENCLAW_IMAGE: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_IMAGE")"
     fi
     printf '    image: %s\n' "$image"
     printf '    labels:\n'
@@ -501,9 +422,10 @@ render_compose_and_quadlet() {
       printf '    ports:\n'
       for item in "${ports[@]}"; do printf '      - %s\n' "$(yaml_dq "$item")"; done
     fi
-    if [ -f "$SCRIPT_DIR/config.conf" ] || [ -f "$SCRIPT_DIR/.env" ]; then
+    if [ -f "$SCRIPT_DIR/config.conf" ] || [ -f "$SCRIPT_DIR/container.conf" ] || [ -f "$SCRIPT_DIR/.env" ]; then
       printf '    env_file:\n'
       [ -f "$SCRIPT_DIR/config.conf" ] && printf '      - %s\n' "$SCRIPT_DIR/config.conf"
+      [ -f "$SCRIPT_DIR/container.conf" ] && printf '      - %s\n' "$SCRIPT_DIR/container.conf"
       [ -f "$SCRIPT_DIR/.env" ] && printf '      - %s\n' "$SCRIPT_DIR/.env"
     fi
     if [ "${#volumes[@]}" -gt 0 ] || [ "${#disabled_volumes[@]}" -gt 0 ]; then
@@ -536,6 +458,7 @@ render_compose_and_quadlet() {
     printf 'Image=%s\n' "$image"
     [ -n "$network" ] && printf 'Network=%s\n' "$network"
     [ -f "$SCRIPT_DIR/config.conf" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/config.conf"
+    [ -f "$SCRIPT_DIR/container.conf" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/container.conf"
     [ -f "$SCRIPT_DIR/.env" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/.env"
     if $publish_ports; then
       for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
@@ -561,13 +484,8 @@ for p in "${PLUGINS[@]}"; do
   stage_init_scripts "$p"
 done
 
-echo "  Merging env.examples + requirements.txt..."
-bash "$SCRIPT_DIR/merge.sh"
-
-echo "  Merging config.conf_example ..."
-merge_config_examples
-
-DOCKER_IO_IMAGE="$(docker_io_image)"
+echo "  Merging examples + requirements.txt..."
+bash "$SCRIPT_DIR/merge.sh" "${CONFIG_PLUGINS[@]}"
 
 if ! $NO_CONFIG; then
   run_init_scripts
@@ -577,6 +495,10 @@ if ! $NO_CONFIG; then
   rm -f "$SCRIPT_DIR/${CONTAINER_NAME}.container" "$SCRIPT_DIR/compose.yml" "$SCRIPT_DIR/docker-compose.yml"
   ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR" )
 fi
+
+DOCKER_IO_IMAGE="$(docker_io_image)"
+OPENCLAW_BUILD_IMAGE="$(config_value OPENCLAW_IMAGE || true)"
+[ -n "$OPENCLAW_BUILD_IMAGE" ] || { echo "Missing OPENCLAW_IMAGE in build.conf" >&2; exit 1; }
 
 EXISTING_IMAGE="$(read_kv_file "$SCRIPT_DIR/${CONTAINER_NAME}.container" Image || true)"
 RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
@@ -610,10 +532,14 @@ case "$IMG_CHOICE" in
     echo ""
     if $NO_CACHE; then
       echo "  Building $LOCAL_IMAGE with --no-cache ..."
-      podman build --pull=always --no-cache -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+      podman build --pull=always --no-cache \
+        --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
+        -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     else
       echo "  Building $LOCAL_IMAGE ..."
-      podman build -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
+      podman build \
+        --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
+        -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     fi
     render_compose_and_quadlet "$LOCAL_IMAGE" true
     echo "  Done. Image ready: $LOCAL_IMAGE"

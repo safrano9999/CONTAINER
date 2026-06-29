@@ -1,22 +1,22 @@
 # OpenClaw plugins container
 # =============================================================================
-# Bundles the four safcontainer OpenClaw plugins - DAILYNEWS, CALENDAR,
-# ZEROINBOX, KACHELMANN - into the official OpenClaw gateway image. LLM
+# Bundles the five OpenClaw plugins - DAILYNEWS, CALENDAR, ZEROINBOX,
+# KACHELMANN, CITADEL - into the official OpenClaw gateway image. LLM
 # environment values are for standalone plugins only; OpenClaw itself is not
 # configured with a model provider in this image.
 #
-# Base:    ghcr.io/openclaw/openclaw:latest  (node:24-bookworm-slim + OpenClaw)
+# Base:    OPENCLAW_IMAGE from build.conf (official OpenClaw image)
 # Patch:   /app dist replaced by the safrano9999 fork build (PR #91217,
 #          deterministic dummy/dummy default model, set at image build).
 # Boot:    tini -> SCRIPTS/.../entrypoint.sh (tailscale up -> configure -> gateway)
 # Context: all build and runtime helpers live below ./SCRIPTS.
 # =============================================================================
 
-ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
+ARG OPENCLAW_IMAGE
 FROM ${OPENCLAW_IMAGE}
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
-      org.opencontainers.image.description="OpenClaw gateway bundled with the DAILYNEWS, CALENDAR, ZEROINBOX and KACHELMANN plugins + Tailscale."
+      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN and CITADEL with localhost and Tailscale providers."
 
 # --- system layer (root) -----------------------------------------------------
 # The base image runs as the unprivileged "node" user; we need root to install
@@ -24,8 +24,7 @@ LABEL org.opencontainers.image.title="safrano9999-openclaw" \
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Basic tooling - the Debian/apt counterparts of the fedora43-ai dnf base set.
-# GitHub CLI lives in its own apt repo, so add the keyring first.
+# Runtime tooling. GitHub CLI lives in its own apt repository.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
  && install -d -m 0755 /etc/apt/keyrings \
@@ -64,6 +63,15 @@ RUN bash -lc 'set -eux; \
     mkdir -p /root/.openclaw; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
+    safrano9999_OC_plugins CITADEL; \
+    for root in "$OPENCLAW_PLUGINS_DIR/CITADEL" /root/.openclaw/extensions/citadel; do \
+      [ -d "$root/extensions/enabled" ] || continue; \
+      mkdir -p "$root/extensions/disabled"; \
+      for provider in cloudflare subnet; do \
+        [ ! -d "$root/extensions/enabled/$provider" ] \
+          || mv "$root/extensions/enabled/$provider" "$root/extensions/disabled/$provider"; \
+      done; \
+    done; \
     safrano9999_OC_plugins --fullrun \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'

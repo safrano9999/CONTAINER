@@ -108,6 +108,7 @@ provider_file_for_example() {
             printf '%s\n' "$candidate"
             return 0
         fi
+        return 1
     fi
     for candidate in "$DIR"/safrano9999/*-provider.conf; do
         [ -f "$candidate" ] || continue

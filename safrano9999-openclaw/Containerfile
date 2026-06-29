@@ -74,9 +74,6 @@ RUN bash -lc 'set -eux; \
     done; \
     safrano9999_OC_plugins --fullrun \
       DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
-    mkdir -p \
-      "$OPENCLAW_PLUGINS_DIR/KACHELMANN/sqlite" \
-      /root/.openclaw/extensions/kachelmann/sqlite; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.

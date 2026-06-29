@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SCRIPTS_DIR="$SCRIPT_DIR/SCRIPTS"
 SAFRANO_SCRIPTS_DIR="$SCRIPTS_DIR/safrano9999"
+SQLITE_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/sqlite_persistence.sh"
 IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
 CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
 INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
@@ -395,10 +396,13 @@ render_compose_and_quadlet() {
   done < "$source_file"
   done
 
-  if [ "$(config_value KACHELMANN_DB_BACKEND || true)" = "sqlite" ]; then
-    add_volume_item "${CONTAINER_NAME}-kachelmann-sqlite:/opt/safrano9999-openclaw/KACHELMANN/sqlite:Z" volumes named_volumes
-    add_volume_item "${CONTAINER_NAME}-kachelmann-sqlite:/root/.openclaw/extensions/kachelmann/sqlite:Z" volumes named_volumes
-  fi
+  while IFS= read -r item || [ -n "$item" ]; do
+    [ -n "$item" ] || continue
+    add_volume_item "$item" volumes named_volumes
+  done < <("$SQLITE_PERSISTENCE" mounts \
+    --zip-root "$SAFRANO_DIR" \
+    --config-dir "$SCRIPT_DIR" \
+    --container "$CONTAINER_NAME")
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports

@@ -337,4 +337,4 @@ ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"
 3. Add build-context ignore rules before a release build. The repository currently has no `.containerignore` or `.dockerignore`, so local `.env`, generated configuration, and `tmp/` are sent to the local build engine even though the `Containerfile` does not copy them into an image layer.
 4. Run a fresh local image build and smoke-test OpenClaw startup, all five plugin registrations, KACHELMANN health, the initial CITADEL scan, `/citadel`, and the gateway health check.
 
-When `KACHELMANN_DB_BACKEND=sqlite`, `setup.sh` creates the named volume `${CONTAINER_NAME}-kachelmann-sqlite`. It mounts that volume at both KACHELMANN `sqlite/` directories so the WebUI and installed OpenClaw plugin share one persistent database while all plugin code remains in the image layer.
+The shared SQLite persistence helper inspects each staged plugin ZIP. For every local `*_DB_BACKEND=sqlite`, `setup.sh` creates an isolated named volume and mounts it at `/root/.openclaw/extensions/<plugin-id>/sqlite`; plugin code remains in the image layer.

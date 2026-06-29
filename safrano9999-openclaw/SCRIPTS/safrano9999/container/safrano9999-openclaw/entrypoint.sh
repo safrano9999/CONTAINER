@@ -47,7 +47,7 @@ if [ -x "${zdir}/.venv/bin/python" ] && [ -f "${zdir}/scripts/gmail-init-labels"
 fi
 
 if [ -n "${KACHELMANN_PORT:-}" ]; then
-  kdir="${OPENCLAW_PLUGINS_DIR:-/opt/safrano9999-openclaw}/KACHELMANN"
+  kdir="${OPENCLAW_CONFIG_DIR:-/root/.openclaw}/extensions/kachelmann"
   if [ -x "${kdir}/.venv/bin/uvicorn" ]; then
     log "starting KACHELMANN WebUI on 0.0.0.0:${KACHELMANN_PORT}"
     ( cd "${kdir}" && exec ./.venv/bin/uvicorn webui:app --host 0.0.0.0 --port "${KACHELMANN_PORT}" ) \

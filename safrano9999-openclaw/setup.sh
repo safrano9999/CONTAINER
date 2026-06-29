@@ -12,6 +12,7 @@ SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SCRIPTS_DIR="$SCRIPT_DIR/SCRIPTS"
 SAFRANO_SCRIPTS_DIR="$SCRIPTS_DIR/safrano9999"
 SQLITE_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/sqlite_persistence.sh"
+OPTIONAL_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/optional_persistence.sh"
 IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
 CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
 INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
@@ -404,6 +405,13 @@ render_compose_and_quadlet() {
     --config-dir "$SCRIPT_DIR" \
     --container "$CONTAINER_NAME" \
     --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
+
+  while IFS= read -r item || [ -n "$item" ]; do
+    [ -n "$item" ] || continue
+    add_volume_item "$item" volumes named_volumes
+  done < <("$OPTIONAL_PERSISTENCE" mounts \
+    --config-dir "$SCRIPT_DIR" \
+    --container "$CONTAINER_NAME")
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports

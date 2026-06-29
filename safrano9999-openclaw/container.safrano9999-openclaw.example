@@ -9,6 +9,3 @@ SAFRANO9999_OPENCLAW_CAPABILITIES=NET_ADMIN,NET_RAW
 
 #default-preset: /dev/net/tun
 SAFRANO9999_OPENCLAW_DEVICES=/dev/net/tun
-
-#default-preset: zeroinbox-reports:/opt/safrano9999-openclaw/ZEROINBOX/REPORTS:Z,zeroinbox-logs:/opt/safrano9999-openclaw/ZEROINBOX/logs:Z
-ZEROINBOX_VOLUMES=zeroinbox-reports:/opt/safrano9999-openclaw/ZEROINBOX/REPORTS:Z,zeroinbox-logs:/opt/safrano9999-openclaw/ZEROINBOX/logs:Z

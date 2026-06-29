@@ -128,20 +128,21 @@ RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
 
 - **Purpose:** Downloads, verifies, and installs the patched OpenClaw `/app/dist` implementing the deterministic `dummy/dummy` model behavior.
 - **Verification:** The helper checks SHA-256 and runs `node /app/openclaw.mjs --version`.
-- **Current pin:** The helper still defaults to the `2026.6.5` deterministic artifact and must be updated before the next release build.
+- **Current pin:** OpenClaw `2026.6.10`.
 
 ### 10 - Plugin installation root
 
 ```dockerfile
-ENV OPENCLAW_PLUGINS_DIR=/opt/safrano9999-openclaw
+ENV OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
+ENV OPENCLAW_PLUGINS_DIR=${OPENCLAW_CONFIG_DIR}/extensions
 ```
 
-- **Purpose:** Defines the permanent source directories for all bundled plugin repositories.
+- **Purpose:** Uses OpenClaw's native extension directory for installed plugins.
 
 ### 11 - Temporary plugin stage
 
 ```dockerfile
-ENV SAFRANO9999_STAGE_DIR=${OPENCLAW_PLUGINS_DIR}/.stage
+ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 ```
 
 - **Purpose:** Defines the temporary directory receiving the verified release ZIP files from the build context.

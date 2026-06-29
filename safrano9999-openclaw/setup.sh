@@ -12,7 +12,6 @@ SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SCRIPTS_DIR="$SCRIPT_DIR/SCRIPTS"
 SAFRANO_SCRIPTS_DIR="$SCRIPTS_DIR/safrano9999"
 SQLITE_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/sqlite_persistence.sh"
-OPTIONAL_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/optional_persistence.sh"
 IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
 CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
 INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
@@ -406,12 +405,15 @@ render_compose_and_quadlet() {
     --container "$CONTAINER_NAME" \
     --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
 
-  while IFS= read -r item || [ -n "$item" ]; do
-    [ -n "$item" ] || continue
-    add_volume_item "$item" volumes named_volumes
-  done < <("$OPTIONAL_PERSISTENCE" mounts \
-    --config-dir "$SCRIPT_DIR" \
-    --container "$CONTAINER_NAME")
+  while IFS='|' read -r key volume directory; do
+    value="$(config_value "$key" || true)"
+    case "${value,,}" in ""|0|false|no|blank|null) continue ;; esac
+    add_volume_item "$volume:$OPENCLAW_BUILD_CONFIG_DIR/extensions/zeroinbox/$directory:Z" volumes named_volumes
+  done <<'EOF'
+ZEROINBOX_REPORTS_VOLUME|zeroinbox-reports|REPORTS
+ZEROINBOX_LOGS_VOLUME|zeroinbox-logs|logs
+ZEROINBOX_MAILDIR_VOLUME|zeroinbox-maildir|maildir
+EOF
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports

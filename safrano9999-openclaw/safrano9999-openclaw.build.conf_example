@@ -4,14 +4,14 @@ OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.6.10
 #default-preset: /root/.openclaw
 OPENCLAW_CONFIG_DIR=/root/.openclaw
 
-#default-preset: /root/.openclaw/workspace/ZEROINBOX
-ZEROINBOX_REPORTS_PERSISTENT_PATH=/root/.openclaw/workspace/ZEROINBOX
+#default-preset: 1
+ZEROINBOX_REPORTS_VOLUME=1
 
-#default-preset: /root/.openclaw/extensions/zeroinbox/logs
-ZEROINBOX_LOGS_PERSISTENT_PATH=/root/.openclaw/extensions/zeroinbox/logs
+#default-preset: 1
+ZEROINBOX_LOGS_VOLUME=1
 
-#default-preset: /root/.openclaw/extensions/zeroinbox/maildir
-ZEROINBOX_MAILDIR_PERSISTENT_PATH=/root/.openclaw/extensions/zeroinbox/maildir
+#default-preset: 1
+ZEROINBOX_MAILDIR_VOLUME=1
 
 #default-preset: docker.io/safrano9999/safrano9999-openclaw:latest
 SAFRANO9999_OPENCLAW_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest

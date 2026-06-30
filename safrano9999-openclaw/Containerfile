@@ -108,10 +108,11 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /u
 COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/bin/openclaw_common.py
 COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local/bin/safrano9999-openclaw-entrypoint
 COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
+COPY SCRIPTS/safrano9999/named_volume_links.sh /usr/local/bin/named_volume_links.sh
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/named_volume_links.sh /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
  && mkdir -p "$OPENCLAW_CONFIG_DIR" /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.

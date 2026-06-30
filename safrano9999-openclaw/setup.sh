@@ -12,6 +12,7 @@ SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
 SCRIPTS_DIR="$SCRIPT_DIR/SCRIPTS"
 SAFRANO_SCRIPTS_DIR="$SCRIPTS_DIR/safrano9999"
 SQLITE_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/sqlite_persistence.sh"
+OPTIONAL_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/optional_persistence.sh"
 IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
 CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
 INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
@@ -291,6 +292,7 @@ render_compose_and_quadlet() {
   local -a devices=()
   local -a named_volumes=()
   local -a disabled_named_volumes=()
+  local -a persistent_envs=()
 
   local -a source_files=()
   [ -f "$SCRIPT_DIR/config.conf_example" ] && source_files+=("$SCRIPT_DIR/config.conf_example")
@@ -376,15 +378,14 @@ render_compose_and_quadlet() {
     --container "$CONTAINER_NAME" \
     --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
 
-  while IFS='|' read -r key volume directory; do
-    value="$(config_value "$key" || true)"
-    case "${value,,}" in ""|0|false|no|blank|null) continue ;; esac
-    add_volume_item "$volume:$OPENCLAW_BUILD_CONFIG_DIR/extensions/zeroinbox/$directory:Z" volumes named_volumes
-  done <<'EOF'
-ZEROINBOX_REPORTS_VOLUME|zeroinbox-reports|REPORTS
-ZEROINBOX_LOGS_VOLUME|zeroinbox-logs|logs
-ZEROINBOX_MAILDIR_VOLUME|zeroinbox-maildir|maildir
-EOF
+  while IFS= read -r item || [ -n "$item" ]; do
+    [ -n "$item" ] || continue
+    add_volume_item "$item" volumes named_volumes
+  done < <("$OPTIONAL_PERSISTENCE" mounts --config-dir "$SCRIPT_DIR" --container "$CONTAINER_NAME")
+  while IFS=$'\t' read -r key value; do
+    [ -n "$key" ] || continue
+    persistent_envs+=("$key=$value")
+  done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$SCRIPT_DIR")
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
@@ -420,6 +421,10 @@ EOF
       [ -f "$SCRIPT_DIR/container.conf" ] && printf '      - %s\n' "$SCRIPT_DIR/container.conf"
       [ -f "$SCRIPT_DIR/.env" ] && printf '      - %s\n' "$SCRIPT_DIR/.env"
     fi
+    if [ "${#persistent_envs[@]}" -gt 0 ]; then
+      printf '    environment:\n'
+      for item in "${persistent_envs[@]}"; do printf '      - %s\n' "$(yaml_dq "$item")"; done
+    fi
     if [ "${#volumes[@]}" -gt 0 ] || [ "${#disabled_volumes[@]}" -gt 0 ]; then
       printf '    volumes:\n'
       for item in "${disabled_volumes[@]}"; do printf '      # - %s\n' "$item"; done
@@ -452,6 +457,7 @@ EOF
     [ -f "$SCRIPT_DIR/config.conf" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/config.conf"
     [ -f "$SCRIPT_DIR/container.conf" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/container.conf"
     [ -f "$SCRIPT_DIR/.env" ] && printf 'EnvironmentFile=%s\n' "$SCRIPT_DIR/.env"
+    for item in "${persistent_envs[@]}"; do printf 'Environment=%s\n' "$(yaml_dq "$item")"; done
     if $publish_ports; then
       for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
     fi

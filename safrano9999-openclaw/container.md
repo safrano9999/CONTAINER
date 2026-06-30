@@ -91,12 +91,12 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       git gh tmux wget less vim-tiny nano \
       jq ripgrep fd-find unzip xz-utils file \
-      python3 python3-venv python3-pip \
+      python3 python3-pip \
       iproute2 iputils-ping dnsutils procps net-tools lsof \
  && rm -rf /var/lib/apt/lists/*
 ```
 
-- **Purpose:** Installs Git/GitHub tooling, editors, archive tools, Python/venv support, and network diagnostics needed by plugins and CITADEL scanning.
+- **Purpose:** Installs Git/GitHub tooling, editors, archive tools, system Python/pip, and network diagnostics needed by plugins and CITADEL scanning.
 - **Cleanup:** Removes apt indexes after installation.
 
 ### 07 - Tailscale installation
@@ -130,7 +130,35 @@ RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
 - **Verification:** The helper checks SHA-256 and runs `node /app/openclaw.mjs --version`.
 - **Current pin:** OpenClaw `2026.6.10`.
 
-### 10 - Plugin installation root
+### 10 - Global Python package policy
+
+```dockerfile
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+```
+
+- **Purpose:** Allows the immutable container image to use Debian's system Python as its shared plugin runtime.
+- **Scope:** Container build only; bare-metal plugin setup may still use a local virtual environment.
+
+### 11 - Combined Python requirements
+
+```dockerfile
+COPY requirements.txt /requirements.txt
+```
+
+- **SOT:** `merge.sh` combines and deduplicates every staged plugin `requirements.txt` before the build.
+- **Purpose:** Places the complete shared dependency set into the image build.
+
+### 12 - Global Python dependencies
+
+```dockerfile
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.txt
+```
+
+- **Purpose:** Installs every plugin dependency once for `/usr/bin/python3`, matching the Fedora44 image pattern.
+- **Result:** Container plugins do not create or use `.venv` directories.
+
+### 13 - Plugin installation root
 
 ```dockerfile
 ENV OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
@@ -139,7 +167,7 @@ ENV OPENCLAW_PLUGINS_DIR=${OPENCLAW_CONFIG_DIR}/extensions
 
 - **Purpose:** Uses OpenClaw's native extension directory for installed plugins.
 
-### 11 - Temporary plugin stage
+### 14 - Temporary plugin stage
 
 ```dockerfile
 ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
@@ -148,16 +176,16 @@ ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 - **Purpose:** Defines the temporary directory receiving the verified release ZIP files from the build context.
 - **Lifetime:** Removed after plugin installation.
 
-### 12 - Shared plugin installer
+### 15 - Shared plugin installer
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 ```
 
 - **SOT:** Shared Python installer under `SCRIPTS`.
-- **Purpose:** Validates manifests, prepares plugin Python environments, installs OpenClaw extensions, and registers plugin IDs.
+- **Purpose:** Validates manifests, installs OpenClaw extensions, and registers plugin IDs.
 
-### 13 - Shared container helper
+### 16 - Shared container helper
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
@@ -165,7 +193,7 @@ COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano99
 
 - **Purpose:** Provides `safrano9999_OC_plugins`, release extraction, webhook generation, and fullrun generation.
 
-### 14 - Verified plugin archives
+### 17 - Verified plugin archives
 
 ```dockerfile
 COPY safrano9999 ${SAFRANO9999_STAGE_DIR}
@@ -174,7 +202,7 @@ COPY safrano9999 ${SAFRANO9999_STAGE_DIR}
 - **Source:** `setup.sh` downloads and verifies the five release ZIPs before the build starts.
 - **Purpose:** Makes plugin sources available without cloning from the network during this image stage.
 
-### 15 - Plugin installation and CITADEL provider profile
+### 18 - Plugin installation and CITADEL provider profile
 
 ```dockerfile
 RUN bash -lc 'set -eux; \
@@ -197,10 +225,10 @@ RUN bash -lc 'set -eux; \
 
 - **CITADEL:** Installs the command plugin, then leaves the localhost and Tailscale providers enabled in both source and installed extension trees.
 - **Fullrun plugins:** DAILYNEWS, CALENDAR, ZEROINBOX, and KACHELMANN contribute deterministic webhook commands.
-- **Python:** Per-plugin setup scripts or fallback virtual environments are created during the build.
+- **Python:** Plugins use the globally installed system-Python requirements; no plugin virtual environments are created.
 - **Cleanup:** Removes the temporary archive stage.
 
-### 16 - Runtime paths and defaults
+### 19 - Runtime paths and defaults
 
 ```dockerfile
 ENV HOME=/root \
@@ -216,7 +244,7 @@ ENV HOME=/root \
 - **Tailscale:** State defaults to `/var/lib/tailscale`.
 - **Bonjour:** Disabled to avoid container multicast discovery.
 
-### 17 - Deterministic default model
+### 20 - Deterministic default model
 
 ```dockerfile
 RUN openclaw models set dummy/dummy \
@@ -226,7 +254,7 @@ RUN openclaw models set dummy/dummy \
 - **Purpose:** Sets and verifies the credential-free deterministic gateway model.
 - **Boundary:** Plugin-specific OpenAI-v1 settings remain plugin runtime configuration; this image does not configure an OpenClaw LLM provider.
 
-### 18 - Gateway port metadata
+### 21 - Gateway port metadata
 
 ```dockerfile
 EXPOSE 18789
@@ -235,7 +263,7 @@ EXPOSE 18789
 - **Purpose:** Documents the internal OpenClaw gateway port.
 - **Publishing:** Does not publish the port by itself; Quadlet or Compose performs that mapping.
 
-### 19 - Gateway health check
+### 22 - Gateway health check
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
@@ -244,7 +272,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 
 - **Purpose:** Marks the container healthy only after the gateway health endpoint responds.
 
-### 20 - OpenClaw runtime configurator
+### 23 - OpenClaw runtime configurator
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /usr/local/bin/openclaw-configure
@@ -253,7 +281,7 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /u
 - **Purpose:** Generates OpenClaw plugin, Telegram, and gateway configuration from injected environment values.
 - **Runtime caller:** The entrypoint invokes it before starting the gateway.
 
-### 21 - Shared OpenClaw functions
+### 24 - Shared OpenClaw functions
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/bin/openclaw_common.py
@@ -261,7 +289,7 @@ COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/b
 
 - **Purpose:** Supplies shared OpenClaw command and configuration helpers used by `openclaw-configure`.
 
-### 22 - Container entrypoint
+### 25 - Container entrypoint
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local/bin/safrano9999-openclaw-entrypoint
@@ -269,7 +297,7 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local
 
 - **Runtime sequence:** Optional Tailscale, OpenClaw configuration, ZEROINBOX labels, KACHELMANN WebUI, CITADEL localhost scan, cron setup, optional fullrun, then the gateway.
 
-### 23 - Routine helper
+### 26 - Routine helper
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
@@ -277,7 +305,7 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh 
 
 - **Purpose:** Provides the shared deterministic plugin routine wrapper.
 
-### 24 - Cron installer
+### 27 - Cron installer
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
@@ -285,7 +313,7 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/
 
 - **Purpose:** Converts configured CET schedules into OpenClaw cron jobs after gateway startup.
 
-### 25 - Command-authorization helper
+### 28 - Command-authorization helper
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
@@ -293,7 +321,7 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bi
 
 - **Purpose:** Repairs command authorization if cron registration requires it.
 
-### 26 - Cron defaults
+### 29 - Cron defaults
 
 ```dockerfile
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
@@ -301,7 +329,7 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9
 
 - **Purpose:** Installs the shared cron configuration source below `/etc/safrano9999`.
 
-### 27 - Runtime modes and state directories
+### 30 - Runtime modes and state directories
 
 ```dockerfile
 RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
@@ -310,7 +338,7 @@ RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-opencl
 
 - **Purpose:** Marks runtime helpers executable and creates OpenClaw and Tailscale state roots.
 
-### 28 - PID 1
+### 31 - PID 1
 
 ```dockerfile
 ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]

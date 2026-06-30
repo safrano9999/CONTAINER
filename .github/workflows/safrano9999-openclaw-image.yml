@@ -65,6 +65,24 @@ jobs:
           cd safrano9999-openclaw
           ./setup.sh --no-config --no-build
 
+      - name: Resolve image build configuration
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd safrano9999-openclaw
+          build_conf="build.conf"
+          [ -f "$build_conf" ] || build_conf="safrano9999-openclaw.build.conf_example"
+          set -a
+          . "./$build_conf"
+          set +a
+          : "${OPENCLAW_IMAGE:?Missing OPENCLAW_IMAGE}"
+          : "${OPENCLAW_CONFIG_DIR:?Missing OPENCLAW_CONFIG_DIR}"
+          {
+            echo "openclaw_image=$OPENCLAW_IMAGE"
+            echo "openclaw_config_dir=$OPENCLAW_CONFIG_DIR"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -82,6 +100,9 @@ jobs:
           file: ./safrano9999-openclaw/Containerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            OPENCLAW_IMAGE=${{ steps.build.outputs.openclaw_image }}
+            OPENCLAW_CONFIG_DIR=${{ steps.build.outputs.openclaw_config_dir }}
 
   build-and-push-fedora43-ai:
     runs-on: ubuntu-latest

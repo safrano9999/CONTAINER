@@ -62,6 +62,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # --- plugins: install into OpenClaw -------------------------------------------
 ENV OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
 ENV OPENCLAW_PLUGINS_DIR=${OPENCLAW_CONFIG_DIR}/extensions
+ENV ZEROINBOX_DIR=${OPENCLAW_CONFIG_DIR}/extensions/zeroinbox
 ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh

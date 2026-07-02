@@ -1,3 +1,8 @@
+#CONTAINER-NAME
+#default-preset: safrano9999-openclaw
+#required:
+CONTAINER_NAME=safrano9999-openclaw
+
 #publish-host: FASTAPI_HOST
 #required: published host bind address
 FASTAPI_HOST=127.0.0.1

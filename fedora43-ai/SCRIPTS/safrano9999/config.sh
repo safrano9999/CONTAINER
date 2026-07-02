@@ -12,6 +12,11 @@ fi
 
 PROJECT_NAME="$(basename "$DIR")"
 CONTAINER_NAME="${PROJECT_NAME,,}"
+ENV_FILE="$DIR/.env"
+CONFIG_FILE="$DIR/config.conf"
+CONTAINER_FILE="$DIR/container.conf"
+BUILD_FILE="$DIR/build.conf"
+CONTAINER_NAME_MODE=false
 CONFIG_SHOW=""
 NO_CONTAINER=false
 
@@ -34,6 +39,40 @@ trim() {
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
+}
+
+configure_container_name() {
+    local example default_name="" value="${CONFIG_CONTAINER_NAME:-}"
+
+    for example in "$DIR"/*example; do
+        [ -f "$example" ] || continue
+        grep -qx '#CONTAINER-NAME' "$example" || continue
+        default_name="$(awk '
+            $0 == "#CONTAINER-NAME" { active = 1; next }
+            active && $0 ~ /^CONTAINER_NAME=/ { sub(/^[^=]*=/, ""); print; exit }
+        ' "$example")"
+        break
+    done
+    [ -n "$default_name" ] || return 0
+    CONTAINER_NAME_MODE=true
+
+    if [ -z "$value" ]; then
+        if [ -t 0 ]; then
+            read -rp "  Container name [$default_name]: " value
+        fi
+        value="${value:-$default_name}"
+    fi
+    if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+        echo "Invalid container name: $value" >&2
+        exit 2
+    fi
+
+    CONTAINER_NAME="$value"
+    export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
+    ENV_FILE="$DIR/$CONTAINER_NAME.env"
+    CONFIG_FILE="$DIR/${CONTAINER_NAME}_config.conf"
+    CONTAINER_FILE="$DIR/${CONTAINER_NAME}_container.conf"
+    BUILD_FILE="$DIR/${CONTAINER_NAME}_build.conf"
 }
 
 read_kv_file() {
@@ -65,9 +104,9 @@ config_value() {
     local file
 
     if [ "$NO_CONTAINER" != "true" ]; then
-        read_kv_file "$DIR/container.conf" "$key" && return 0
+        read_kv_file "$CONTAINER_FILE" "$key" && return 0
     fi
-    for file in "$DIR/config.conf" "$DIR/.env"; do
+    for file in "$CONFIG_FILE" "$ENV_FILE"; do
         read_kv_file "$file" "$key" && return 0
     done
     if [ "$NO_CONTAINER" != "true" ]; then
@@ -478,7 +517,8 @@ configure_from_example() {
     local -a db_config_keys=()
     local -a db_backend_keys=()
     local required_next=false
-    local directive condition condition_key condition_value target_key target_list
+    local secret_next=false
+    local directive condition condition_key condition_value target_key target_list secret
     local repeat_group repeat_style repeat_fields base_key repeat_choice repeat_index
     local pending_value_dupe="" pending_reverse_varname="" value_dupe_target value_dupe_existing value_dupe_choice
     local generator_label choice
@@ -621,7 +661,7 @@ configure_from_example() {
         pending_reverse_varname=""
     done 6< "$example"
 
-    if [ "$(basename "$target")" = ".env" ] && [ "${#db_backend_keys[@]}" -gt 1 ]; then
+    if [ "$target" = "$ENV_FILE" ] && [ "${#db_backend_keys[@]}" -gt 1 ]; then
         db_bulk_eligible=true
         for key in "${db_config_keys[@]}"; do
             if grep -q "^${key}=" "$target" 2>/dev/null; then
@@ -698,7 +738,7 @@ configure_from_example() {
         local alias_base_key="$1" alias_name="$2"
         local source_base_key source_key source_value group index style
 
-        [ "$(basename "$target")" = ".env" ] || return 0
+        [ "$target" = "$ENV_FILE" ] || return 0
         source_base_key="${reverse_varname_sources[$alias_base_key]:-}"
         [ -n "$source_base_key" ] || return 0
         [[ "$alias_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 0
@@ -909,12 +949,22 @@ configure_from_example() {
             required_next=true
             continue
         fi
-        if [[ -z "$stripped" || "$stripped" == \#* ]]; then
+        if [[ "$stripped" == "#secret" ]]; then
+            secret_next=true
+            continue
+        fi
+        if [[ -z "$stripped" ]]; then
             required_next=false
+            secret_next=false
+            continue
+        fi
+        if [[ "$stripped" == \#* ]]; then
             continue
         fi
         required="$required_next"
+        secret="$secret_next"
         required_next=false
+        secret_next=false
 
         entry="${line%%#*}"
         entry="${entry#"${entry%%[![:space:]]*}"}"
@@ -927,6 +977,7 @@ configure_from_example() {
         key="${key%"${key##*[![:space:]]}"}"
         default="${default#"${default%%[![:space:]]*}"}"
         default="${default%"${default##*[![:space:]]}"}"
+        default="${default//\$\{CONTAINER_NAME\}/$CONTAINER_NAME}"
 
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
         base_key="$key"
@@ -949,10 +1000,10 @@ configure_from_example() {
         fi
 
         env_existing=""
-        if [ "$(basename "$target")" = "config.conf" ]; then
-            env_existing="$(read_kv_file "$DIR/.env" "$key" || true)"
-        elif [ "$(basename "$target")" = "container.conf" ]; then
-            env_existing="$(read_kv_file "$DIR/config.conf" "$key" || read_kv_file "$DIR/.env" "$key" || true)"
+        if [ "$target" = "$CONFIG_FILE" ]; then
+            env_existing="$(read_kv_file "$ENV_FILE" "$key" || true)"
+        elif [ "$target" = "$CONTAINER_FILE" ]; then
+            env_existing="$(read_kv_file "$CONFIG_FILE" "$key" || read_kv_file "$ENV_FILE" "$key" || true)"
         fi
 
         if [[ -n "${autofill_blank_keys[$key]+x}" ]]; then
@@ -974,7 +1025,7 @@ configure_from_example() {
             continue
         fi
         if [ -n "$existing_line" ] && { [ "$required" != "true" ] || [ -n "$existing" ]; }; then
-            if [ "$(basename "$target")" = ".env" ]; then
+            if [ "$target" = "$ENV_FILE" ]; then
                 echo "    $key= exists"
             else
                 echo "    $key=$existing"
@@ -1016,7 +1067,12 @@ configure_from_example() {
                     choice="${choice:-2}"
                     case "$choice" in
                         1)
-                            read -r -p "    $key: " val || read_status=$?
+                            if [ "$secret" = "true" ]; then
+                                read -r -s -p "    $key: " val || read_status=$?
+                                echo "" >&2
+                            else
+                                read -r -p "    $key: " val || read_status=$?
+                            fi
                             ;;
                         2)
                             val="$(run_openssl_generator "$default")" || {
@@ -1050,7 +1106,10 @@ configure_from_example() {
             if provider_selector_key "$key"; then
                 prompt_suffix="$(provider_prompt "$example" "$key")"
             fi
-            if [ -n "$default" ] && [ -t 0 ]; then
+            if [ "$secret" = "true" ] && [ -t 0 ]; then
+                read -r -s -p "    $key ${prompt_suffix}: " val || read_status=$?
+                echo "" >&2
+            elif [ -n "$default" ] && [ -t 0 ]; then
                 read -e -i "$default" -r -p "    $key ${prompt_suffix}: " val || read_status=$?
                 used_prefill=true
             else
@@ -1102,6 +1161,7 @@ configure_from_example() {
 existing_image() {
     local quadlet="$DIR/$CONTAINER_NAME.container"
     local compose="$DIR/docker-compose.yml"
+    $CONTAINER_NAME_MODE && compose="$DIR/$CONTAINER_NAME-compose.yml"
 
     if [ -f "$quadlet" ]; then
         awk -F= '/^Image=/{print $2; exit}' "$quadlet"
@@ -1139,14 +1199,14 @@ project_image() {
 }
 
 config_source_files() {
-    if [ -f "$DIR/config.conf" ]; then
-        printf '%s\n' "$DIR/config.conf"
+    if [ -f "$CONFIG_FILE" ]; then
+        printf '%s\n' "$CONFIG_FILE"
     elif [ -f "$DIR/config.conf_example" ]; then
         printf '%s\n' "$DIR/config.conf_example"
     fi
     if [ "$NO_CONTAINER" != "true" ]; then
-        if [ -f "$DIR/container.conf" ]; then
-            printf '%s\n' "$DIR/container.conf"
+        if [ -f "$CONTAINER_FILE" ]; then
+            printf '%s\n' "$CONTAINER_FILE"
         elif [ -f "$DIR/container.example" ]; then
             printf '%s\n' "$DIR/container.example"
         fi
@@ -1212,6 +1272,7 @@ generate_container_files() {
     [ -n "$host" ] || host="127.0.0.1"
     image="$(project_image)"
     compose_file="$DIR/docker-compose.yml"
+    $CONTAINER_NAME_MODE && compose_file="$DIR/$CONTAINER_NAME-compose.yml"
     quadlet_file="$DIR/$CONTAINER_NAME.container"
 
     while IFS= read -r source_file || [ -n "$source_file" ]; do
@@ -1349,12 +1410,13 @@ generate_container_files() {
             printf '    ports:\n'
             for item in "${ports[@]}"; do printf '      - "%s"\n' "$item"; done
         fi
-        if [ -f "$DIR/config.conf" ] || [ -f "$DIR/container.conf" ] || [ -f "$DIR/.env" ]; then
+        if [ -f "$CONFIG_FILE" ] || [ -f "$CONTAINER_FILE" ] || [ -f "$ENV_FILE" ] || [ -f "$BUILD_FILE" ]; then
             printf '    # Runtime configuration files generated from *example files\n'
             printf '    env_file:\n'
-            [ -f "$DIR/config.conf" ] && printf '      - %s\n' "$DIR/config.conf"
-            [ -f "$DIR/container.conf" ] && printf '      - %s\n' "$DIR/container.conf"
-            [ -f "$DIR/.env" ] && printf '      - %s\n' "$DIR/.env"
+            [ -f "$CONFIG_FILE" ] && printf '      - %s\n' "$CONFIG_FILE"
+            [ -f "$CONTAINER_FILE" ] && printf '      - %s\n' "$CONTAINER_FILE"
+            [ -f "$BUILD_FILE" ] && printf '      - %s\n' "$BUILD_FILE"
+            [ -f "$ENV_FILE" ] && printf '      - %s\n' "$ENV_FILE"
         fi
         if [ "${#persistent_envs[@]}" -gt 0 ]; then
             printf '    environment:\n'
@@ -1396,12 +1458,13 @@ generate_container_files() {
         printf 'ContainerName=%s\n' "$CONTAINER_NAME"
         printf '# Container image from config or existing generated file\n'
         printf 'Image=%s\n' "$image"
-        if [ -f "$DIR/config.conf" ] || [ -f "$DIR/container.conf" ] || [ -f "$DIR/.env" ]; then
+        if [ -f "$CONFIG_FILE" ] || [ -f "$CONTAINER_FILE" ] || [ -f "$ENV_FILE" ] || [ -f "$BUILD_FILE" ]; then
             printf '# Runtime configuration files generated from *example files\n'
         fi
-        [ -f "$DIR/config.conf" ] && printf 'EnvironmentFile=%s\n' "$DIR/config.conf"
-        [ -f "$DIR/container.conf" ] && printf 'EnvironmentFile=%s\n' "$DIR/container.conf"
-        [ -f "$DIR/.env" ] && printf 'EnvironmentFile=%s\n' "$DIR/.env"
+        [ -f "$CONFIG_FILE" ] && printf 'EnvironmentFile=%s\n' "$CONFIG_FILE"
+        [ -f "$CONTAINER_FILE" ] && printf 'EnvironmentFile=%s\n' "$CONTAINER_FILE"
+        [ -f "$BUILD_FILE" ] && printf 'EnvironmentFile=%s\n' "$BUILD_FILE"
+        [ -f "$ENV_FILE" ] && printf 'EnvironmentFile=%s\n' "$ENV_FILE"
         for item in "${persistent_envs[@]}"; do printf 'Environment=%s\n' "$item"; done
         [ "${#ports[@]}" -gt 0 ] && printf '# Port mappings: publish host:PUBLISH_PORT:PORT from config.conf/container.conf\n'
         for item in "${ports[@]}"; do printf 'PublishPort=%s\n' "$item"; done
@@ -1433,11 +1496,18 @@ fi
 echo ""
 echo "  Configuring $PROJECT_NAME"
 
-for example in "$DIR"/*build.conf_example; do configure_from_example "$example" "$DIR/build.conf" "build.conf"; done
-for example in "$DIR"/env*example; do configure_from_example "$example" "$DIR/.env" ".env"; done
-for example in "$DIR"/config*example; do configure_from_example "$example" "$DIR/config.conf" "config.conf"; done
+configure_container_name
+if $CONTAINER_NAME_MODE; then
+    touch "$CONFIG_FILE"
+    write_config_value "$CONFIG_FILE" CONTAINER_NAME "$CONTAINER_NAME"
+fi
+
+for example in "$DIR"/*build.conf_example; do configure_from_example "$example" "$BUILD_FILE" "$(basename "$BUILD_FILE")"; done
+for example in "$DIR"/env*example; do configure_from_example "$example" "$ENV_FILE" "$(basename "$ENV_FILE")"; done
+for example in "$DIR"/config*example; do configure_from_example "$example" "$CONFIG_FILE" "$(basename "$CONFIG_FILE")"; done
 if [ "$NO_CONTAINER" != "true" ]; then
-    for example in "$DIR"/container*example "$DIR"/config*.container; do configure_from_example "$example" "$DIR/container.conf" "container.conf"; done
+    touch "$CONTAINER_FILE"
+    for example in "$DIR"/container*example "$DIR"/config*.container; do configure_from_example "$example" "$CONTAINER_FILE" "$(basename "$CONTAINER_FILE")"; done
     initialize_sqlite_persistence
     generate_container_files
 else

@@ -1,5 +1,5 @@
-#default-preset: ghcr.io/openclaw/openclaw:2026.6.10
-OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.6.10
+#default-preset: ghcr.io/openclaw/openclaw:2026.6.11
+OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.6.11
 
 #default-preset: /root/.openclaw
 OPENCLAW_CONFIG_DIR=/root/.openclaw

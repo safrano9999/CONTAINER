@@ -1,7 +1,7 @@
 # OpenClaw plugins container
 # =============================================================================
-# Bundles the five OpenClaw plugins - DAILYNEWS, CALENDAR, ZEROINBOX,
-# KACHELMANN, CITADEL - into the official OpenClaw gateway image. LLM
+# Bundles DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN, CITADEL and NOTE into
+# the official OpenClaw gateway image. LLM
 # environment values are for standalone plugins only; OpenClaw itself is not
 # configured with a model provider in this image.
 #
@@ -17,7 +17,7 @@ FROM ${OPENCLAW_IMAGE}
 ARG OPENCLAW_CONFIG_DIR
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
-      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN and CITADEL with localhost and Tailscale providers."
+      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN, CITADEL and NOTE with localhost and Tailscale providers."
 
 # --- system layer (root) -----------------------------------------------------
 # The base image runs as the unprivileged "node" user; we need root to install
@@ -73,6 +73,7 @@ RUN bash -lc 'set -eux; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
     safrano9999_OC_plugins CITADEL; \
+    safrano9999_OC_plugins NOTE; \
     for root in "$OPENCLAW_PLUGINS_DIR/citadel"; do \
       [ -d "$root/extensions/enabled" ] || continue; \
       mkdir -p "$root/extensions/disabled"; \
@@ -92,9 +93,10 @@ ENV HOME=/root \
     TS_STATE_DIR=/var/lib/tailscale \
     OPENCLAW_DISABLE_BONJOUR=1
 
-# Deterministic gateway default: dummy/dummy needs no provider credentials
+# Deterministic NOTE default needs no provider credentials
 # (https://docs.openclaw.ai/cli/models). openclaw-configure leaves it as is.
-RUN openclaw models set dummy/dummy \
+RUN openclaw config set plugins.entries.note.hooks.allowConversationAccess true --strict-json \
+ && openclaw models set dummy/note \
  && openclaw config get agents.defaults.model.primary
 
 EXPOSE 18789

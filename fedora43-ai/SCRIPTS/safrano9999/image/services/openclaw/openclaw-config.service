@@ -1,0 +1,16 @@
+[Unit]
+Description=Configure OpenClaw before gateway start
+After=tailscale-up.service
+Wants=tailscale-up.service
+Before=openclaw.service
+
+[Service]
+Type=oneshot
+PassEnvironment=OPENCLAW_START OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT OPENCLAW_GATEWAY_PUBLISH_PORT OPENCLAW_TELEGRAMTOKEN FASTAPI_HOST TS_HOSTNAME OPENCLAW_AGENT_WORKSPACE OPENCLAW_WORKSPACE_DIR
+# Fedora OpenAI-v1 provider variables are activated by the image drop-in.
+ExecCondition=/bin/bash -c '[ "$${OPENCLAW_START:-1}" = "1" ]'
+ExecStart=/usr/local/bin/openclaw-configure
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=KACHELMANN FastAPI WebUI
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/safrano9999/KACHELMANN
+Environment=KACHELMANN_PORT=8077
+ExecStartPre=/bin/bash -c '[ -x .venv/bin/python ] || ./scripts/setup-python.sh'
+ExecStart=/opt/safrano9999/KACHELMANN/.venv/bin/python -m uvicorn webui:app --host 0.0.0.0 --port ${KACHELMANN_PORT}
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,7 @@ This document maps the current `Containerfile` to its logical image instructions
 
 1. Recreate every file below `./SCRIPTS/safrano9999/` as a hardlink to `../../SCRIPTS/safrano9999/`.
 2. Hardlink the canonical `SCRIPTS/safrano9999/merge.sh` to `./merge.sh`.
-3. Download the signed release ZIP and SHA-256 file for DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN, and CITADEL.
+3. Download the signed release ZIP and SHA-256 file for DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, and CITADEL.
 4. Verify every downloaded ZIP with `sha256sum`.
 5. Run the single SOT `merge.sh` for `env.example`, `config.conf_example`, `container.example`, and `requirements.txt`.
 6. Exclude CITADEL's standalone configuration from the merge; this image supplies a focused OpenClaw plugin profile with localhost and Tailscale providers.
@@ -53,7 +53,7 @@ FROM ${OPENCLAW_IMAGE}
 
 ```dockerfile
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
-      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN and CITADEL with localhost and Tailscale providers."
+      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN and CITADEL with localhost and Tailscale providers."
 ```
 
 - **Purpose:** Describes the image and its five bundled plugins.
@@ -219,12 +219,12 @@ RUN bash -lc 'set -eux; \
       done; \
     done; \
     safrano9999_OC_plugins --fullrun \
-      DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
+      DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 ```
 
 - **CITADEL:** Installs the command plugin, then leaves the localhost and Tailscale providers enabled in both source and installed extension trees.
-- **Fullrun plugins:** DAILYNEWS, CALENDAR, ZEROINBOX, and KACHELMANN contribute deterministic webhook commands.
+- **Fullrun plugins:** DAILYNEWS, NEXTCLOUD, ZEROINBOX, and KACHELMANN contribute deterministic webhook commands.
 - **Python:** Plugins use the globally installed system-Python requirements; no plugin virtual environments are created.
 - **Cleanup:** Removes the temporary archive stage.
 

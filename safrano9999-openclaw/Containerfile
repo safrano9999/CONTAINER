@@ -1,6 +1,6 @@
 # OpenClaw plugins container
 # =============================================================================
-# Bundles DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN, CITADEL and NOTE into
+# Bundles DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, CITADEL and NOTE into
 # the official OpenClaw gateway image. LLM
 # environment values are for standalone plugins only; OpenClaw itself is not
 # configured with a model provider in this image.
@@ -17,7 +17,7 @@ FROM ${OPENCLAW_IMAGE}
 ARG OPENCLAW_CONFIG_DIR
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
-      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, CALENDAR, ZEROINBOX, KACHELMANN, CITADEL and NOTE with localhost and Tailscale providers."
+      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, CITADEL and NOTE with localhost and Tailscale providers."
 
 # --- system layer (root) -----------------------------------------------------
 # The base image runs as the unprivileged "node" user; we need root to install
@@ -83,7 +83,7 @@ RUN bash -lc 'set -eux; \
       done; \
     done; \
     safrano9999_OC_plugins --fullrun \
-      DAILYNEWS CALENDAR ZEROINBOX KACHELMANN; \
+      DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.

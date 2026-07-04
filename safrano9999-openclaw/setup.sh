@@ -19,8 +19,8 @@ INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
 DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
 CONTAINER_NAME=""
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/safrano9999-openclaw:latest"
-PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN CITADEL NOTE)
-CONFIG_PLUGINS=(DAILYNEWS CALENDAR ZEROINBOX KACHELMANN NOTE)
+PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN CITADEL NOTE)
+CONFIG_PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN NOTE)
 
 NO_CONFIG=false
 NO_CACHE=false
@@ -183,26 +183,30 @@ plugin_tag() {
 
 download_plugin_zip() {
   local name="$1"
-  local lower tag zip zip_path sha_path url
+  local lower tag zip asset zip_path sha_path asset_path asset_sha_path url
   local downloaded=false
   local -a curl_auth=()
 
   lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
   tag="$(plugin_tag "$name")"
   zip="${lower}-latest.zip"
+  asset="$zip"
+  [ "$name" != "NEXTCLOUD" ] || asset="nextcloud-debian64-plugin-latest.zip"
   zip_path="$SAFRANO_DIR/$zip"
   sha_path="$SAFRANO_DIR/$zip.sha256"
+  asset_path="$SAFRANO_DIR/$asset"
+  asset_sha_path="$SAFRANO_DIR/$asset.sha256"
   url="https://github.com/safrano9999/$name/releases/download/$tag"
 
   mkdir -p "$SAFRANO_DIR"
   rm -rf "$SAFRANO_DIR/$name" "$SAFRANO_DIR/.tmp-$name"
-  rm -f "$zip_path" "$sha_path"
-  echo "  downloading $name ($tag) -> $zip"
+  rm -f "$zip_path" "$sha_path" "$asset_path" "$asset_sha_path"
+  echo "  downloading $name ($tag) -> $asset"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     if gh release download "$tag" \
       -R "safrano9999/$name" \
-      --pattern "$zip" \
-      --pattern "$zip.sha256" \
+      --pattern "$asset" \
+      --pattern "$asset.sha256" \
       --dir "$SAFRANO_DIR" \
       --clobber >/dev/null; then
       downloaded=true
@@ -212,10 +216,15 @@ download_plugin_zip() {
   fi
   if [ "$downloaded" != "true" ]; then
     [ -n "${GH_TOKEN:-}" ] && curl_auth=(-H "Authorization: Bearer ${GH_TOKEN}")
-    curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip" -o "$zip_path"
-    curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$zip.sha256" -o "$sha_path"
+    curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$asset" -o "$asset_path"
+    curl -fsSL --retry 3 --retry-delay 2 "${curl_auth[@]}" "$url/$asset.sha256" -o "$asset_sha_path"
   fi
-  (cd "$SAFRANO_DIR" && sha256sum -c "$zip.sha256" >/dev/null)
+  (cd "$SAFRANO_DIR" && sha256sum -c "$asset.sha256" >/dev/null)
+  if [ "$asset" != "$zip" ]; then
+    mv "$asset_path" "$zip_path"
+    rm -f "$asset_sha_path"
+    (cd "$SAFRANO_DIR" && sha256sum "$zip" > "$zip.sha256")
+  fi
 
   echo "  staged $name release archive"
 }
@@ -501,6 +510,7 @@ render_compose_and_quadlet() {
 }
 
 echo "  Staging plugin release archives -> safrano9999/"
+rm -f "$SAFRANO_DIR/calendar-latest.zip" "$SAFRANO_DIR/calendar-latest.zip.sha256"
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"

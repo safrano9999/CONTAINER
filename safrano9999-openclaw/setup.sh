@@ -56,22 +56,75 @@ DEFAULT_CONTAINER_NAME="$(awk '
   active && $0 ~ /^CONTAINER_NAME=/ { sub(/^[^=]*=/, ""); print; exit }
 ' "$SCRIPT_DIR/config.safrano9999-openclaw.conf_example")"
 DEFAULT_CONTAINER_NAME="${DEFAULT_CONTAINER_NAME:-safrano9999-openclaw}"
-CONTAINER_NAME="${CONFIG_CONTAINER_NAME:-$DEFAULT_CONTAINER_NAME}"
-if [ -t 0 ]; then
-  read -rp "  Container name [$CONTAINER_NAME]: " selected_container_name
-  CONTAINER_NAME="${selected_container_name:-$CONTAINER_NAME}"
-fi
+INSTANCE_ROOT="$SCRIPT_DIR/CONTAINER"
+
+migrate_root_instances() {
+  local config name dir item source
+  shopt -s nullglob
+  for config in "$SCRIPT_DIR"/*_config.conf; do
+    name="$(basename "$config" _config.conf)"
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || continue
+    dir="$INSTANCE_ROOT/$name"
+    mkdir -p "$dir"
+    for item in "$name.env" "${name}_config.conf" "${name}_container.conf" \
+      "$name-compose.yml" "$name.container"; do
+      source="$SCRIPT_DIR/$item"
+      [ -e "$source" ] && [ ! -e "$dir/$item" ] && mv "$source" "$dir/$item"
+    done
+  done
+  shopt -u nullglob
+}
+
+select_container_name() {
+  local answer new_index default_index=1 i
+  local -a names=()
+
+  mkdir -p "$INSTANCE_ROOT"
+  migrate_root_instances
+  mkdir -p "$INSTANCE_ROOT/$DEFAULT_CONTAINER_NAME"
+  if [ -n "${CONFIG_CONTAINER_NAME:-}" ]; then
+    CONTAINER_NAME="$CONFIG_CONTAINER_NAME"
+  elif [ -t 0 ]; then
+    mapfile -t names < <(find "$INSTANCE_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+    echo ""
+    echo "  Container:"
+    for i in "${!names[@]}"; do
+      printf '    (%d) %s\n' "$((i + 1))" "${names[$i]}"
+      [ "${names[$i]}" = "$DEFAULT_CONTAINER_NAME" ] && default_index="$((i + 1))"
+    done
+    new_index="$(( ${#names[@]} + 1 ))"
+    printf '    (%d) new\n\n' "$new_index"
+    read -rp "  Choose [1-$new_index] (default: $default_index): " answer
+    answer="${answer:-$default_index}"
+    if [ "$answer" = "$new_index" ]; then
+      read -rp "  New container name: " CONTAINER_NAME
+    elif [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#names[@]}" ]; then
+      CONTAINER_NAME="${names[$((answer - 1))]}"
+    else
+      echo "Invalid container choice: $answer" >&2
+      exit 2
+    fi
+  else
+    CONTAINER_NAME="$DEFAULT_CONTAINER_NAME"
+  fi
+}
+
+select_container_name
 [[ "$CONTAINER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
   echo "Invalid container name: $CONTAINER_NAME" >&2
   exit 2
 }
 export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
-ENV_FILE="$SCRIPT_DIR/$CONTAINER_NAME.env"
-CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_config.conf"
-CONTAINER_CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_container.conf"
-BUILD_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_build.conf"
-COMPOSE_FILE="$SCRIPT_DIR/$CONTAINER_NAME-compose.yml"
-QUADLET_FILE="$SCRIPT_DIR/$CONTAINER_NAME.container"
+INSTANCE_DIR="$INSTANCE_ROOT/$CONTAINER_NAME"
+mkdir -p "$INSTANCE_DIR"
+export CONFIG_OUTPUT_DIR="$INSTANCE_DIR"
+export CONFIG_BUILD_FILE="$SCRIPT_DIR/${DEFAULT_CONTAINER_NAME}_build.conf"
+ENV_FILE="$INSTANCE_DIR/$CONTAINER_NAME.env"
+CONFIG_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_config.conf"
+CONTAINER_CONFIG_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_container.conf"
+BUILD_FILE="$CONFIG_BUILD_FILE"
+COMPOSE_FILE="$INSTANCE_DIR/$CONTAINER_NAME-compose.yml"
+QUADLET_FILE="$INSTANCE_DIR/$CONTAINER_NAME.container"
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 
 relink_dev_scripts() {
@@ -406,18 +459,18 @@ render_compose_and_quadlet() {
     add_volume_item "$item" volumes named_volumes
   done < <("$SQLITE_PERSISTENCE" mounts \
     --zip-root "$SAFRANO_DIR" \
-    --config-dir "$SCRIPT_DIR" \
+    --config-dir "$INSTANCE_DIR" \
     --container "$CONTAINER_NAME" \
     --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
 
   while IFS= read -r item || [ -n "$item" ]; do
     [ -n "$item" ] || continue
     add_volume_item "$item" volumes named_volumes
-  done < <("$OPTIONAL_PERSISTENCE" mounts --config-dir "$SCRIPT_DIR" --container "$CONTAINER_NAME")
+  done < <("$OPTIONAL_PERSISTENCE" mounts --config-dir "$INSTANCE_DIR" --container "$CONTAINER_NAME")
   while IFS=$'\t' read -r key value; do
     [ -n "$key" ] || continue
     persistent_envs+=("$key=$value")
-  done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$SCRIPT_DIR")
+  done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$INSTANCE_DIR")
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
@@ -431,7 +484,7 @@ render_compose_and_quadlet() {
     printf '  %s:\n' "$CONTAINER_NAME"
     if [ "$include_build" = "true" ]; then
       printf '    build:\n'
-      printf '      context: .\n'
+      printf '      context: %s\n' "$(yaml_dq "$SCRIPT_DIR")"
       printf '      dockerfile: Containerfile\n'
       printf '      args:\n'
       printf '        OPENCLAW_IMAGE: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_IMAGE")"
@@ -525,7 +578,7 @@ if ! $NO_CONFIG; then
   [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
   ( cd "$SCRIPT_DIR" && bash "$config_sh" )
   rm -f "$QUADLET_FILE" "$COMPOSE_FILE" "$SCRIPT_DIR/docker-compose.yml"
-  ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR" )
+  ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$INSTANCE_DIR" )
 fi
 
 DOCKER_IO_IMAGE="$(docker_io_image)"

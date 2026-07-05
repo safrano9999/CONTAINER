@@ -38,3 +38,7 @@ safrano9999/*
 **/*.sqlite3
 **/*.bak
 .git/
+/CONTAINER/
+/container_backup.env
+/SCRIPTS/safrano9999/container_backup.sh
+/SCRIPTS/safrano9999/container_backup.env_example

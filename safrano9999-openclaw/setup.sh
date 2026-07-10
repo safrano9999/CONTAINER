@@ -41,6 +41,17 @@ Without options, setup runs config, then opens the interactive image menu.
 EOF
 }
 
+fix_instance_paths() {
+  local file item
+
+  for file in "$COMPOSE_FILE" "$QUADLET_FILE"; do
+    [ -f "$file" ] || continue
+    for item in "${INSTANCE_FILES[@]}"; do
+      sed -i "s#${SCRIPT_DIR}/${item}#${INSTANCE_DIR}/${item}#g" "$file"
+    done
+  done
+}
+
 for arg in "$@"; do
   case "$arg" in
     --help) show_help; exit 0 ;;
@@ -592,7 +603,7 @@ RENDER_BUILD=false
 [ "$RENDER_IMAGE" = "$LOCAL_IMAGE" ] && RENDER_BUILD=true
 render_compose_and_quadlet "$RENDER_IMAGE" "$RENDER_BUILD"
 
-$NO_BUILD && { echo "  Staging done."; exit 0; }
+$NO_BUILD && { fix_instance_paths; echo "  Staging done."; exit 0; }
 
 if [ -z "$IMG_CHOICE" ]; then
   echo ""
@@ -639,4 +650,5 @@ case "$IMG_CHOICE" in
 esac
 
 echo ""
-python3 "$SCRIPT_DIR/quadlet_finish.py" "$COMPOSE_FILE" "$QUADLET_FILE" "$CONTAINER_NAME"
+fix_instance_paths
+python3 "$SCRIPT_DIR/quadlet_finish.py" "$INSTANCE_DIR/$(basename "$COMPOSE_FILE")" "$INSTANCE_DIR/$(basename "$QUADLET_FILE")" "$CONTAINER_NAME"

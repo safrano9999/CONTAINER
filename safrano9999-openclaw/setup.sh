@@ -117,14 +117,15 @@ select_container_name
 export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
 INSTANCE_DIR="$INSTANCE_ROOT/$CONTAINER_NAME"
 mkdir -p "$INSTANCE_DIR"
-export CONFIG_OUTPUT_DIR="$INSTANCE_DIR"
-export CONFIG_BUILD_FILE="$SCRIPT_DIR/${DEFAULT_CONTAINER_NAME}_build.conf"
-ENV_FILE="$INSTANCE_DIR/$CONTAINER_NAME.env"
-CONFIG_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_config.conf"
-CONTAINER_CONFIG_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_container.conf"
-BUILD_FILE="$CONFIG_BUILD_FILE"
-COMPOSE_FILE="$INSTANCE_DIR/$CONTAINER_NAME-compose.yml"
-QUADLET_FILE="$INSTANCE_DIR/$CONTAINER_NAME.container"
+ENV_FILE="$SCRIPT_DIR/$CONTAINER_NAME.env"
+CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_config.conf"
+CONTAINER_CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_container.conf"
+BUILD_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_build.conf"
+COMPOSE_FILE="$SCRIPT_DIR/$CONTAINER_NAME-compose.yml"
+QUADLET_FILE="$SCRIPT_DIR/$CONTAINER_NAME.container"
+INSTANCE_FILES=("$CONTAINER_NAME.env" "${CONTAINER_NAME}_config.conf" "${CONTAINER_NAME}_container.conf" "$CONTAINER_NAME-compose.yml" "$CONTAINER_NAME.container")
+for file in "${INSTANCE_FILES[@]}"; do [ ! -f "$INSTANCE_DIR/$file" ] || cp -f "$INSTANCE_DIR/$file" "$SCRIPT_DIR/$file"; done
+trap 'for file in "${INSTANCE_FILES[@]}"; do [ ! -f "$SCRIPT_DIR/$file" ] || mv -f "$SCRIPT_DIR/$file" "$INSTANCE_DIR/$file"; done' EXIT
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 
 relink_dev_scripts() {
@@ -459,18 +460,18 @@ render_compose_and_quadlet() {
     add_volume_item "$item" volumes named_volumes
   done < <("$SQLITE_PERSISTENCE" mounts \
     --zip-root "$SAFRANO_DIR" \
-    --config-dir "$INSTANCE_DIR" \
+    --config-dir "$SCRIPT_DIR" \
     --container "$CONTAINER_NAME" \
     --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
 
   while IFS= read -r item || [ -n "$item" ]; do
     [ -n "$item" ] || continue
     add_volume_item "$item" volumes named_volumes
-  done < <("$OPTIONAL_PERSISTENCE" mounts --config-dir "$INSTANCE_DIR" --container "$CONTAINER_NAME")
+  done < <("$OPTIONAL_PERSISTENCE" mounts --config-dir "$SCRIPT_DIR" --container "$CONTAINER_NAME")
   while IFS=$'\t' read -r key value; do
     [ -n "$key" ] || continue
     persistent_envs+=("$key=$value")
-  done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$INSTANCE_DIR")
+  done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$SCRIPT_DIR")
 
   if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
@@ -500,11 +501,10 @@ render_compose_and_quadlet() {
       printf '    ports:\n'
       for item in "${ports[@]}"; do printf '      - %s\n' "$(yaml_dq "$item")"; done
     fi
-    if [ -f "$CONFIG_FILE" ] || [ -f "$CONTAINER_CONFIG_FILE" ] || [ -f "$BUILD_FILE" ] || [ -f "$ENV_FILE" ]; then
+    if [ -f "$CONFIG_FILE" ] || [ -f "$CONTAINER_CONFIG_FILE" ] || [ -f "$ENV_FILE" ]; then
       printf '    env_file:\n'
       [ -f "$CONFIG_FILE" ] && printf '      - %s\n' "$CONFIG_FILE"
       [ -f "$CONTAINER_CONFIG_FILE" ] && printf '      - %s\n' "$CONTAINER_CONFIG_FILE"
-      [ -f "$BUILD_FILE" ] && printf '      - %s\n' "$BUILD_FILE"
       [ -f "$ENV_FILE" ] && printf '      - %s\n' "$ENV_FILE"
     fi
     if [ "${#persistent_envs[@]}" -gt 0 ]; then
@@ -542,7 +542,6 @@ render_compose_and_quadlet() {
     [ -n "$network" ] && printf 'Network=%s\n' "$network"
     [ -f "$CONFIG_FILE" ] && printf 'EnvironmentFile=%s\n' "$CONFIG_FILE"
     [ -f "$CONTAINER_CONFIG_FILE" ] && printf 'EnvironmentFile=%s\n' "$CONTAINER_CONFIG_FILE"
-    [ -f "$BUILD_FILE" ] && printf 'EnvironmentFile=%s\n' "$BUILD_FILE"
     [ -f "$ENV_FILE" ] && printf 'EnvironmentFile=%s\n' "$ENV_FILE"
     for item in "${persistent_envs[@]}"; do printf 'Environment=%s\n' "$(yaml_dq "$item")"; done
     if $publish_ports; then
@@ -578,7 +577,7 @@ if ! $NO_CONFIG; then
   [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
   ( cd "$SCRIPT_DIR" && bash "$config_sh" )
   rm -f "$QUADLET_FILE" "$COMPOSE_FILE" "$SCRIPT_DIR/docker-compose.yml"
-  ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$INSTANCE_DIR" )
+  ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR" )
 fi
 
 DOCKER_IO_IMAGE="$(docker_io_image)"

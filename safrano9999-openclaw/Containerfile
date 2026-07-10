@@ -53,6 +53,22 @@ COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh
 RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
  && /usr/local/bin/openclaw-patch-deterministic
 
+# Allow persistent ZEROINBOX reports to be sent as local Telegram documents.
+RUN python3 - <<'PY'
+from pathlib import Path
+
+root = Path("/app/dist")
+target = 'path.join(resolvedStateDir, "sandboxes")'
+replacement = target + ',\n\t\t"/named_volumes/ZEROINBOX/REPORTS"'
+for path in root.glob("local-roots-*.js"):
+    text = path.read_text()
+    if "/named_volumes/ZEROINBOX/REPORTS" not in text:
+        path.write_text(text.replace(target, replacement))
+    break
+else:
+    raise SystemExit("OpenClaw local-roots bundle not found")
+PY
+
 # --- shared Python requirements ----------------------------------------------
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 COPY requirements.txt /requirements.txt

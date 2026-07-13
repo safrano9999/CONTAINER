@@ -21,3 +21,6 @@ TS_HOSTNAME=safrano9999-openclaw
 
 #default-preset: true
 CITADEL_TAILSCALE=true
+
+#default-preset: ./sqlite/content
+KACHELMANN_CONTENT_PATH=./sqlite/content

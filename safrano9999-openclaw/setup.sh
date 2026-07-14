@@ -68,63 +68,9 @@ DEFAULT_CONTAINER_NAME="$(awk '
 ' "$SCRIPT_DIR/config.safrano9999-openclaw.conf_example")"
 DEFAULT_CONTAINER_NAME="${DEFAULT_CONTAINER_NAME:-safrano9999-openclaw}"
 INSTANCE_ROOT="$SCRIPT_DIR/CONTAINER"
-
-migrate_root_instances() {
-  local config name dir item source
-  shopt -s nullglob
-  for config in "$SCRIPT_DIR"/*_config.conf; do
-    name="$(basename "$config" _config.conf)"
-    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || continue
-    dir="$INSTANCE_ROOT/$name"
-    mkdir -p "$dir"
-    for item in "$name.env" "${name}_config.conf" "${name}_container.conf" \
-      "$name-compose.yml" "$name.container"; do
-      source="$SCRIPT_DIR/$item"
-      [ -e "$source" ] && [ ! -e "$dir/$item" ] && mv "$source" "$dir/$item"
-    done
-  done
-  shopt -u nullglob
-}
-
-select_container_name() {
-  local answer new_index default_index=1 i
-  local -a names=()
-
-  mkdir -p "$INSTANCE_ROOT"
-  migrate_root_instances
-  mkdir -p "$INSTANCE_ROOT/$DEFAULT_CONTAINER_NAME"
-  if [ -n "${CONFIG_CONTAINER_NAME:-}" ]; then
-    CONTAINER_NAME="$CONFIG_CONTAINER_NAME"
-  elif [ -t 0 ]; then
-    mapfile -t names < <(find "$INSTANCE_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
-    echo ""
-    echo "  Container:"
-    for i in "${!names[@]}"; do
-      printf '    (%d) %s\n' "$((i + 1))" "${names[$i]}"
-      [ "${names[$i]}" = "$DEFAULT_CONTAINER_NAME" ] && default_index="$((i + 1))"
-    done
-    new_index="$(( ${#names[@]} + 1 ))"
-    printf '    (%d) new\n\n' "$new_index"
-    read -rp "  Choose [1-$new_index] (default: $default_index): " answer
-    answer="${answer:-$default_index}"
-    if [ "$answer" = "$new_index" ]; then
-      read -rp "  New container name: " CONTAINER_NAME
-    elif [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#names[@]}" ]; then
-      CONTAINER_NAME="${names[$((answer - 1))]}"
-    else
-      echo "Invalid container choice: $answer" >&2
-      exit 2
-    fi
-  else
-    CONTAINER_NAME="$DEFAULT_CONTAINER_NAME"
-  fi
-}
-
-select_container_name
-[[ "$CONTAINER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
-  echo "Invalid container name: $CONTAINER_NAME" >&2
-  exit 2
-}
+SELECT_ARGS=("$SCRIPT_DIR" "$DEFAULT_CONTAINER_NAME")
+[ -z "${CONFIG_CONTAINER_NAME:-}" ] || SELECT_ARGS+=(--name "$CONFIG_CONTAINER_NAME")
+CONTAINER_NAME="$(python3 "$SAFRANO_SCRIPTS_DIR/container_instance.py" "${SELECT_ARGS[@]}")"
 export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
 INSTANCE_DIR="$INSTANCE_ROOT/$CONTAINER_NAME"
 mkdir -p "$INSTANCE_DIR"
@@ -379,6 +325,7 @@ render_compose_and_quadlet() {
   local include_build="$2"
   local source_file host compose_file quadlet_file line stripped entry key value disabled
   local network
+  local container_nr_value
   local publish_ports=true
   local prefix internal_key internal_port publish_port publish_host map source
   local first_port=""
@@ -402,9 +349,11 @@ render_compose_and_quadlet() {
   host="$(config_value FASTAPI_HOST || true)"
   [ -n "$host" ] || host="127.0.0.1"
   network="$(config_value SAFRANO9999_OPENCLAW_NETWORK || true)"
+  container_nr_value="$(config_value CONTAINER_NR || true)"
   network="$(trim "$network")"
   [ "$network" = "default" ] && network=""
   [[ "$network" == "host" || "$network" == "none" ]] && publish_ports=false
+  [ "${container_nr_value^^}" = "TUN" ] && publish_ports=false
   compose_file="$COMPOSE_FILE"
   quadlet_file="$QUADLET_FILE"
 
@@ -484,7 +433,7 @@ render_compose_and_quadlet() {
     persistent_envs+=("$key=$value")
   done < <("$OPTIONAL_PERSISTENCE" entries --config-dir "$SCRIPT_DIR")
 
-  if [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
+  if $publish_ports && [ "${#ports[@]}" -eq 0 ] && [ -n "$first_port" ]; then
     add_unique "${host}:${first_port}:${first_port}" ports
   fi
 

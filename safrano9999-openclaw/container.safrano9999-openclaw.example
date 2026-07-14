@@ -1,3 +1,7 @@
+# Container port block: 2=20000-29999, TUN=no host publishing, blank=manual.
+#default-preset: TUN
+CONTAINER_NR=TUN
+
 #default-preset: default
 SAFRANO9999_OPENCLAW_NETWORK=default
 

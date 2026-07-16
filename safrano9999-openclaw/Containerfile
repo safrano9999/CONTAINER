@@ -1,6 +1,6 @@
 # OpenClaw plugins container
 # =============================================================================
-# Bundles DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, CITADEL and NOTE into
+# Bundles DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN into
 # the official OpenClaw gateway image. LLM
 # environment values are for standalone plugins only; OpenClaw itself is not
 # configured with a model provider in this image.
@@ -18,7 +18,7 @@ ARG OPENCLAW_CONFIG_DIR
 ARG SAFRANO9999_SOURCE_KEY
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
-      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, CITADEL and NOTE with localhost and Tailscale providers."
+      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN with localhost and Tailscale providers."
 
 # --- system layer (root) -----------------------------------------------------
 # The base image runs as the unprivileged "node" user; we need root to install
@@ -91,8 +91,8 @@ RUN bash -lc 'set -eux; \
     mkdir -p "$OPENCLAW_CONFIG_DIR"; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
-    safrano9999_OC_plugins CITADEL; \
     safrano9999_OC_plugins NOTE; \
+    safrano9999_OC_plugins CITADEL; \
     for root in "$OPENCLAW_PLUGINS_DIR/citadel"; do \
       [ -d "$root/extensions/enabled" ] || continue; \
       mkdir -p "$root/extensions/disabled"; \

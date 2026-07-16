@@ -229,8 +229,7 @@ download_plugin_zip() {
   asset="$zip"
   [ "$name" != "NEXTCLOUD" ] || asset="nextcloud-debian64-plugin-latest.zip"
   tag="$(plugin_tag "$name" "$asset")"
-  tag_commit="$(git ls-remote --tags --refs "https://github.com/safrano9999/$name" \
-    "refs/tags/$tag" | awk 'NR == 1 {print $1}')"
+  tag_commit="$(gh api "repos/safrano9999/$name/commits/$tag" --jq .sha)"
   [ -n "$tag_commit" ] || { echo "Counter tag not found for $name: $tag" >&2; return 1; }
   zip_path="$SAFRANO_DIR/$zip"
   sha_path="$SAFRANO_DIR/$zip.sha256"
@@ -274,17 +273,12 @@ download_plugin_zip() {
 }
 
 append_scripts_source_tag() {
-  local refs version version_commit content_hash
+  local tags version version_commit content_hash
 
-  refs="$(git ls-remote --tags --refs https://github.com/safrano9999/SCRIPTS \
-    'refs/tags/20*.*.*')"
-  version="$(awk '
-    $2 ~ /^refs\/tags\/20[0-9][0-9][.][0-9]+[.][0-9]+$/ {
-      sub(/^refs\/tags\//, "", $2)
-      print $2
-    }
-  ' <<< "$refs" | sort -V | tail -n 1)"
-  version_commit="$(awk -v ref="refs/tags/$version" '$2 == ref {print $1; exit}' <<< "$refs")"
+  tags="$(gh api 'repos/safrano9999/SCRIPTS/tags?per_page=100')"
+  version="$(jq -r '.[].name | select(test("^20[0-9]{2}\\.[0-9]+\\.[0-9]+$"))' \
+    <<< "$tags" | sort -V | tail -n 1)"
+  version_commit="$(gh api "repos/safrano9999/SCRIPTS/commits/$version" --jq .sha)"
   [ -n "$version" ] && [ -n "$version_commit" ] \
     || { echo "No SCRIPTS counter tag found" >&2; return 1; }
   content_hash="$(cd "$SCRIPTS_DIR" && find . -type f \

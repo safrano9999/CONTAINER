@@ -13,3 +13,6 @@ SAFRANO9999_OPENCLAW_CAPABILITIES=NET_ADMIN,NET_RAW
 
 #default-preset: /dev/net/tun
 SAFRANO9999_OPENCLAW_DEVICES=/dev/net/tun
+
+#default-preset: ${CONTAINER_NAME}-tailscale:/var/lib/tailscale:Z
+TAILSCALE_VOLUMES=

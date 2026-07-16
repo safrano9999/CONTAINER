@@ -17,6 +17,7 @@ IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
 CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
 INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
 DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
+SOURCE_TAG_MANIFEST="$SCRIPT_DIR/.safrano9999-source-tags.tsv"
 CONTAINER_NAME=""
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/safrano9999-openclaw:latest"
 PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN CITADEL NOTE)
@@ -181,28 +182,56 @@ choose_pull_engine() {
   printf '%s\n' "$engine"
 }
 
+counter_tag() {
+  local name="$1"
+  local asset="$2"
+  local releases tag
+
+  releases="$(gh api "repos/safrano9999/$name/releases?per_page=100")"
+  tag="$(jq -r --arg asset "$asset" '
+    .[]
+    | select(.draft == false and .prerelease == false)
+    | select(.tag_name | test("^20[0-9]{2}\\.[0-9]+\\.[0-9]+$"))
+    | select(any(.assets[]?; .name == $asset))
+    | .tag_name
+  ' <<< "$releases" | sort -V | tail -n 1)"
+  [ -n "$tag" ] || { echo "No counter release containing $asset found for $name" >&2; return 1; }
+  printf '%s\n' "$tag"
+}
+
 plugin_tag() {
   local name="$1"
+  local asset="$2"
   local key="${name}_PLUGIN_RELEASE_TAG"
   local value="${!key:-}"
 
   [ -n "$value" ] || value="$(config_value "$key" || true)"
   [ -n "$value" ] || value="${OPENCLAW_PLUGIN_RELEASE_TAG:-}"
   [ -n "$value" ] || value="$(config_value OPENCLAW_PLUGIN_RELEASE_TAG || true)"
-  printf '%s\n' "${value:-latest}"
+  case "$value" in
+    ""|counter|latest) counter_tag "$name" "$asset" ;;
+    *)
+      [[ "$value" =~ ^20[0-9]{2}[.][0-9]+[.][0-9]+$ ]] \
+        || { echo "Invalid counter tag for $name: $value" >&2; return 1; }
+      printf '%s\n' "$value"
+      ;;
+  esac
 }
 
 download_plugin_zip() {
   local name="$1"
-  local lower tag zip asset zip_path sha_path asset_path asset_sha_path url
+  local lower tag tag_commit zip asset zip_path sha_path asset_path asset_sha_path url digest
   local downloaded=false
   local -a curl_auth=()
 
   lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
-  tag="$(plugin_tag "$name")"
   zip="${lower}-latest.zip"
   asset="$zip"
   [ "$name" != "NEXTCLOUD" ] || asset="nextcloud-debian64-plugin-latest.zip"
+  tag="$(plugin_tag "$name" "$asset")"
+  tag_commit="$(git ls-remote --tags --refs "https://github.com/safrano9999/$name" \
+    "refs/tags/$tag" | awk 'NR == 1 {print $1}')"
+  [ -n "$tag_commit" ] || { echo "Counter tag not found for $name: $tag" >&2; return 1; }
   zip_path="$SAFRANO_DIR/$zip"
   sha_path="$SAFRANO_DIR/$zip.sha256"
   asset_path="$SAFRANO_DIR/$asset"
@@ -237,7 +266,32 @@ download_plugin_zip() {
     (cd "$SAFRANO_DIR" && sha256sum "$zip" > "$zip.sha256")
   fi
 
+  digest="$(sha256sum "$zip_path" | cut -d' ' -f1)"
+  printf '%s\t%s\t%s\t%s\n' "$name" "$tag" "$tag_commit" "$digest" \
+    >> "$SOURCE_TAG_MANIFEST"
+
   echo "  staged $name release archive"
+}
+
+append_scripts_source_tag() {
+  local refs version version_commit content_hash
+
+  refs="$(git ls-remote --tags --refs https://github.com/safrano9999/SCRIPTS \
+    'refs/tags/20*.*.*')"
+  version="$(awk '
+    $2 ~ /^refs\/tags\/20[0-9][0-9][.][0-9]+[.][0-9]+$/ {
+      sub(/^refs\/tags\//, "", $2)
+      print $2
+    }
+  ' <<< "$refs" | sort -V | tail -n 1)"
+  version_commit="$(awk -v ref="refs/tags/$version" '$2 == ref {print $1; exit}' <<< "$refs")"
+  [ -n "$version" ] && [ -n "$version_commit" ] \
+    || { echo "No SCRIPTS counter tag found" >&2; return 1; }
+  content_hash="$(cd "$SCRIPTS_DIR" && find . -type f \
+    ! -path '*/__pycache__/*' ! -name '*.pyc' -print0 \
+    | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+  printf 'SCRIPTS\t%s\t%s\t%s\n' "$version" "$version_commit" "$content_hash" \
+    >> "$SOURCE_TAG_MANIFEST"
 }
 
 stage_provider_conf() {
@@ -450,6 +504,7 @@ render_compose_and_quadlet() {
       printf '      args:\n'
       printf '        OPENCLAW_IMAGE: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_IMAGE")"
       printf '        OPENCLAW_CONFIG_DIR: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_CONFIG_DIR")"
+      printf '        SAFRANO9999_SOURCE_KEY: %s\n' "$(yaml_dq "$SAFRANO9999_SOURCE_KEY")"
     fi
     printf '    image: %s\n' "$image"
     printf '    labels:\n'
@@ -522,11 +577,15 @@ render_compose_and_quadlet() {
 }
 
 echo "  Staging plugin release archives -> safrano9999/"
+printf 'repository\tversion_tag\tversion_commit\tartifact_sha256\n' > "$SOURCE_TAG_MANIFEST"
 rm -f "$SAFRANO_DIR/calendar-latest.zip" "$SAFRANO_DIR/calendar-latest.zip.sha256"
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"
 done
+append_scripts_source_tag
+SAFRANO9999_SOURCE_KEY="$(sha256sum "$SOURCE_TAG_MANIFEST" | cut -d' ' -f1)"
+echo "  Source counter tags: $SAFRANO9999_SOURCE_KEY"
 rm -f "$SCRIPT_DIR"/*_init*
 
 echo "  Merging examples + requirements.txt..."
@@ -581,12 +640,14 @@ case "$IMG_CHOICE" in
       podman build --pull=always --no-cache \
         --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
         --build-arg "OPENCLAW_CONFIG_DIR=$OPENCLAW_BUILD_CONFIG_DIR" \
+        --build-arg "SAFRANO9999_SOURCE_KEY=$SAFRANO9999_SOURCE_KEY" \
         -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     else
       echo "  Building $LOCAL_IMAGE ..."
       podman build \
         --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
         --build-arg "OPENCLAW_CONFIG_DIR=$OPENCLAW_BUILD_CONFIG_DIR" \
+        --build-arg "SAFRANO9999_SOURCE_KEY=$SAFRANO9999_SOURCE_KEY" \
         -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     fi
     render_compose_and_quadlet "$LOCAL_IMAGE" true

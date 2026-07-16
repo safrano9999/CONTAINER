@@ -19,6 +19,7 @@ compose.yml
 docker-compose.yml
 *.container
 /safrano9999/
+/.safrano9999-source-tags.tsv
 /tmp/
 /sqlite/
 *.bak

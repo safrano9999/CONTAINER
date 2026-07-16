@@ -15,6 +15,7 @@
 ARG OPENCLAW_IMAGE
 FROM ${OPENCLAW_IMAGE}
 ARG OPENCLAW_CONFIG_DIR
+ARG SAFRANO9999_SOURCE_KEY
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
       org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, CITADEL and NOTE with localhost and Tailscale providers."
@@ -80,8 +81,10 @@ ENV OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
 ENV OPENCLAW_PLUGINS_DIR=${OPENCLAW_CONFIG_DIR}/extensions
 ENV ZEROINBOX_DIR=${OPENCLAW_CONFIG_DIR}/extensions/zeroinbox
 ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
+LABEL io.safrano9999.source-tags.sha256="${SAFRANO9999_SOURCE_KEY}"
 COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
+COPY .safrano9999-source-tags.tsv /README/safrano9999-source-tags.tsv
 COPY safrano9999/*.zip safrano9999/*.zip.sha256 ${SAFRANO9999_STAGE_DIR}/
 
 RUN bash -lc 'set -eux; \

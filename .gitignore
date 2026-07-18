@@ -10,3 +10,5 @@ __pycache__/
 *.pyc
 .tag
 /safrano9999-openclaw/CONTAINER/
+/fedora44-ai-base/
+/fedora44-ai-safrano9999/

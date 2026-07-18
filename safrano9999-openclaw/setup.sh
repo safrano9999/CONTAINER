@@ -63,13 +63,8 @@ for arg in "$@"; do
   esac
 done
 
-DEFAULT_CONTAINER_NAME="$(awk '
-  $0 == "#CONTAINER-NAME" { active = 1; next }
-  active && $0 ~ /^CONTAINER_NAME=/ { sub(/^[^=]*=/, ""); print; exit }
-' "$SCRIPT_DIR/config.safrano9999-openclaw.conf_example")"
-DEFAULT_CONTAINER_NAME="${DEFAULT_CONTAINER_NAME:-safrano9999-openclaw}"
 INSTANCE_ROOT="$SCRIPT_DIR/CONTAINER"
-SELECT_ARGS=("$SCRIPT_DIR" "$DEFAULT_CONTAINER_NAME")
+SELECT_ARGS=("$SCRIPT_DIR")
 [ -z "${CONFIG_CONTAINER_NAME:-}" ] || SELECT_ARGS+=(--name "$CONFIG_CONTAINER_NAME")
 CONTAINER_NAME="$(python3 "$SAFRANO_SCRIPTS_DIR/container_instance.py" "${SELECT_ARGS[@]}")"
 export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"

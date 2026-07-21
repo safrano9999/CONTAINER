@@ -63,7 +63,7 @@ jobs:
           OPENCLAW_PLUGIN_RELEASE_TAG: ${{ steps.tags.outputs.plugin_tag }}
         run: |
           cd safrano9999-openclaw
-          ./setup.sh --no-config --no-build
+          CONFIG_CONTAINER_NAME=safrano9999-openclaw ./setup.sh --no-config --no-build
 
       - name: Resolve image build configuration
         id: build

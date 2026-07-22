@@ -602,6 +602,7 @@ render_compose_and_quadlet "$RENDER_IMAGE" "$RENDER_BUILD"
 
 $NO_BUILD && { fix_instance_paths; echo "  Staging done."; exit 0; }
 
+# Setup contract: normal interactive runs always ask for the image source.
 if [ -z "$IMG_CHOICE" ]; then
   echo ""
   echo "  Image source:"

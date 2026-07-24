@@ -68,6 +68,8 @@ jobs:
       - name: Resolve image build configuration
         id: build
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
           cd safrano9999-openclaw
@@ -78,10 +80,19 @@ jobs:
           set +a
           : "${OPENCLAW_IMAGE:?Missing OPENCLAW_IMAGE}"
           : "${OPENCLAW_CONFIG_DIR:?Missing OPENCLAW_CONFIG_DIR}"
+          : "${GH_TOKEN:?GH_RELEASE_TOKEN is required for the private Android release}"
+          apk_release_id="$(
+            gh api repos/safrano9999/KACHELMANN-ANDROID/releases/latest --jq '.id'
+          )"
+          [ -n "$apk_release_id" ] || {
+            echo "KACHELMANN Android release not found" >&2
+            exit 1
+          }
           {
             echo "openclaw_image=$OPENCLAW_IMAGE"
             echo "openclaw_config_dir=$OPENCLAW_CONFIG_DIR"
             echo "source_key=$(sha256sum .safrano9999-source-tags.tsv | cut -d' ' -f1)"
+            echo "kachelmann_apk_release_id=$apk_release_id"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -106,5 +117,8 @@ jobs:
             OPENCLAW_IMAGE=${{ steps.build.outputs.openclaw_image }}
             OPENCLAW_CONFIG_DIR=${{ steps.build.outputs.openclaw_config_dir }}
             SAFRANO9999_SOURCE_KEY=${{ steps.build.outputs.source_key }}
+            KACHELMANN_APK_RELEASE_ID=${{ steps.build.outputs.kachelmann_apk_release_id }}
           cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          secrets: |
+            github_token=${{ secrets.GH_RELEASE_TOKEN }}

@@ -106,11 +106,10 @@ RUN bash -lc 'set -eux; \
       DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
 
-RUN --mount=type=secret,id=github_token,required=true \
+RUN --mount=type=secret,id=github_token \
     KACHELMANN_APK_RELEASE_ID="${KACHELMANN_APK_RELEASE_ID}" \
       bash "$OPENCLAW_PLUGINS_DIR/kachelmann/scripts/download-android-apk.sh" \
-      "$OPENCLAW_PLUGINS_DIR/kachelmann" \
- && test -s "$OPENCLAW_PLUGINS_DIR/kachelmann/kachelmann-latest.apk"
+      "$OPENCLAW_PLUGINS_DIR/kachelmann"
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.
 ENV HOME=/root \

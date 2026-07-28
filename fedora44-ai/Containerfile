@@ -310,7 +310,6 @@ ARG GETH_COMMIT=be4dc0c4
 ARG SOLANA_INSTALLER_MD5
 ARG ELECTRUM_KEYS_COMMIT
 ARG SAFRANO9999_SOURCE_KEY
-ARG KACHELMANN_APK_RELEASE_ID
 
 ENV ZEROINBOX_DIR=/opt/safrano9999/ZEROINBOX \
     KACHELMANN_PYTHON=/usr/bin/python3
@@ -402,11 +401,6 @@ RUN bash -lc '. /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container
  && _safrano9999_write_fullrun /opt/safrano9999 WELCOME NEXTCLOUD DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
  && printf "%s\n" "CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00" > /opt/safrano9999/.openclaw-crontab \
  && rm -rf "$SAFRANO9999_STAGE_DIR"'
-
-RUN --mount=type=secret,id=github_token \
-    KACHELMANN_APK_RELEASE_ID="${KACHELMANN_APK_RELEASE_ID}" \
-      /opt/safrano9999/KACHELMANN/scripts/download-android-apk.sh \
-      /opt/safrano9999/KACHELMANN
 
 RUN python3 /usr/local/bin/openclaw-safrano9999-build.py
 

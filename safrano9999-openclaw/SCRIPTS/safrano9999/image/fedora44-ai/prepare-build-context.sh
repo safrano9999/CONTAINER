@@ -26,6 +26,9 @@ SAFRANO_REPOS=(
     NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual
     DAILYNEWS ZEROINBOX SPANKER KACHELMANN
 )
+RELEASE_PLUGIN_ASSETS=(
+    "KACHELMANN=kachelmann-latest.zip"
+)
 
 link_file() {
     local source="$1" target="$2"
@@ -143,6 +146,172 @@ write_manifest() {
     mv -f "$temporary" "$output"
 }
 
+stage_release_plugins() (
+    local mapping repo asset repository target download_dir archive checksum expected
+    local temporary extract_root payload backup
+    local restore_target="" restore_backup=""
+    local -a entries=()
+    local -A seen_repositories=()
+
+    command -v gh >/dev/null || {
+        echo "Missing command for release plugin staging: gh" >&2
+        exit 1
+    }
+    gh auth status --hostname github.com >/dev/null 2>&1 || {
+        echo "GitHub CLI authentication is required for release plugin staging" >&2
+        exit 1
+    }
+
+    temporary="$(mktemp -d "$REPOS/.release-plugins.XXXXXX")"
+    cleanup_release_plugin_stage() {
+        if [ -n "$restore_target" ] && [ ! -e "$restore_target" ] \
+            && [ -d "$restore_backup" ]; then
+            mv -- "$restore_backup" "$restore_target" || true
+        fi
+        rm -rf -- "$temporary"
+    }
+    trap cleanup_release_plugin_stage EXIT
+    trap 'exit 1' HUP INT TERM
+
+    for mapping in "${RELEASE_PLUGIN_ASSETS[@]}"; do
+        repo="${mapping%%=*}"
+        asset="${mapping#*=}"
+        [ "$repo" != "$mapping" ] && [ -n "$repo" ] && [ -n "$asset" ] || {
+            echo "Invalid release plugin mapping: $mapping" >&2
+            exit 1
+        }
+        [[ "$repo" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+            echo "Invalid release plugin repository name: $repo" >&2
+            exit 1
+        }
+        [[ "$asset" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*[.]zip$ ]] || {
+            echo "Invalid release plugin asset name: $asset" >&2
+            exit 1
+        }
+        [ -z "${seen_repositories[$repo]+x}" ] || {
+            echo "Duplicate release plugin repository: $repo" >&2
+            exit 1
+        }
+        seen_repositories["$repo"]=1
+
+        repository="safrano9999/$repo"
+        target="$REPOS/$repo"
+        [ -d "$target" ] && [ ! -L "$target" ] || {
+            echo "Cloned plugin repository is unavailable: $target" >&2
+            exit 1
+        }
+
+        download_dir="$temporary/$repo-download"
+        extract_root="$temporary/$repo-extracted"
+        archive="$download_dir/$asset"
+        checksum="$download_dir/$asset.sha256"
+        mkdir -p "$download_dir" "$extract_root"
+
+        gh release download --repo "$repository" \
+            --pattern "$asset" \
+            --pattern "$asset.sha256" \
+            --dir "$download_dir"
+        [ -f "$archive" ] && [ -f "$checksum" ] || {
+            echo "Release assets are incomplete for $repository: $asset" >&2
+            exit 1
+        }
+        expected="$(awk 'NR == 1 {print $1; exit}' "$checksum")"
+        [[ "$expected" =~ ^[0-9A-Fa-f]{64}$ ]] || {
+            echo "Invalid release checksum for $repository: $asset.sha256" >&2
+            exit 1
+        }
+        printf '%s  %s\n' "$expected" "$asset" \
+            | (cd "$download_dir" && sha256sum --check --status -) || {
+                echo "Release checksum mismatch for $repository: $asset" >&2
+                exit 1
+            }
+
+        python3 - "$archive" "$extract_root" <<'PY'
+from pathlib import Path, PurePosixPath
+import stat
+import sys
+from zipfile import BadZipFile, ZipFile
+
+archive_path = Path(sys.argv[1])
+destination = Path(sys.argv[2]).resolve()
+maximum_uncompressed_bytes = 2 * 1024 * 1024 * 1024
+
+try:
+    with ZipFile(archive_path) as archive:
+        entries = archive.infolist()
+        if not entries:
+            raise ValueError("release archive is empty")
+
+        seen = set()
+        total_size = 0
+        for entry in entries:
+            name = entry.filename
+            path = PurePosixPath(name)
+            parts = path.parts
+            if (
+                not name
+                or "\\" in name
+                or path.is_absolute()
+                or not parts
+                or any(part in {"", ".", ".."} for part in parts)
+                or ".git" in parts
+            ):
+                raise ValueError(f"unsafe archive path: {name!r}")
+
+            normalized = "/".join(parts)
+            if normalized in seen:
+                raise ValueError(f"duplicate archive path: {name!r}")
+            seen.add(normalized)
+
+            file_type = stat.S_IFMT(entry.external_attr >> 16)
+            if file_type not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                raise ValueError(f"unsupported archive entry: {name!r}")
+            if entry.flag_bits & 0x1:
+                raise ValueError(f"encrypted archive entry: {name!r}")
+
+            total_size += entry.file_size
+            if total_size > maximum_uncompressed_bytes:
+                raise ValueError("release archive exceeds extraction limit")
+
+        archive.extractall(destination)
+except (BadZipFile, OSError, ValueError) as error:
+    raise SystemExit(f"Invalid release plugin archive: {error}") from error
+PY
+
+        shopt -s dotglob nullglob
+        entries=("$extract_root"/*)
+        shopt -u dotglob nullglob
+        payload="$extract_root"
+        if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ] \
+            && [ -f "${entries[0]}/openclaw.plugin.json" ]; then
+            payload="${entries[0]}"
+        fi
+        [ -f "$payload/openclaw.plugin.json" ] || {
+            echo "Release asset is not an OpenClaw plugin: $repository/$asset" >&2
+            exit 1
+        }
+        python3 -m json.tool "$payload/openclaw.plugin.json" >/dev/null
+
+        backup="$temporary/$repo-source"
+        restore_target="$target"
+        restore_backup="$backup"
+        mv -- "$target" "$backup"
+        if ! mv -- "$payload" "$target"; then
+            mv -- "$backup" "$target" || {
+                echo "Failed to restore cloned plugin repository: $target" >&2
+                exit 1
+            }
+            restore_target=""
+            restore_backup=""
+            echo "Failed to stage release plugin: $repository/$asset" >&2
+            exit 1
+        fi
+        restore_target=""
+        restore_backup=""
+        printf '  [%s] staged release asset %s\n' "$repo" "$asset"
+    done
+)
+
 merge_requirements_and_reference() {
     local merge="$SCRIPTS_ROOT/safrano9999/merge.sh"
     (
@@ -228,6 +397,7 @@ mkdir -p "$REPOS"
 for repo in "${BASE_REPOS[@]}" "${SAFRANO_REPOS[@]}"; do sync_repo "$repo"; done
 write_manifest "$CONTEXT/.fedora44-ai-base-source-tags.tsv" "${BASE_REPOS[@]}"
 write_manifest "$CONTEXT/.safrano9999-source-tags.tsv" "${SAFRANO_REPOS[@]}"
+stage_release_plugins
 merge_requirements_and_reference
 stage_openclaw_patch
 

@@ -16,7 +16,6 @@ ARG OPENCLAW_IMAGE
 FROM ${OPENCLAW_IMAGE}
 ARG OPENCLAW_CONFIG_DIR
 ARG SAFRANO9999_SOURCE_KEY
-ARG KACHELMANN_APK_RELEASE_ID
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
       org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN with localhost and Tailscale providers."
@@ -106,11 +105,6 @@ RUN bash -lc 'set -eux; \
     safrano9999_OC_plugins --fullrun \
       DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN; \
     rm -rf "$SAFRANO9999_STAGE_DIR"'
-
-RUN --mount=type=secret,id=github_token \
-    KACHELMANN_APK_RELEASE_ID="${KACHELMANN_APK_RELEASE_ID}" \
-      bash "$OPENCLAW_PLUGINS_DIR/kachelmann/scripts/download-android-apk.sh" \
-      "$OPENCLAW_PLUGINS_DIR/kachelmann"
 
 # Gateway runs as root (so tailscaled can run); state lives under /root.
 ENV HOME=/root \

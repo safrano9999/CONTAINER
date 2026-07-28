@@ -87,7 +87,6 @@ jobs:
         shell: bash
         env:
           BUILD_SCOPE: ${{ inputs.build_scope }}
-          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
           cd fedora44-ai
@@ -100,13 +99,6 @@ jobs:
             [ -n "${!name:-}" ] || { echo "Missing $name" >&2; exit 1; }
           done
           [ -s .resolved-build.env ] || { echo "Missing .resolved-build.env" >&2; exit 1; }
-          apk_release_id=""
-          if [ "$BUILD_SCOPE" != base ] && [ -n "${GH_TOKEN:-}" ]; then
-            apk_release_id="$(
-              gh api repos/safrano9999/KACHELMANN-ANDROID/releases/latest \
-                --jq '.id' 2>/dev/null || true
-            )"
-          fi
           {
             echo "build_args<<EOF"
             echo "CERTS=$CERTS"
@@ -118,7 +110,6 @@ jobs:
             echo "GETH_VERSION=$GETH_VERSION"
             echo "GETH_COMMIT=$GETH_COMMIT"
             echo "WEBHOOK_VERSION=$WEBHOOK_VERSION"
-            echo "KACHELMANN_APK_RELEASE_ID=$apk_release_id"
             cat .resolved-build.env
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -164,5 +155,3 @@ jobs:
             type=registry,ref=${{ env.SAFRANO_IMAGE }}:latest
             type=registry,ref=${{ steps.tags.outputs.base_ref }}
           cache-to: type=inline
-          secrets: |
-            github_token=${{ secrets.GH_RELEASE_TOKEN }}

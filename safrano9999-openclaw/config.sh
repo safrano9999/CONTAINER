@@ -679,6 +679,7 @@ configure_from_example() {
     declare -A db_seen_keys=()
     local -a db_config_keys=()
     local -a db_backend_keys=()
+    local -a field_choice_values=()
     local required_next=false
     local secret_next=false
     local directive condition condition_key condition_value target_key target_list secret
@@ -688,6 +689,9 @@ configure_from_example() {
     local field_choices="" field_when="" field_when_not="" field_default_rules="" field_telegram_token=""
     local telegram_token_key="" telegram_existing=""
     local generator_label choice
+    local field_choice_count=0 field_choice_index=0 field_choice_total=0
+    local field_choice_default="" field_choice_numbers=""
+    local field_choice_freeform=false field_choice_selected_freeform=false
     local rule_key db_bulk_eligible=false db_bulk_decided=false
     local container_nr="" publish_port_count=0 publish_port_choice="" publish_port_autofill=false
 
@@ -1456,6 +1460,13 @@ configure_from_example() {
             used_prefill=false
             read_status=0
             prompt_suffix=""
+            field_choice_values=()
+            field_choice_count=0
+            field_choice_total=0
+            field_choice_default=""
+            field_choice_numbers=""
+            field_choice_freeform=false
+            field_choice_selected_freeform=false
             if [ "$required" = "true" ] && openssl_generator_default "$default"; then
                 generator_label="$(openssl_generator_label "$default")"
                 if [ -t 0 ]; then
@@ -1505,11 +1516,42 @@ configure_from_example() {
             if provider_selector_key "$key"; then
                 prompt_suffix="$(provider_prompt "$example" "$key")"
             elif [ -n "$field_choices" ]; then
-                prompt_suffix="[$(printf '%s' "$field_choices" | tr ' ' '/')]"
+                read -r -a field_choice_values <<< "$field_choices"
+                field_choice_count="${#field_choice_values[@]}"
+                field_choice_total="$field_choice_count"
+                [[ -z "${repeat_freeform[$base_key]+x}" ]] || {
+                    field_choice_freeform=true
+                    field_choice_total=$((field_choice_total + 1))
+                }
+                for ((field_choice_index = 0; field_choice_index < field_choice_count; field_choice_index++)); do
+                    if [ -t 0 ]; then
+                        printf '      (%d) %s\n' \
+                            "$((field_choice_index + 1))" \
+                            "${field_choice_values[$field_choice_index]}"
+                    fi
+                    if [ "$default" = "${field_choice_values[$field_choice_index]}" ]; then
+                        field_choice_default="$((field_choice_index + 1))"
+                    fi
+                done
+                if [ "$field_choice_freeform" = "true" ] && [ -t 0 ]; then
+                    printf '      (%d) enter custom value\n' "$field_choice_total"
+                fi
+                for ((field_choice_index = 1; field_choice_index <= field_choice_total; field_choice_index++)); do
+                    [ -z "$field_choice_numbers" ] \
+                        && field_choice_numbers="$field_choice_index" \
+                        || field_choice_numbers="$field_choice_numbers/$field_choice_index"
+                done
+                prompt_suffix="[$field_choice_numbers]"
             fi
             if [ "$secret" = "true" ] && [ -t 0 ]; then
                 read -r -s -p "    $key ${prompt_suffix}: " val || read_status=$?
                 echo "" >&2
+            elif [ -n "$field_choices" ] && [ -t 0 ]; then
+                if [ -n "$field_choice_default" ]; then
+                    read -r -p "    Choose ${prompt_suffix} (default: $field_choice_default): " val || read_status=$?
+                else
+                    read -r -p "    Choose ${prompt_suffix}: " val || read_status=$?
+                fi
             elif [ -n "$default" ] && [ -t 0 ]; then
                 read -e -i "$default" -r -p "    $key ${prompt_suffix}: " val || read_status=$?
                 used_prefill=true
@@ -1535,10 +1577,25 @@ configure_from_example() {
             fi
             if [ -n "$field_choices" ]; then
                 if [[ "$val" =~ ^[0-9]+$ ]]; then
-                    val="$(printf '%s\n' $field_choices | sed -n "${val}p")"
+                    if [ "$val" -ge 1 ] && [ "$val" -le "$field_choice_count" ]; then
+                        val="${field_choice_values[$((val - 1))]}"
+                    elif [ "$field_choice_freeform" = "true" ] && [ "$val" -eq "$field_choice_total" ]; then
+                        field_choice_selected_freeform=true
+                        if [ -t 0 ]; then
+                            read -r -p "    $key custom value: " val || read_status=$?
+                        else
+                            read -r val || read_status=$?
+                        fi
+                        val="$(trim "$val")"
+                        if [ -z "$val" ]; then
+                            echo "    custom value required"
+                            continue
+                        fi
+                    fi
                 fi
-                if ! printf '%s\n' $field_choices | grep -Fxq "$val"; then
-                    echo "    choose one of: $field_choices"
+                if [ "$field_choice_selected_freeform" != "true" ] \
+                    && ! printf '%s\n' "${field_choice_values[@]}" | grep -Fxq "$val"; then
+                    echo "    choose ${field_choice_numbers//\//, }"
                     val=""
                     continue
                 fi

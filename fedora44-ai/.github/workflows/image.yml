@@ -1,0 +1,161 @@
+name: fedora44-ai images
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag. Empty uses YYYY.M.D."
+        required: false
+        default: ""
+      build_scope:
+        description: "Choose which image layer to build"
+        required: true
+        type: choice
+        options:
+          - safrano9999
+          - base
+          - all
+        default: safrano9999
+      push_latest:
+        description: "Also publish :latest"
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      BASE_IMAGE: ghcr.io/safrano9999/fedora44-ai-base
+      SAFRANO_IMAGE: ghcr.io/safrano9999/fedora44-ai-safrano9999
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout shared scripts
+        run: git clone --depth 1 https://github.com/safrano9999/SCRIPTS.git SCRIPTS
+
+      - name: Resolve image tags
+        id: tags
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+          BUILD_SCOPE: ${{ inputs.build_scope }}
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        run: |
+          set -euo pipefail
+          version="$REQUESTED_TAG"
+          [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
+          if [ "$BUILD_SCOPE" = all ] || [ "$BUILD_SCOPE" = base ]; then
+            base_ref="${BASE_IMAGE}:${version}"
+          else
+            base_ref="${BASE_IMAGE}:latest"
+          fi
+          {
+            echo "version=$version"
+            echo "base_ref=$base_ref"
+            echo "base_tags<<EOF"
+            echo "${BASE_IMAGE}:${version}"
+            [ "$PUSH_LATEST" != true ] || echo "${BASE_IMAGE}:latest"
+            echo "EOF"
+            echo "safrano_tags<<EOF"
+            echo "${SAFRANO_IMAGE}:${version}"
+            [ "$PUSH_LATEST" != true ] || echo "${SAFRANO_IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Stage source repositories
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+          DEV_SCRIPTS_DIR: ${{ github.workspace }}/SCRIPTS
+        run: |
+          gh auth setup-git
+          ./SCRIPTS/safrano9999/image/fedora44-ai/prepare-build-context.sh "$GITHUB_WORKSPACE"
+
+      - name: Resolve image build configuration
+        id: build
+        shell: bash
+        env:
+          BUILD_SCOPE: ${{ inputs.build_scope }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          build_conf="build.conf"
+          [ -f "$build_conf" ] || { echo "Missing $build_conf" >&2; exit 1; }
+          set -a
+          . "./$build_conf"
+          set +a
+          for name in CERTS NODE_VERSION HERMES_TAG HERMES_COMMIT HERMES_VERSION ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT WEBHOOK_VERSION; do
+            [ -n "${!name:-}" ] || { echo "Missing $name" >&2; exit 1; }
+          done
+          [ -s .resolved-build.env ] || { echo "Missing .resolved-build.env" >&2; exit 1; }
+          apk_release_id=""
+          if [ "$BUILD_SCOPE" != base ] && [ -n "${GH_TOKEN:-}" ]; then
+            apk_release_id="$(
+              gh api repos/safrano9999/KACHELMANN-ANDROID/releases/latest \
+                --jq '.id' 2>/dev/null || true
+            )"
+          fi
+          {
+            echo "build_args<<EOF"
+            echo "CERTS=$CERTS"
+            echo "HERMES_TAG=$HERMES_TAG"
+            echo "HERMES_COMMIT=$HERMES_COMMIT"
+            echo "HERMES_VERSION=$HERMES_VERSION"
+            echo "ELECTRUM_VERSION=$ELECTRUM_VERSION"
+            echo "LND_VERSION=$LND_VERSION"
+            echo "GETH_VERSION=$GETH_VERSION"
+            echo "GETH_COMMIT=$GETH_COMMIT"
+            echo "WEBHOOK_VERSION=$WEBHOOK_VERSION"
+            echo "KACHELMANN_APK_RELEASE_ID=$apk_release_id"
+            cat .resolved-build.env
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Base
+        if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Containerfile
+          target: ai-base
+          pull: true
+          push: true
+          tags: ${{ steps.tags.outputs.base_tags }}
+          build-args: ${{ steps.build.outputs.build_args }}
+          cache-from: type=registry,ref=${{ env.BASE_IMAGE }}:latest
+          cache-to: type=inline
+
+      - name: Build and push Safrano layer
+        if: inputs.build_scope != 'base'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Containerfile
+          target: ai-safrano9999
+          pull: true
+          push: true
+          tags: ${{ steps.tags.outputs.safrano_tags }}
+          build-args: |
+            AI_BASE_IMAGE=${{ steps.tags.outputs.base_ref }}
+            ${{ steps.build.outputs.build_args }}
+          cache-from: |
+            type=registry,ref=${{ env.SAFRANO_IMAGE }}:latest
+            type=registry,ref=${{ steps.tags.outputs.base_ref }}
+          cache-to: type=inline
+          secrets: |
+            github_token=${{ secrets.GH_RELEASE_TOKEN }}

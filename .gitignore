@@ -1,14 +1,5 @@
-fedora43-ai/.env
-fedora43-ai/.env2
-fedora43-ai/docker-compose.yml
-fedora43-ai/env.example
-fedora43-ai/fedora43-ai.container
-fedora43-ai/requirements.txt
-fedora43-ai/safrano9999/
 __pycache__/
 **/__pycache__/
 *.pyc
 .tag
 /safrano9999-openclaw/CONTAINER/
-/fedora44-ai-base/
-/fedora44-ai-safrano9999/

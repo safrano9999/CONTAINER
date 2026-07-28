@@ -1,0 +1,6 @@
+#CONTAINER-NAME
+#default-preset: fedora44-ai-safrano9999
+#required:
+CONTAINER_NAME=fedora44-ai-safrano9999
+
+BIP39_PORT=11030

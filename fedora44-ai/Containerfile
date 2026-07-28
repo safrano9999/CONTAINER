@@ -1,0 +1,425 @@
+ARG AI_BASE_IMAGE=ghcr.io/safrano9999/fedora44-ai-base:latest
+FROM quay.io/fedora/fedora:44 AS ai-base
+
+ARG WEBHOOK_VERSION=2.8.3
+ARG HERMES_TAG
+ARG HERMES_COMMIT
+ARG HERMES_VERSION
+ARG NODE_VERSION=stable
+ARG VDITOR_VERSION=3.11.2
+ARG CERTS=/srv/shared/certs
+ARG FEDORA_REPOMD_KEY
+ARG UV_VERSION
+ARG UV_INSTALLER_SHA256
+ARG FUGU_COMMIT
+ARG CLOUDFLARED_VERSION
+ARG CLOUDFLARED_SHA256
+ARG NEXTCLOUD_PLUGIN_SHA256
+ARG OPENCLAW_VERSION
+ARG CODEX_VERSION
+ARG CLAUDE_CODE_VERSION
+ARG OPENCLAW_BRAVE_PLUGIN_VERSION
+ARG OPENCLAW_CODEX_PLUGIN_VERSION
+ARG FEDORA44_AI_BASE_SOURCE_KEY
+
+# DNF Cache Mount: Behält heruntergeladene RPMs über Builds hinweg,
+# falls der Layer neu gebaut werden muss.
+RUN --mount=type=cache,target=/var/cache/dnf \
+    test -n "${FEDORA_REPOMD_KEY}" \
+ && printf 'Fedora repository state: %s\n' "${FEDORA_REPOMD_KEY}" \
+ && dnf -y update && dnf -y install \
+    bash bash-completion shadow-utils sudo \
+    git gh tmux \
+    nano vim-minimal less \
+    curl wget ca-certificates openssl gnupg2 fuse-libs \
+    nodejs npm \
+    python3 python3-pip \
+    make gcc gcc-c++ \
+    ripgrep fd-find jq sqlite unzip tar gzip xz which file \
+    iputils iproute procps-ng psmisc util-linux \
+    findutils grep sed gawk diffutils \
+    hostname bind-utils net-tools traceroute \
+    lsof strace tcpdump nmap-ncat \
+    v4l-utils zbar qrencode bc ffmpeg mpv libv4l \
+    dbus-x11 xauth mesa-dri-drivers \
+    cockpit cockpit-podman \
+    tailscale
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${NODE_VERSION}" \
+ && npm install -g n \
+ && n "${NODE_VERSION}" \
+ && hash -r \
+ && node --version
+
+COPY ${CERTS}/ /run/fedora44-ai-certs/
+
+RUN \
+    set -eu; \
+    find /run/fedora44-ai-certs -type f \( -name '*.crt' -o -name '*.pem' \) -print \
+      | while IFS= read -r cert; do \
+          if openssl x509 -in "$cert" -noout >/dev/null 2>&1; then \
+            fingerprint="$(openssl x509 -in "$cert" -noout -fingerprint -sha256 \
+              | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"; \
+            install -m 0644 "$cert" "/etc/pki/ca-trust/source/anchors/fedora44-ai-${fingerprint}.crt"; \
+          fi; \
+        done; \
+    update-ca-trust
+
+COPY build/hermes-nous-api-key.patch /tmp/hermes-nous-api-key.patch
+RUN set -eu; \
+    hermes_branch="${HERMES_TAG}"; \
+    if [ "${hermes_branch}" = stable ]; then hermes_branch=main; fi; \
+    curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_COMMIT}/scripts/install.sh" \
+      | bash -s -- --skip-setup --branch "${hermes_branch}" --commit "${HERMES_COMMIT}" \
+ && git -C /usr/local/lib/hermes-agent apply /tmp/hermes-nous-api-key.patch \
+ && grep -q "__version__ = \"${HERMES_VERSION}\"" \
+      /usr/local/lib/hermes-agent/hermes_cli/__init__.py \
+ && npm --prefix /usr/local/lib/hermes-agent run build --workspace web
+
+RUN set -eux; \
+    case "$(uname -m)" in \
+      x86_64) webhook_arch=amd64 ;; \
+      aarch64|arm64) webhook_arch=arm64 ;; \
+      armv7l|armv6l) webhook_arch=arm ;; \
+      i386|i686) webhook_arch=386 ;; \
+      *) echo "Unsupported webhook architecture" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/adnanh/webhook/releases/download/${WEBHOOK_VERSION}/webhook-linux-${webhook_arch}.tar.gz" \
+        | tar -xz --strip-components=1 -C /usr/local/bin "webhook-linux-${webhook_arch}/webhook"; \
+    webhook -version
+
+# systemd für Container-Betrieb: unnötige Units entfernen
+RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
+    && for i in *; do [ "$i" = "systemd-tmpfiles-setup.service" ] || rm -f "$i"; done || true \
+ && rm -f /usr/lib/systemd/system/multi-user.target.wants/* \
+ && rm -f /etc/systemd/system/*.wants/* \
+ && rm -f /usr/lib/systemd/system/local-fs.target.wants/* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*udev* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*initctl* \
+ && rm -f /usr/lib/systemd/system/basic.target.wants/* \
+ && rm -f /usr/lib/systemd/system/anaconda.target.wants/*
+
+RUN mkdir -p /tmp/runtime-root \
+ && chmod 700 /tmp/runtime-root
+
+RUN --mount=type=cache,target=/root/.npm \
+    mkdir -p /tmp/vditor /usr/local/lib/vditor \
+ && npm pack "vditor@${VDITOR_VERSION}" --pack-destination /tmp/vditor \
+ && tar -xzf /tmp/vditor/vditor-*.tgz --strip-components=1 -C /usr/local/lib/vditor \
+ && test -f /usr/local/lib/vditor/dist/index.min.js \
+ && rm -rf /tmp/vditor
+
+RUN test -n "${UV_VERSION}" \
+ && test -n "${UV_INSTALLER_SHA256}" \
+ && curl -fsSL --retry 3 "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh \
+ && echo "${UV_INSTALLER_SHA256}  /tmp/uv-install.sh" | sha256sum -c - \
+ && UV_UNMANAGED_INSTALL=/usr/local/bin sh /tmp/uv-install.sh \
+ && rm -f /tmp/uv-install.sh \
+ && uv --version
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${CODEX_VERSION}" \
+ && test -n "${CLAUDE_CODE_VERSION}" \
+ && test -n "${OPENCLAW_VERSION}" \
+ && npm install -g --include=optional \
+      "@openai/codex@${CODEX_VERSION}" \
+      "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+      "openclaw@${OPENCLAW_VERSION}" \
+ && test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = "${OPENCLAW_VERSION}"
+
+COPY openclaw-deterministic-patch/ /tmp/openclaw-deterministic-patch/
+RUN test "$(cat /tmp/openclaw-deterministic-patch/openclaw.version)" = "${OPENCLAW_VERSION}" \
+ && (cd /tmp/openclaw-deterministic-patch && sha256sum -c patch.tar.gz.sha256) \
+ && openclaw_root="$(dirname "$(readlink -f "$(command -v openclaw)")")" \
+ && [ -f "$openclaw_root/openclaw.mjs" ] \
+ && rm -rf "$openclaw_root/dist" \
+ && tar -xzf /tmp/openclaw-deterministic-patch/patch.tar.gz -C "$openclaw_root" \
+ && node "$openclaw_root/openclaw.mjs" --version \
+ && models="$(openclaw config get agents.defaults.models --json 2>/dev/null || printf '{}\n')" \
+ && models="$(printf '%s\n' "$models" | jq -c 'if type == "object" then . else {} end | . + {"dummy/dummy": {}, "dummy/note": {}}')" \
+ && openclaw config set agents.defaults.models "$models" --strict-json \
+ && if ! openclaw config get agents.defaults.model.primary --json 2>/dev/null \
+      | jq -e 'type == "string" and length > 0' >/dev/null; then \
+        openclaw config set agents.defaults.model.primary '"dummy/dummy"' --strict-json; \
+    fi \
+ && rm -rf /tmp/openclaw-deterministic-patch
+
+RUN test -n "${FUGU_COMMIT}" \
+ && git init /root/.fugu \
+ && git -C /root/.fugu remote add origin https://github.com/SakanaAI/fugu.git \
+ && git -C /root/.fugu fetch --depth=1 origin "${FUGU_COMMIT}" \
+ && git -C /root/.fugu checkout --detach FETCH_HEAD \
+ && test "$(git -C /root/.fugu rev-parse HEAD)" = "${FUGU_COMMIT}" \
+ && mkdir -p /root/.codex \
+ && cp /root/.fugu/configs/files/fugu.json /root/.codex/fugu.json \
+ && sed 's|{{CODEX_HOME}}|/root/.codex|g' /root/.fugu/configs/formats/modern/files/fugu.config.toml > /root/.codex/fugu.config.toml \
+ && cp /root/.fugu/configs/injects/model_providers.sakana.toml /root/.codex/config.toml \
+ && install -m 0755 /root/.fugu/scripts/codex-fugu /usr/local/bin/codex-fugu
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${OPENCLAW_BRAVE_PLUGIN_VERSION}" \
+ && openclaw plugins install "@openclaw/brave-plugin@${OPENCLAW_BRAVE_PLUGIN_VERSION}"
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${OPENCLAW_CODEX_PLUGIN_VERSION}" \
+ && printf 'ClawHub Codex plugin release: %s\n' "${OPENCLAW_CODEX_PLUGIN_VERSION}" \
+ && openclaw plugins install clawhub:@openclaw/codex
+
+RUN test -n "${CLOUDFLARED_VERSION}" \
+ && test -n "${CLOUDFLARED_SHA256}" \
+ && curl -fsSL --retry 3 \
+      "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" \
+      -o /usr/local/bin/cloudflared \
+ && echo "${CLOUDFLARED_SHA256}  /usr/local/bin/cloudflared" | sha256sum -c - \
+ && chmod +x /usr/local/bin/cloudflared \
+ && cloudflared --version
+
+COPY requirements.base.txt /requirements.base.txt
+COPY requirements.safrano9999.txt /requirements.safrano9999.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.base.txt -r /requirements.safrano9999.txt python-multipart \
+ && python3 -c 'import PIL, dotenv, fastapi, jinja2, mcp, mistune, multipart, pypdf, pymysql, psycopg, reportlab, slowapi, sqlalchemy, uvicorn'
+
+COPY build/services/vditor-notes/ /usr/local/lib/vditor-notes/
+
+ENV SAFRANO9999_STAGE_DIR=/opt/safrano9999/.stage
+LABEL io.safrano9999.base-source-tags.sha256="${FEDORA44_AI_BASE_SOURCE_KEY}"
+COPY .fedora44-ai-base-source-tags.tsv /README/fedora44-ai-base-source-tags.tsv
+COPY safrano9999/WELCOME ${SAFRANO9999_STAGE_DIR}/WELCOME
+COPY safrano9999/CODEANALYST ${SAFRANO9999_STAGE_DIR}/CODEANALYST
+COPY safrano9999/CITADEL ${SAFRANO9999_STAGE_DIR}/CITADEL
+COPY safrano9999/DIESDAS- ${SAFRANO9999_STAGE_DIR}/DIESDAS-
+COPY safrano9999/NEXTCLOUD ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD
+COPY safrano9999/NOTE ${SAFRANO9999_STAGE_DIR}/NOTE
+COPY SCRIPTS /opt/safrano9999/SCRIPTS
+COPY ref.base.conf ${SAFRANO9999_STAGE_DIR}/WELCOME/ref.conf
+
+RUN mkdir -p /tmp/nextcloud-runtime \
+ && test -n "${NEXTCLOUD_PLUGIN_SHA256}" \
+ && curl -fsSL https://github.com/safrano9999/NEXTCLOUD/releases/download/latest/nextcloud-fedora64-plugin-latest.zip \
+      -o /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip \
+ && echo "${NEXTCLOUD_PLUGIN_SHA256}  /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip" \
+      | sha256sum -c - \
+ && unzip -q /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip 'runtime/*' -d ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD \
+ && rm -rf /tmp/nextcloud-runtime
+
+RUN mkdir -p /README \
+ && ln -f /opt/safrano9999/SCRIPTS/safrano9999/image/readme/paper.pdf /README/paper.pdf
+
+RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
+ && . /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
+ && safrano9999_standalone CODEANALYST DIESDAS- \
+ && safrano9999_OC_plugins --link NOTE CITADEL \
+ && safrano9999_OC_plugins --link --fullrun --crontab "CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00" \
+      WELCOME NEXTCLOUD \
+ && install -m 0755 /opt/safrano9999/DIESDAS-/openclaw-llm-ephemeral-autodiscoverer /usr/local/bin/openclaw-llm-ephemeral-autodiscoverer \
+ && rm -rf "$SAFRANO9999_STAGE_DIR"'
+
+RUN openclaw config set plugins.entries.note.hooks.allowConversationAccess true --strict-json
+
+RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
+ && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
+      mv /opt/safrano9999/CITADEL/extensions/disabled/subnet /opt/safrano9999/CITADEL/extensions/enabled/subnet; \
+    fi \
+ && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/tailscale ]; then \
+      mv /opt/safrano9999/CITADEL/extensions/disabled/tailscale /opt/safrano9999/CITADEL/extensions/enabled/tailscale; \
+    fi \
+ && chmod +x /opt/safrano9999/CITADEL/scan.sh
+
+COPY build/services/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
+COPY build/services/openclaw_common.py /usr/local/bin/openclaw_common.py
+COPY build/services/openclaw-safrano9999-build.py /usr/local/bin/openclaw-safrano9999-build.py
+RUN python3 /usr/local/bin/openclaw-safrano9999-build.py
+
+COPY build/services/citadel-scan.service build/services/citadel.service build/services/cloudflared.service \
+     build/services/cockpit.service build/services/codeanalyst.service build/services/fedora44-ai.service \
+     build/services/hermes-dashboard.service build/services/hermes.service build/services/openclaw-config.service \
+     build/services/openclaw.service \
+     build/services/safrano9999-welcome.service build/services/tailscale-up.service build/services/tailscaled.service \
+     build/services/vditor-notes.service /etc/systemd/system/
+COPY openclaw-safrano9999-base.service /etc/systemd/system/openclaw-safrano9999.service
+RUN install -m 0644 /opt/safrano9999/NEXTCLOUD/systemd/nextcloud-sync@.service /etc/systemd/system/nextcloud-sync@.service \
+ && install -m 0755 /opt/safrano9999/NEXTCLOUD/systemd/nextcloud-timer-generator /usr/lib/systemd/system-generators/nextcloud-timer-generator
+COPY build/services/fedora44-runtime-environment-generator.sh /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator
+COPY build/services/systemd/ /etc/systemd/system/
+RUN mkdir -p /usr/local/share/fedora44-ai/bin
+
+RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
+
+COPY build/services/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY build/services/openclaw-safrano9999.py /usr/local/bin/openclaw-safrano9999
+COPY build/services/hermes-configure-openai-v1.py /usr/local/bin/hermes-configure-openai-v1
+COPY build/services/openclaw-patch-models-command.py /usr/local/bin/openclaw-patch-models-command
+COPY build/services/fedora44-ai-init.sh /usr/local/bin/fedora44-ai-init
+COPY build/named_volume_links*.sh /usr/local/bin/
+COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
+COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
+
+RUN install -m 0755 /opt/safrano9999/WELCOME/readme_welcome.py /usr/local/bin/safrano9999-welcome \
+ && ln -f /opt/safrano9999/SCRIPTS/safrano9999/python_header.py /usr/local/bin/python_header.py \
+ && ln -f /opt/safrano9999/SCRIPTS/safrano9999/optional_persistence.sh /usr/local/bin/optional_persistence.sh \
+ && ln -f /opt/safrano9999/SCRIPTS/safrano9999/image/services/tailscale/tailscale-state-up.sh /usr/local/bin/tailscale-state-up.sh \
+ && /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
+    --extra-root /usr/local/bin \
+    --extra-root /etc/systemd/system \
+    -- \
+    config.sh python_header.py \
+    openclaw-config.service openclaw.service openclaw_common.py \
+    safrano9999_plugins.py tailscale-state-up.sh tailscale-up.service tailscaled.service \
+    cloudflared.service env.cloudflare.example config.cloudflare.conf_example config.cloudflare.container \
+    sqlite_persistence.sh optional_persistence.sh \
+    named_volume_links.sh named_volume_links_hermes.sh named_volume_links_openclaw.sh \
+    readme_welcome.py safrano9999-welcome.service \
+    cockpit.service \
+    10-tailscale-ssh.conf 10-fedora-openai-v1.conf 20-safrano9999.conf
+
+RUN sed -i 's#file:///app/dist/#file:///usr/local/lib/node_modules/openclaw/dist/#' \
+      /usr/local/bin/openclaw-allow-all \
+ && chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/openclaw-llm-ephemeral-autodiscoverer /usr/local/bin/hermes-configure-openai-v1 \
+    /usr/local/bin/openclaw-safrano9999 \
+    /usr/local/bin/openclaw-patch-models-command \
+    /usr/local/bin/optional_persistence.sh \
+    /usr/local/bin/tailscale-state-up.sh \
+    /usr/local/bin/fedora44-ai-init \
+    /usr/local/bin/named_volume_links*.sh \
+    /usr/local/bin/safrano9999-welcome \
+    /usr/local/bin/openclaw-crontabs \
+    /usr/local/bin/openclaw-allow-all \
+    /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator
+
+RUN systemctl enable codeanalyst.service citadel.service citadel-scan.service vditor-notes.service fedora44-ai.service safrano9999-welcome.service \
+    tailscaled.service tailscale-up.service openclaw-config.service openclaw-safrano9999.service openclaw.service hermes.service \
+    hermes-dashboard.service cockpit.service
+
+RUN systemctl mask cockpit.socket \
+ && sed -i '1i auth       sufficient   pam_permit.so' /etc/pam.d/cockpit
+
+#RUN /usr/local/bin/openclaw-patch-models-command
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
+
+FROM ${AI_BASE_IMAGE} AS ai-safrano9999
+
+ARG ELECTRUM_VERSION=4.7.2
+ARG LND_VERSION=v0.20.1-beta
+ARG GETH_VERSION=1.17.2
+ARG GETH_COMMIT=be4dc0c4
+ARG SOLANA_INSTALLER_MD5
+ARG ELECTRUM_KEYS_COMMIT
+ARG SAFRANO9999_SOURCE_KEY
+ARG KACHELMANN_APK_RELEASE_ID
+
+ENV ZEROINBOX_DIR=/opt/safrano9999/ZEROINBOX \
+    KACHELMANN_PYTHON=/usr/bin/python3
+LABEL io.safrano9999.source-tags.sha256="${SAFRANO9999_SOURCE_KEY}"
+COPY ref.safrano9999.conf /opt/safrano9999/WELCOME/ref.conf
+
+RUN mkdir -p /usr/local/share/bip39 \
+ && curl -fsSL \
+    https://github.com/iancoleman/bip39/releases/download/0.5.6/bip39-standalone.html \
+    -o /usr/local/share/bip39/index.html \
+ && echo "129b03505824879b8a4429576e3de6951c8599644c1afcaae80840f79237695a  /usr/local/share/bip39/index.html" \
+    | sha256sum -c -
+
+RUN mkdir -p /opt/electrum \
+ && cd /opt/electrum \
+ && curl -fsSLO "https://download.electrum.org/${ELECTRUM_VERSION}/electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && curl -fsSLO "https://download.electrum.org/${ELECTRUM_VERSION}/electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" \
+ && test -n "${ELECTRUM_KEYS_COMMIT}" \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/ThomasV.asc" | gpg --batch --import \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/sombernight_releasekey.asc" | gpg --batch --import \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/Emzy.asc" | gpg --batch --import \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/felixb_f321x.asc" | gpg --batch --import \
+ && gpg --batch --verify "electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && chmod +x "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && "./electrum-${ELECTRUM_VERSION}-x86_64.AppImage" --appimage-extract >/dev/null \
+ && rm -f "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" "electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" \
+ && printf '%s\n' '#!/usr/bin/env bash' 'cd /opt/electrum/squashfs-root' 'exec ./AppRun "$@"' > /usr/local/bin/electrum \
+ && chmod +x /usr/local/bin/electrum
+
+RUN mkdir -p /tmp/lnd \
+ && curl -fsSL \
+    "https://github.com/lightningnetwork/lnd/releases/download/${LND_VERSION}/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+    -o "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+ && echo "e01f755ba18e45a7b20f9fd645a328a250aae241e23b8c1eca06efeb2974570a  /tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+    | sha256sum -c - \
+ && tar -xzf "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" -C /tmp/lnd \
+ && install -m 0755 "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}/lnd" /usr/local/bin/lnd \
+ && install -m 0755 "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}/lncli" /usr/local/bin/lncli \
+ && rm -rf /tmp/lnd \
+ && lnd --version \
+ && lncli --version
+
+RUN gpgconf --kill all && rm -rf /root/.gnupg \
+ && mkdir -p /tmp/geth \
+ && cd /tmp/geth \
+ && curl -fsSLO "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && curl -fsSLO "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc" \
+ && echo "56d2b4772c63b02e7487c76a56b7afd5  geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" | md5sum -c - \
+ && gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys A61A13569BA28146 \
+ && gpg --batch --verify "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc" "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && tar -xzf "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && install -m 0755 "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}/geth" /usr/local/bin/geth \
+ && rm -rf /tmp/geth \
+ && geth version
+
+RUN test -n "${SOLANA_INSTALLER_MD5}" \
+ && curl -fsSL --retry 3 \
+      https://release.anza.xyz/stable/agave-install-init-x86_64-unknown-linux-gnu \
+      -o /tmp/agave-install-init \
+ && echo "${SOLANA_INSTALLER_MD5}  /tmp/agave-install-init" | md5sum -c - \
+ && chmod +x /tmp/agave-install-init \
+ && /tmp/agave-install-init stable \
+ && rm -f /tmp/agave-install-init \
+ && find /root/.local/share/solana/install/active_release/bin -maxdepth 1 -type f -executable \
+      -exec ln -sf {} /usr/local/bin/ \; \
+ && solana --version
+
+COPY .safrano9999-source-tags.tsv /README/safrano9999-source-tags.tsv
+COPY safrano9999/JUGO ${SAFRANO9999_STAGE_DIR}/JUGO
+COPY safrano9999/VikAI ${SAFRANO9999_STAGE_DIR}/VikAI
+COPY safrano9999/PV_D-A-CH ${SAFRANO9999_STAGE_DIR}/PV_D-A-CH
+COPY safrano9999/KIWIX_BRIDGE ${SAFRANO9999_STAGE_DIR}/KIWIX_BRIDGE
+COPY safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES ${SAFRANO9999_STAGE_DIR}/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
+COPY safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW ${SAFRANO9999_STAGE_DIR}/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
+COPY safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager ${SAFRANO9999_STAGE_DIR}/NaturalGrounding-Tiktok-Ying-Video-Manager
+COPY safrano9999/DAILYNEWS ${SAFRANO9999_STAGE_DIR}/DAILYNEWS
+COPY safrano9999/ZEROINBOX ${SAFRANO9999_STAGE_DIR}/ZEROINBOX
+COPY safrano9999/SPANKER ${SAFRANO9999_STAGE_DIR}/SPANKER
+COPY safrano9999/KACHELMANN ${SAFRANO9999_STAGE_DIR}/KACHELMANN
+
+RUN bash -lc '. /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container.sh \
+ && safrano9999_standalone \
+      JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
+      NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
+      SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
+      NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
+      DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+ && _safrano9999_write_webhooks /opt/safrano9999 WELCOME NEXTCLOUD DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+ && _safrano9999_write_fullrun /opt/safrano9999 WELCOME NEXTCLOUD DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+ && printf "%s\n" "CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00" > /opt/safrano9999/.openclaw-crontab \
+ && rm -rf "$SAFRANO9999_STAGE_DIR"'
+
+RUN --mount=type=secret,id=github_token \
+    KACHELMANN_APK_RELEASE_ID="${KACHELMANN_APK_RELEASE_ID}" \
+      /opt/safrano9999/KACHELMANN/scripts/download-android-apk.sh \
+      /opt/safrano9999/KACHELMANN
+
+RUN python3 /usr/local/bin/openclaw-safrano9999-build.py
+
+COPY build/services/bip39.service build/services/jugo.service build/services/kiwix-bridge.service \
+     build/services/napoleon.service build/services/naturalgrounding.service build/services/pvdach-qgis-webhook.service \
+     build/services/pvdach.service /etc/systemd/system/
+RUN install -m 0644 /opt/safrano9999/SPANKER/systemd/spanker-webui.service /etc/systemd/system/spanker-webui.service
+COPY build/services/openclaw-safrano9999.service /etc/systemd/system/openclaw-safrano9999.service
+
+COPY build/services/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
+RUN chmod +x /usr/local/bin/vikai-bootstrap-openclaw-agents \
+ && systemctl enable jugo.service pvdach.service pvdach-qgis-webhook.service \
+      kiwix-bridge.service napoleon.service naturalgrounding.service bip39.service spanker-webui.service
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

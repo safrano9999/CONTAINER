@@ -1,0 +1,63 @@
+#CONTAINER-NAME
+#default-preset: fedora44-ai-base
+#required:
+CONTAINER_NAME=fedora44-ai-base
+
+#default-preset: ${CONTAINER_NAME}
+#required:
+TS_HOSTNAME=${CONTAINER_NAME}
+
+#default-preset: --ssh
+TS_EXTRA_ARGS=--ssh
+
+#named-volume: /named_volumes/CODEX_AUTH /named_volumes/CODEX_AUTH/auth.json /root/.codex/auth.json link
+#default-preset: 1
+CODEX_AUTH_PERSISTENCE=1
+
+#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/workspace /root/.openclaw/workspace dir
+#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/agents /root/.openclaw/agents dir
+#default-preset: 1
+OPENCLAW_PERSISTENT=1
+
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/state.db /root/.hermes/state.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/response_store.db /root/.hermes/response_store.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/kanban.db /root/.hermes/kanban.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/auth.json /root/.hermes/auth.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/config.yaml /root/.hermes/config.yaml link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/SOUL.md /root/.hermes/SOUL.md link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/channel_directory.json /root/.hermes/channel_directory.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/gateway_state.json /root/.hermes/gateway_state.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/memories /root/.hermes/memories dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/sessions /root/.hermes/sessions dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/cron /root/.hermes/cron dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/profiles /root/.hermes/profiles dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/pairing /root/.hermes/pairing dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/platforms /root/.hermes/platforms dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/hooks /root/.hermes/hooks dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/scripts /root/.hermes/scripts dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/skills/custom /root/.hermes/skills/custom dir
+#default-preset: 1
+HERMES_PERSISTENT=1
+
+OPENCLAW_GATEWAY_PORT=18789
+
+#default-preset: CET 07:00,CET 13:00,CET 19:00
+OPENCLAW_CRONTAB=CET 07:00,CET 13:00,CET 19:00
+
+SAFRANO9999_FULLRUN_ON_START=1
+
+HERMES_DASHBOARD_PORT=9119
+
+HERMES_API_SERVER_PORT=8642
+
+#default-preset: /data
+#required:
+VDITOR_NOTES_PATH=/data
+
+#default-preset: 11100
+#required:
+VDITOR_NOTES_PORT=11100
+
+#default-preset: 9090
+#required:
+COCKPIT_PORT=9090

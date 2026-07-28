@@ -53,6 +53,18 @@ fix_instance_paths() {
   done
 }
 
+persist_instance_files() {
+  local file
+
+  # EXIT also runs after Ctrl+C and early failures. Repair generated paths
+  # before moving the files so an interrupted setup never leaves a Quadlet
+  # pointing at the temporary repository-root copies.
+  fix_instance_paths
+  for file in "${INSTANCE_FILES[@]}"; do
+    [ ! -f "$SCRIPT_DIR/$file" ] || mv -f "$SCRIPT_DIR/$file" "$INSTANCE_DIR/$file"
+  done
+}
+
 for arg in "$@"; do
   case "$arg" in
     --help) show_help; exit 0 ;;
@@ -76,9 +88,9 @@ CONTAINER_CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_container.conf"
 BUILD_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_build.conf"
 COMPOSE_FILE="$SCRIPT_DIR/$CONTAINER_NAME-compose.yml"
 QUADLET_FILE="$SCRIPT_DIR/$CONTAINER_NAME.container"
-INSTANCE_FILES=("$CONTAINER_NAME.env" "${CONTAINER_NAME}_config.conf" "${CONTAINER_NAME}_container.conf" "$CONTAINER_NAME-compose.yml" "$CONTAINER_NAME.container")
+INSTANCE_FILES=("$CONTAINER_NAME.env" "${CONTAINER_NAME}_config.conf" "${CONTAINER_NAME}_container.conf" "${CONTAINER_NAME}_build.conf" "$CONTAINER_NAME-compose.yml" "$CONTAINER_NAME.container")
 for file in "${INSTANCE_FILES[@]}"; do [ ! -f "$INSTANCE_DIR/$file" ] || cp -f "$INSTANCE_DIR/$file" "$SCRIPT_DIR/$file"; done
-trap 'for file in "${INSTANCE_FILES[@]}"; do [ ! -f "$SCRIPT_DIR/$file" ] || mv -f "$SCRIPT_DIR/$file" "$INSTANCE_DIR/$file"; done' EXIT
+trap persist_instance_files EXIT
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 
 relink_dev_scripts() {

@@ -44,6 +44,78 @@ trim() {
     printf '%s' "$value"
 }
 
+valid_ipv4() {
+    python3 - "$1" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+
+ipaddress.IPv4Address(sys.argv[1])
+PY
+}
+
+podman_hosts_file_ip() {
+    local hosts_file="$1"
+
+    [ -r "$hosts_file" ] || return 1
+    awk '
+        {
+            for (field = 2; field <= NF; field++) {
+                if ($field == "host.containers.internal") {
+                    print $1
+                    exit
+                }
+            }
+        }
+    ' "$hosts_file"
+}
+
+discover_podman_host_internal_ip() {
+    local configured="${PODMAN_HOST_INTERNAL_IP:-}"
+    local image="${PODMAN_HOST_INTERNAL_IMAGE:-}"
+    local container_id hosts_file candidate
+
+    if [ -n "$configured" ]; then
+        valid_ipv4 "$configured" || {
+            echo "Invalid PODMAN_HOST_INTERNAL_IP: $configured" >&2
+            return 2
+        }
+        printf '%s\n' "$configured"
+        return 0
+    fi
+
+    if command -v podman >/dev/null 2>&1; then
+        while IFS= read -r container_id; do
+            [ -n "$container_id" ] || continue
+            hosts_file="$(podman inspect --format '{{.HostsPath}}' "$container_id" 2>/dev/null || true)"
+            candidate="$(podman_hosts_file_ip "$hosts_file" 2>/dev/null || true)"
+            if [ -n "$candidate" ] && valid_ipv4 "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done < <(podman ps --quiet 2>/dev/null || true)
+
+        if [ -n "$image" ] && podman image exists "$image" >/dev/null 2>&1; then
+            candidate="$(
+                {
+                    podman run --rm \
+                        --network=pasta \
+                        --entrypoint /usr/bin/getent \
+                        "$image" ahostsv4 host.containers.internal 2>/dev/null ||
+                        true
+                } |
+                    awk 'NR == 1 { print $1 }'
+            )"
+            if [ -n "$candidate" ] && valid_ipv4 "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        fi
+    fi
+
+    # Podman 5.x uses this address for Pasta if no explicit override exists.
+    printf '%s\n' '169.254.1.2'
+}
+
 configure_container_name() {
     local example default_name="" value="${CONFIG_CONTAINER_NAME:-}"
 
@@ -686,7 +758,9 @@ configure_from_example() {
     local repeat_group repeat_style repeat_fields base_key repeat_choice repeat_index repeat_suffix
     local pending_value_dupe="" pending_reverse_varname="" value_dupe_target value_dupe_existing value_dupe_choice
     local pending_choices="" pending_when="" pending_when_not="" pending_default_rules="" pending_telegram_token=""
+    local pending_podman_host_internal=false
     local field_choices="" field_when="" field_when_not="" field_default_rules="" field_telegram_token=""
+    local field_podman_host_internal=false podman_host_internal_ip=""
     local telegram_token_key="" telegram_existing=""
     local generator_label choice
     local field_choice_count=0 field_choice_index=0 field_choice_total=0
@@ -1269,6 +1343,10 @@ configure_from_example() {
             fi
             continue
         fi
+        if [[ "$stripped" == "#discover-podman-host-internal" ]]; then
+            pending_podman_host_internal=true
+            continue
+        fi
         if [[ "$stripped" == \#required:* ]]; then
             required_next=true
             continue
@@ -1285,6 +1363,7 @@ configure_from_example() {
             pending_when_not=""
             pending_default_rules=""
             pending_telegram_token=""
+            pending_podman_host_internal=false
             continue
         fi
         if [[ "$stripped" == \#* ]]; then
@@ -1297,6 +1376,7 @@ configure_from_example() {
         field_when_not="$pending_when_not"
         field_default_rules="$pending_default_rules"
         field_telegram_token="$pending_telegram_token"
+        field_podman_host_internal="$pending_podman_host_internal"
         required_next=false
         secret_next=false
         pending_choices=""
@@ -1304,6 +1384,7 @@ configure_from_example() {
         pending_when_not=""
         pending_default_rules=""
         pending_telegram_token=""
+        pending_podman_host_internal=false
 
         entry="${line%%#*}"
         entry="${entry#"${entry%%[![:space:]]*}"}"
@@ -1350,6 +1431,13 @@ configure_from_example() {
             if [ -n "$telegram_token_key" ] && [ "${repeat_key_groups[$telegram_token_key]:-}" = "$repeat_group" ]; then
                 telegram_token_key="$(repeat_group_key "$repeat_group" "$repeat_style" "$telegram_token_key" "$repeat_index")"
             fi
+        fi
+        if [ "$field_podman_host_internal" = "true" ]; then
+            if [ -z "$podman_host_internal_ip" ]; then
+                podman_host_internal_ip="$(discover_podman_host_internal_ip)"
+            fi
+            default="${default//@PODMAN_HOST_INTERNAL_IP@/$podman_host_internal_ip}"
+            field_choices="${field_choices//@PODMAN_HOST_INTERNAL_IP@/$podman_host_internal_ip}"
         fi
         if [[ -n "${seen_keys[$key]+x}" ]]; then
             echo "    duplicate $key in $(basename "$example")" >&2
@@ -1401,6 +1489,11 @@ configure_from_example() {
 
         existing_line="$(grep "^${key}=" "$target" 2>/dev/null | head -1 || true)"
         existing="${existing_line#*=}"
+        if [ "$field_podman_host_internal" = "true" ] && [[ "$existing" == *"@PODMAN_HOST_INTERNAL_IP@"* ]]; then
+            existing="${existing//@PODMAN_HOST_INTERNAL_IP@/$podman_host_internal_ip}"
+            write_config_value "$target" "$key" "$existing"
+            existing_line="$key=$existing"
+        fi
         other_existing=false
         if find_configured_value_elsewhere "$target" "$key" && [ -n "$OTHER_VALUE" ]; then
             other_existing=true

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import re
+import stat
 import sys
+import tempfile
 from pathlib import Path
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -9,6 +12,7 @@ FILES = (
     "{name}.env",
     "{name}_config.conf",
     "{name}_container.conf",
+    "{name}_build.conf",
     "{name}-compose.yml",
     "{name}.container",
 )
@@ -64,6 +68,31 @@ def ask(prompt):
     return sys.stdin.readline().strip()
 
 
+def fix_instance_paths(path, repo, target, name):
+    if not path.is_file():
+        return
+    original = path.read_text()
+    updated = original
+    for pattern in FILES:
+        filename = pattern.format(name=name)
+        updated = updated.replace(str(repo / filename), str(target / filename))
+    if updated == original:
+        return
+
+    file_mode = stat.S_IMODE(path.stat().st_mode)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
+    ) as temporary:
+        temporary.write(updated)
+        temporary_path = Path(temporary.name)
+    os.chmod(temporary_path, file_mode)
+    os.replace(temporary_path, path)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("repo", type=Path)
@@ -84,6 +113,13 @@ def main():
             new = target / old.name
             if old.exists() and not new.exists():
                 old.replace(new)
+        for pattern in FILES:
+            fix_instance_paths(
+                target / pattern.format(name=old_name),
+                repo,
+                target,
+                old_name,
+            )
 
     names = sorted(path.name for path in instances.iterdir() if path.is_dir())
     modes = {

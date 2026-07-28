@@ -36,6 +36,9 @@ fi
 log "configuring OpenClaw (plugins only; no OpenClaw LLM provider)"
 /usr/local/bin/openclaw-configure
 
+log "applying persistent trusted-container OpenClaw policy"
+/usr/local/bin/yolo.sh
+
 zdir="${OPENCLAW_CONFIG_DIR:-/root/.openclaw}/extensions/zeroinbox"
 if [ -f "${zdir}/scripts/gmail-init-labels" ]; then
   log "running ZEROINBOX label init"

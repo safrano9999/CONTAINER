@@ -55,16 +55,17 @@ COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh
 RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
  && /usr/local/bin/openclaw-patch-deterministic
 
-# Allow persistent ZEROINBOX reports to be sent as local Telegram documents.
+# Trust the container filesystem as a local-media source. This affects only
+# outbound media path validation; agent workspaces and named volumes stay as-is.
 RUN python3 - <<'PY'
 from pathlib import Path
 
 root = Path("/app/dist")
 target = 'path.join(resolvedStateDir, "sandboxes")'
-replacement = target + ',\n\t\t"/named_volumes/ZEROINBOX/REPORTS"'
+replacement = target + ',\n\t\t"/"'
 for path in root.glob("local-roots-*.js"):
     text = path.read_text()
-    if "/named_volumes/ZEROINBOX/REPORTS" not in text:
+    if replacement not in text:
         path.write_text(text.replace(target, replacement))
     break
 else:
@@ -140,8 +141,9 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh 
 COPY SCRIPTS/safrano9999/named_volume_links.sh /usr/local/bin/named_volume_links.sh
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
+COPY SCRIPTS/safrano9999/container/openclaw/yolo.sh /usr/local/bin/yolo.sh
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/tailscale-state-up.sh /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/named_volume_links.sh /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
+RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/tailscale-state-up.sh /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/named_volume_links.sh /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all /usr/local/bin/yolo.sh \
  && mkdir -p "$OPENCLAW_CONFIG_DIR" /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.

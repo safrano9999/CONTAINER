@@ -1527,6 +1527,12 @@ configure_from_example() {
             if provider_selector_key "$key"; then
                 val="$(normalize_provider_value "$example" "$key" "$val")"
             fi
+            # Optional choice fields must accept an empty answer. Otherwise an
+            # empty default (for example a repeatable ADDITIONAL_LINE) can
+            # never leave this prompt and loops forever on Enter or EOF.
+            if [ -z "$val" ] && [ "$required" != "true" ]; then
+                break
+            fi
             if [ -n "$field_choices" ]; then
                 if [[ "$val" =~ ^[0-9]+$ ]]; then
                     val="$(printf '%s\n' $field_choices | sed -n "${val}p")"

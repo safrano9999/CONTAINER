@@ -5,6 +5,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$(dirname "$DIR")"
 SCRIPTS_DIR="$(dirname "$SAFRANO_DIR")"
 ROOT="$(dirname "$SCRIPTS_DIR")"
+PY_CORE_DIR="$SCRIPTS_DIR/safrano9999-lib/py-core"
 declare -a EXTRA_ROOTS=()
 
 while [ "$#" -gt 0 ]; do
@@ -24,8 +25,24 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+shared_source() {
+    local file="$1"
+
+    case "$file" in
+        python_header.py|openai_v1.py)
+            if [ -f "$PY_CORE_DIR/$file" ]; then
+                printf '%s\n' "$PY_CORE_DIR/$file"
+            fi
+            return 0
+            ;;
+        *)
+            find "$SAFRANO_DIR" -type f -name "$file" -print -quit
+            ;;
+    esac
+}
+
 for file; do
-    source="$(find "$SAFRANO_DIR" -type f -name "$file" -print -quit)"
+    source="$(shared_source "$file")"
     [ -n "$source" ] || { echo "Missing shared file: $file" >&2; exit 1; }
     while IFS= read -r -d '' target; do
         [ "$source" -ef "$target" ] || ln -f "$source" "$target" || exit 1

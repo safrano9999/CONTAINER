@@ -16,6 +16,8 @@ from openclaw_common import (
 
 
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
+OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME", str(CONFIG_PATH.parent)))
+OPENCLAW_AUTH_DB = OPENCLAW_HOME / "agents/main/agent/openclaw-agent.sqlite"
 DEFAULT_MODEL = "gemini/gemini-3.5-flash"
 OPENCLAW_GATEWAY_INTERNAL_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PORT", "18789") or "18789")
 OPENCLAW_GATEWAY_HOST_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PUBLISH_PORT", "20789") or "20789")
@@ -69,6 +71,15 @@ def _enable_codex_harness(config: dict) -> None:
     config.setdefault("plugins", {}).setdefault("entries", {}).setdefault("codex", {})["enabled"] = True
 
 
+def _enable_authenticated_openai_models(config: dict) -> bool:
+    if not OPENCLAW_AUTH_DB.is_file() or not OPENCLAW_AUTH_DB.stat().st_size:
+        return False
+    config.setdefault("agents", {}).setdefault("defaults", {}).setdefault("models", {})[
+        "openai/*"
+    ] = {}
+    return True
+
+
 def main() -> None:
     _ensure_openclaw_config()
 
@@ -87,6 +98,7 @@ def main() -> None:
         include_tailscale_origins=True,
     )
     openai_v1 = configure_openai_v1_providers(config, default_model=DEFAULT_MODEL)
+    authenticated_openai = _enable_authenticated_openai_models(config)
     telegram_configured = configure_telegram_main(
         config,
         include_binding=True,
@@ -105,6 +117,8 @@ def main() -> None:
             "OpenClaw OpenAI v1 models discovered: "
             f"{openai_v1['discovered_count']}; models written: {openai_v1['written_count']}"
         )
+    if authenticated_openai:
+        print("OpenClaw authenticated OpenAI models enabled: openai/*")
     if telegram_configured:
         print("OpenClaw Telegram configured for default account -> main agent")
         print("OpenClaw Telegram command owners allowed for all Telegram senders")

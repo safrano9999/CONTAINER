@@ -251,15 +251,26 @@ write_source_tag_manifest() {
 }
 
 relink_dev_scripts() {
-    local source target path
+    local source target path tree
 
-    [ -d "$DEV_SCRIPTS_DIR/safrano9999" ] || return 0
-    while IFS= read -r -d '' source; do
-        path="${source#"$DEV_SCRIPTS_DIR"/}"
-        target="$SCRIPTS_DIR/$path"
-        mkdir -p "$(dirname "$target")"
-        [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
-    done < <(find "$DEV_SCRIPTS_DIR/safrano9999" -type f -print0)
+    [ -d "$DEV_SCRIPTS_DIR/.git" ] || return 0
+    for tree in safrano9999 safrano9999-lib; do
+        [ -d "$DEV_SCRIPTS_DIR/$tree" ] || {
+            echo "Missing shared SCRIPTS tree: $tree" >&2
+            exit 1
+        }
+        while IFS= read -r -d '' source; do
+            path="${source#"$DEV_SCRIPTS_DIR"/}"
+            target="$SCRIPTS_DIR/$path"
+            mkdir -p "$(dirname "$target")"
+            [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
+        done < <(
+            find "$DEV_SCRIPTS_DIR/$tree" -type f \
+                ! -path '*/__pycache__/*' \
+                ! -name '*.pyc' \
+                -print0
+        )
+    done
     ln -f "$SAFRANO_SCRIPTS_DIR/merge.sh" "$SCRIPT_DIR/merge.sh"
     ln -f "$SAFRANO_SCRIPTS_DIR/quadlet_finish.py" "$SCRIPT_DIR/quadlet_finish.py"
 }
@@ -272,7 +283,7 @@ write_source_tag_manifest "$BASE_SOURCE_TAG_MANIFEST" "${BASE_REPOS[@]}"
 [ "$FEDORA44_AI_VARIANT" = base ] || \
     write_source_tag_manifest "$SOURCE_TAG_MANIFEST" "${SAFRANO_REPOS[@]}"
 "$IMAGE_SCRIPTS_DIR/relink_shared.sh" \
-    config.sh python_header.py \
+    config.sh python_header.py openai_v1.py \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-up.service tailscaled.service \
     hermes.service hermes-dashboard.service \

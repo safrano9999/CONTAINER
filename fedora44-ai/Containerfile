@@ -214,7 +214,6 @@ RUN bash -lc 'chmod +x /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_co
  && safrano9999_OC_plugins --link NOTE CITADEL \
  && safrano9999_OC_plugins --link --fullrun --crontab "CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00" \
       WELCOME NEXTCLOUD \
- && install -m 0755 /opt/safrano9999/DIESDAS-/openclaw-llm-ephemeral-autodiscoverer /usr/local/bin/openclaw-llm-ephemeral-autodiscoverer \
  && rm -rf "$SAFRANO9999_STAGE_DIR"'
 
 RUN openclaw config set plugins.entries.note.hooks.allowConversationAccess true --strict-json
@@ -258,14 +257,15 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
 
 RUN install -m 0755 /opt/safrano9999/WELCOME/readme_welcome.py /usr/local/bin/safrano9999-welcome \
- && ln -f /opt/safrano9999/SCRIPTS/safrano9999/python_header.py /usr/local/bin/python_header.py \
+ && ln -f /opt/safrano9999/SCRIPTS/safrano9999-lib/py-core/python_header.py /usr/local/bin/python_header.py \
+ && ln -f /opt/safrano9999/SCRIPTS/safrano9999-lib/py-core/openai_v1.py /usr/local/bin/openai_v1.py \
  && ln -f /opt/safrano9999/SCRIPTS/safrano9999/optional_persistence.sh /usr/local/bin/optional_persistence.sh \
  && ln -f /opt/safrano9999/SCRIPTS/safrano9999/image/services/tailscale/tailscale-state-up.sh /usr/local/bin/tailscale-state-up.sh \
  && /opt/safrano9999/SCRIPTS/safrano9999/image/relink_shared.sh \
     --extra-root /usr/local/bin \
     --extra-root /etc/systemd/system \
     -- \
-    config.sh python_header.py \
+    config.sh python_header.py openai_v1.py \
     openclaw-config.service openclaw.service openclaw_common.py \
     safrano9999_plugins.py tailscale-state-up.sh tailscale-up.service tailscaled.service \
     cloudflared.service env.cloudflare.example config.cloudflare.conf_example config.cloudflare.container \
@@ -277,7 +277,7 @@ RUN install -m 0755 /opt/safrano9999/WELCOME/readme_welcome.py /usr/local/bin/sa
 
 RUN sed -i 's#file:///app/dist/#file:///usr/local/lib/node_modules/openclaw/dist/#' \
       /usr/local/bin/openclaw-allow-all \
- && chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/openclaw-llm-ephemeral-autodiscoverer /usr/local/bin/hermes-configure-openai-v1 \
+ && chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/hermes-configure-openai-v1 \
     /usr/local/bin/openclaw-safrano9999 \
     /usr/local/bin/openclaw-patch-models-command \
     /usr/local/bin/optional_persistence.sh \

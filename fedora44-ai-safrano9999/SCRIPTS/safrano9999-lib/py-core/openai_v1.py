@@ -1,148 +1,17 @@
-"""
-Shared environment bootstrap for all REPOS programs.
+"""OpenAI-v1 provider discovery, clients, models, and safe stream consumption."""
 
-Usage — add this as first import in every entrypoint:
+from __future__ import annotations
 
-    from python_header import env, get, get_int, get_port
-
-How it works:
-  1. Loads config.conf from the calling script's directory
-  2. Loads auxiliary *.env files, then .env; falls back to env.example if none exist
-  3. Injected process env wins over file values
-  4. If FASTAPI_HOST was injected by the process, the web server binds 0.0.0.0
-  5. All values are accessible via env dict, get(), or os.environ
-
-Requires: pip install python-dotenv
-"""
-
+import inspect
 import os
 import re
+from collections.abc import AsyncIterable, Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from dotenv import dotenv_values
-
-_process_env = dict(os.environ)
-_process_env_has_fastapi_host = "FASTAPI_HOST" in _process_env
-
-
-def _normalize_env_value(value: str | None) -> str:
-    value = "" if value is None else str(value)
-    if value.strip().lower() == "blank":
-        return ""
-    return value
-
-
-def _find_project_dir() -> Path:
-    """Walk the call stack to find the project directory."""
-    import inspect
-    for frame_info in inspect.stack():
-        caller_file = frame_info.filename
-        if caller_file and not caller_file.startswith("<"):
-            directory = Path(caller_file).resolve().parent
-            if (directory / "config.conf").exists() or (directory / "config.conf_example").exists() or (directory / ".env").exists():
-                return directory
-    return Path.cwd()
-
-
-def _apply_values(values: dict[str, str], overwrite: bool) -> None:
-    for key, value in values.items():
-        if not key:
-            continue
-        if overwrite or key not in os.environ:
-            os.environ[key] = _normalize_env_value(value)
-
-
-def _read_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.exists():
-        return values
-    for key, value in dotenv_values(path).items():
-        values[key] = _normalize_env_value(value)
-    return values
-
-
-def _read_env_files(env_dir: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    files = sorted(p for p in env_dir.glob("*.env") if p.name != ".env")
-    dot_env = env_dir / ".env"
-    if dot_env.exists():
-        files.append(dot_env)
-    if not files:
-        env_example = env_dir / "env.example"
-        if env_example.exists():
-            files.append(env_example)
-    for path in files:
-        values.update(_read_env_file(path))
-    return values
-
-
-_env_dir = _find_project_dir()
-_config_file = _env_dir / "config.conf"
-if not _config_file.exists():
-    _config_file = _env_dir / "config.conf_example"
-_config_values = _read_env_file(_config_file)
-_file_values = dict(_config_values)
-_file_values.update(_read_env_files(_env_dir))
-_apply_values(_file_values, overwrite=False)
-
-_apply_values(_process_env, overwrite=True)
-
-if _process_env_has_fastapi_host:
-    os.environ["FASTAPI_HOST"] = "0.0.0.0"
-
-
-def _ensure_local_sqlite_dir() -> None:
-    backend_pattern = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*_DB_BACKEND)\s*=\s*([^#]*)")
-    backends: dict[str, str] = {}
-    for example in sorted(_env_dir.glob("env*example")):
-        for line in example.read_text(encoding="utf-8").splitlines():
-            if line.lstrip().startswith("#"):
-                continue
-            match = backend_pattern.match(line)
-            if match:
-                backends.setdefault(match.group(1), _normalize_env_value(match.group(2)).strip())
-
-    for key, default in backends.items():
-        if os.environ.get(key, default).strip().lower() in {"sqlite", "sqlite3"}:
-            (_env_dir / "sqlite").mkdir(parents=True, exist_ok=True)
-            return
-
-
-_ensure_local_sqlite_dir()
-
-
-def get(key: str, default: str = "") -> str:
-    """Get env var as string."""
-    return os.environ.get(key, default).strip()
-
-
-def get_int(key: str, default: int = 0) -> int:
-    """Get env var as int, fallback to default on bad input."""
-    raw = os.environ.get(key, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except (ValueError, TypeError):
-        return default
-
-
-def get_bool(key: str, default: bool = False) -> bool:
-    """Get env var as bool (1/true/yes/on → True)."""
-    raw = os.environ.get(key, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
-
-
-def get_port(key: str, default: int = 8080) -> int:
-    """Get env var as validated port number (1-65535)."""
-    port = get_int(key, default)
-    if not (1 <= port <= 65535):
-        raise ValueError(f"{key}={port} is not a valid port (1-65535)")
-    return port
+from python_header import env as _loaded_env  # noqa: F401 — load config and environment
 
 
 @dataclass(frozen=True)
@@ -212,19 +81,34 @@ def _openai_v1_suffixes(values: dict[str, str]) -> list[tuple[int, str]]:
     return [(index, "" if index == 1 else f"_{index}") for index in sorted(indexes)]
 
 
-def _openai_v1_value(source: dict[str, str], field: str, index: int) -> str:
+def openai_v1_env_name(
+    field: str,
+    index: int,
+    values: dict[str, str] | None = None,
+) -> str:
+    source = os.environ if values is None else values
+    field = field.strip().upper()
     if index == 1:
-        return source.get(f"OPENAI_V1_{field}", "")
-    for suffix in (f"_{index}", f"_{index:02d}"):
-        value = source.get(f"OPENAI_V1_{field}{suffix}", "")
-        if value:
-            return value
+        return f"OPENAI_V1_{field}"
+
+    names = [f"OPENAI_V1_{field}_{index}", f"OPENAI_V1_{field}_{index:02d}"]
     pattern = re.compile(rf"^OPENAI_V1_{re.escape(field)}_(\d+)$")
-    for key in sorted(source):
-        match = pattern.match(key)
-        if match and int(match.group(1)) == index:
-            return source.get(key, "")
-    return ""
+    names.extend(
+        name
+        for name in sorted(source)
+        if (match := pattern.match(name)) and int(match.group(1)) == index and name not in names
+    )
+    for name in names:
+        if source.get(name):
+            return name
+    for name in names:
+        if name in source:
+            return name
+    return names[0]
+
+
+def _openai_v1_value(source: dict[str, str], field: str, index: int) -> str:
+    return source.get(openai_v1_env_name(field, index, source), "")
 
 
 def openai_v1_providers(values: dict[str, str] | None = None) -> list[OpenAIV1Provider]:
@@ -317,5 +201,53 @@ def openai_v1_provider_for_model(
     return providers[0]
 
 
-# Snapshot for dict-style access: env["KEY"] or env.get("KEY", "default")
-env = dict(os.environ)
+def _append_delta(buffer: bytearray, chunk: Any) -> None:
+    for choice in getattr(chunk, "choices", ()):
+        content = getattr(getattr(choice, "delta", None), "content", None)
+        if isinstance(content, str):
+            buffer.extend(content.encode("utf-8"))
+
+
+def wipe_bytearray(buffer: bytearray) -> None:
+    """Overwrite a mutable buffer before releasing its storage."""
+    buffer[:] = b"\0" * len(buffer)
+    buffer.clear()
+
+
+@contextmanager
+def openai_v1_stream_buffer(response: Iterable[Any]):
+    """Yield a mutable UTF-8 buffer and zero it immediately after use."""
+    buffer = bytearray()
+    try:
+        for chunk in response:
+            _append_delta(buffer, chunk)
+            del chunk
+        yield buffer
+    finally:
+        wipe_bytearray(buffer)
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+
+
+def consume_openai_v1_stream(response: Iterable[Any]) -> str:
+    """Return concatenated text deltas while keeping raw chunks memory-only."""
+    with openai_v1_stream_buffer(response) as buffer:
+        return buffer.decode("utf-8").strip()
+
+
+async def consume_openai_v1_stream_async(response: AsyncIterable[Any]) -> str:
+    """Async variant of consume_openai_v1_stream."""
+    buffer = bytearray()
+    try:
+        async for chunk in response:
+            _append_delta(buffer, chunk)
+            del chunk
+        return buffer.decode("utf-8").strip()
+    finally:
+        wipe_bytearray(buffer)
+        close = getattr(response, "aclose", None) or getattr(response, "close", None)
+        if callable(close):
+            result = close()
+            if inspect.isawaitable(result):
+                await result

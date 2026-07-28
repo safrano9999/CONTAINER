@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from python_header import OpenAIV1Provider
+    from openai_v1 import OpenAIV1Provider
 
 
 DISCOVERY_TIMEOUT_SECONDS = 5
@@ -252,21 +252,6 @@ class OpenAIV1RuntimeProvider:
     models: tuple[str, ...]
 
 
-def _indexed_openai_v1_env_name(field: str, index: int) -> str:
-    if index == 1:
-        return f"OPENAI_V1_{field}"
-    for suffix in (f"_{index}", f"_{index:02d}"):
-        name = f"OPENAI_V1_{field}{suffix}"
-        if name in os.environ:
-            return name
-    pattern = re.compile(rf"^OPENAI_V1_{re.escape(field)}_(\d+)$")
-    for name in sorted(os.environ):
-        match = pattern.match(name)
-        if match and int(match.group(1)) == index:
-            return name
-    return f"OPENAI_V1_{field}_{index}"
-
-
 def _provider_id(provider: "OpenAIV1Provider", used: set[str]) -> str:
     raw = provider.provider or provider.key
     candidate = re.sub(r"[^a-z0-9._-]+", "_", raw.lower()).strip("._-")
@@ -282,7 +267,7 @@ def discover_openai_v1_runtime_providers(
     consumer: str,
     timeout: float = DISCOVERY_TIMEOUT_SECONDS,
 ) -> list[OpenAIV1RuntimeProvider]:
-    from python_header import openai_v1_models, openai_v1_providers
+    from openai_v1 import openai_v1_env_name, openai_v1_models, openai_v1_providers
 
     configured = openai_v1_providers()
     if not configured:
@@ -291,7 +276,7 @@ def discover_openai_v1_runtime_providers(
     runtime: list[OpenAIV1RuntimeProvider] = []
     used_ids: set[str] = set()
     for provider in configured:
-        key_env = _indexed_openai_v1_env_name("KEY", provider.index)
+        key_env = openai_v1_env_name("KEY", provider.index)
         if not provider.api_key:
             raise SystemExit(f"{key_env} must not be empty")
         provider_id = _provider_id(provider, used_ids)

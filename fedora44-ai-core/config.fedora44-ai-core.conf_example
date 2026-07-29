@@ -1,0 +1,4 @@
+#CONTAINER-NAME
+#default-preset: fedora44-ai-core
+#required:
+CONTAINER_NAME=fedora44-ai-core

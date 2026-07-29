@@ -1,8 +1,5 @@
-#default-preset: ghcr.io/openclaw/openclaw:2026.7.1
-OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:2026.7.1
-
-#default-preset: /root/.openclaw
-OPENCLAW_CONFIG_DIR=/root/.openclaw
+#default-preset: docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
+OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
 
 #default-preset: docker.io/safrano9999/safrano9999-openclaw:latest
 SAFRANO9999_OPENCLAW_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest

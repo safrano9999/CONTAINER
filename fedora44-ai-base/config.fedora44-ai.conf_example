@@ -23,7 +23,6 @@ OPENCLAW_PERSISTENT=1
 #named-volume: /named_volumes/HERMES /named_volumes/HERMES/response_store.db /root/.hermes/response_store.db link
 #named-volume: /named_volumes/HERMES /named_volumes/HERMES/kanban.db /root/.hermes/kanban.db link
 #named-volume: /named_volumes/HERMES /named_volumes/HERMES/auth.json /root/.hermes/auth.json link
-#named-volume: /named_volumes/HERMES /named_volumes/HERMES/config.yaml /root/.hermes/config.yaml link
 #named-volume: /named_volumes/HERMES /named_volumes/HERMES/SOUL.md /root/.hermes/SOUL.md link
 #named-volume: /named_volumes/HERMES /named_volumes/HERMES/channel_directory.json /root/.hermes/channel_directory.json link
 #named-volume: /named_volumes/HERMES /named_volumes/HERMES/gateway_state.json /root/.hermes/gateway_state.json link

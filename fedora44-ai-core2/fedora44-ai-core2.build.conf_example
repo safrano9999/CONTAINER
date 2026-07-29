@@ -1,0 +1,8 @@
+#default-preset: ghcr.io/safrano9999/fedora44-ai-core2:latest
+FEDORA44_AI_CORE2_IMAGE=ghcr.io/safrano9999/fedora44-ai-core2:latest
+
+#default-preset: ghcr.io/safrano9999/fedora44-ai-core:latest
+AI_CORE_IMAGE=ghcr.io/safrano9999/fedora44-ai-core:latest
+
+#default-preset: docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
+OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce

@@ -1,0 +1,240 @@
+FROM quay.io/fedora/fedora:44 AS ai-core
+
+ARG WEBHOOK_VERSION=2.8.3
+ARG HERMES_TAG
+ARG HERMES_COMMIT
+ARG HERMES_VERSION
+ARG NODE_VERSION=stable
+ARG VDITOR_VERSION=3.11.2
+ARG CERTS=/srv/shared/certs
+ARG FEDORA_REPOMD_KEY
+ARG UV_VERSION
+ARG UV_INSTALLER_SHA256
+ARG FUGU_COMMIT
+ARG CLOUDFLARED_VERSION
+ARG CLOUDFLARED_SHA256
+ARG OPENCLAW_VERSION=2026.7.1
+ARG CODEX_VERSION
+ARG CLAUDE_CODE_VERSION
+ARG OPENCLAW_BRAVE_PLUGIN_VERSION
+ARG OPENCLAW_CODEX_PLUGIN_VERSION
+ARG ELECTRUM_VERSION=4.7.2
+ARG LND_VERSION=v0.20.1-beta
+ARG GETH_VERSION=1.17.2
+ARG GETH_COMMIT=be4dc0c4
+ARG SOLANA_INSTALLER_MD5
+ARG ELECTRUM_KEYS_COMMIT
+
+LABEL org.opencontainers.image.title="fedora44-ai-core" \
+      org.opencontainers.image.description="Reusable Fedora 44 systemd base with AI, development, networking and crypto tooling." \
+      org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER"
+
+# Keep the package set and order aligned with the existing fedora44-ai image.
+RUN --mount=type=cache,target=/var/cache/dnf \
+    test -n "${FEDORA_REPOMD_KEY}" \
+ && printf 'Fedora repository state: %s\n' "${FEDORA_REPOMD_KEY}" \
+ && dnf -y update && dnf -y install \
+    bash bash-completion shadow-utils sudo \
+    git gh tmux \
+    nano vim-minimal less \
+    curl wget ca-certificates openssl gnupg2 fuse-libs \
+    nodejs npm \
+    python3 python3-pip \
+    make gcc gcc-c++ \
+    ripgrep fd-find jq sqlite unzip tar gzip xz which file \
+    iputils iproute procps-ng psmisc util-linux \
+    findutils grep sed gawk diffutils \
+    hostname bind-utils net-tools traceroute \
+    lsof strace tcpdump nmap-ncat \
+    v4l-utils zbar qrencode bc ffmpeg mpv libv4l \
+    dbus-x11 xauth mesa-dri-drivers \
+    cockpit cockpit-podman \
+    tailscale
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${NODE_VERSION}" \
+ && npm install -g n \
+ && n "${NODE_VERSION}" \
+ && hash -r \
+ && node --version
+
+COPY ${CERTS}/ /run/fedora44-ai-certs/
+
+RUN \
+    set -eu; \
+    find /run/fedora44-ai-certs -type f \( -name '*.crt' -o -name '*.pem' \) -print \
+      | while IFS= read -r cert; do \
+          if openssl x509 -in "$cert" -noout >/dev/null 2>&1; then \
+            fingerprint="$(openssl x509 -in "$cert" -noout -fingerprint -sha256 \
+              | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"; \
+            install -m 0644 "$cert" "/etc/pki/ca-trust/source/anchors/fedora44-ai-${fingerprint}.crt"; \
+          fi; \
+        done; \
+    update-ca-trust
+
+COPY build/hermes-nous-api-key.patch /tmp/hermes-nous-api-key.patch
+RUN set -eu; \
+    hermes_branch="${HERMES_TAG}"; \
+    if [ "${hermes_branch}" = stable ]; then hermes_branch=main; fi; \
+    curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_COMMIT}/scripts/install.sh" \
+      | bash -s -- --skip-setup --branch "${hermes_branch}" --commit "${HERMES_COMMIT}" \
+ && git -C /usr/local/lib/hermes-agent apply /tmp/hermes-nous-api-key.patch \
+ && grep -q "__version__ = \"${HERMES_VERSION}\"" \
+      /usr/local/lib/hermes-agent/hermes_cli/__init__.py \
+ && npm --prefix /usr/local/lib/hermes-agent run build --workspace web
+
+RUN set -eux; \
+    case "$(uname -m)" in \
+      x86_64) webhook_arch=amd64 ;; \
+      aarch64|arm64) webhook_arch=arm64 ;; \
+      armv7l|armv6l) webhook_arch=arm ;; \
+      i386|i686) webhook_arch=386 ;; \
+      *) echo "Unsupported webhook architecture" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/adnanh/webhook/releases/download/${WEBHOOK_VERSION}/webhook-linux-${webhook_arch}.tar.gz" \
+        | tar -xz --strip-components=1 -C /usr/local/bin "webhook-linux-${webhook_arch}/webhook"; \
+    webhook -version
+
+# systemd container baseline from the existing Fedora image.
+RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
+    && for i in *; do [ "$i" = "systemd-tmpfiles-setup.service" ] || rm -f "$i"; done || true \
+ && rm -f /usr/lib/systemd/system/multi-user.target.wants/* \
+ && rm -f /etc/systemd/system/*.wants/* \
+ && rm -f /usr/lib/systemd/system/local-fs.target.wants/* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*udev* \
+ && rm -f /usr/lib/systemd/system/sockets.target.wants/*initctl* \
+ && rm -f /usr/lib/systemd/system/basic.target.wants/* \
+ && rm -f /usr/lib/systemd/system/anaconda.target.wants/*
+
+RUN mkdir -p /tmp/runtime-root \
+ && chmod 700 /tmp/runtime-root
+
+RUN --mount=type=cache,target=/root/.npm \
+    mkdir -p /tmp/vditor /usr/local/lib/vditor \
+ && npm pack "vditor@${VDITOR_VERSION}" --pack-destination /tmp/vditor \
+ && tar -xzf /tmp/vditor/vditor-*.tgz --strip-components=1 -C /usr/local/lib/vditor \
+ && test -f /usr/local/lib/vditor/dist/index.min.js \
+ && rm -rf /tmp/vditor
+
+RUN test -n "${UV_VERSION}" \
+ && test -n "${UV_INSTALLER_SHA256}" \
+ && curl -fsSL --retry 3 "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh \
+ && echo "${UV_INSTALLER_SHA256}  /tmp/uv-install.sh" | sha256sum -c - \
+ && UV_UNMANAGED_INSTALL=/usr/local/bin sh /tmp/uv-install.sh \
+ && rm -f /tmp/uv-install.sh \
+ && uv --version
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${CODEX_VERSION}" \
+ && test -n "${CLAUDE_CODE_VERSION}" \
+ && test -n "${OPENCLAW_VERSION}" \
+ && npm install -g --include=optional \
+      "@openai/codex@${CODEX_VERSION}" \
+      "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+      "openclaw@${OPENCLAW_VERSION}" \
+ && test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = "${OPENCLAW_VERSION}"
+
+RUN test -n "${FUGU_COMMIT}" \
+ && git init /root/.fugu \
+ && git -C /root/.fugu remote add origin https://github.com/SakanaAI/fugu.git \
+ && git -C /root/.fugu fetch --depth=1 origin "${FUGU_COMMIT}" \
+ && git -C /root/.fugu checkout --detach FETCH_HEAD \
+ && test "$(git -C /root/.fugu rev-parse HEAD)" = "${FUGU_COMMIT}" \
+ && mkdir -p /root/.codex \
+ && cp /root/.fugu/configs/files/fugu.json /root/.codex/fugu.json \
+ && sed 's|{{CODEX_HOME}}|/root/.codex|g' /root/.fugu/configs/formats/modern/files/fugu.config.toml > /root/.codex/fugu.config.toml \
+ && cp /root/.fugu/configs/injects/model_providers.sakana.toml /root/.codex/config.toml \
+ && install -m 0755 /root/.fugu/scripts/codex-fugu /usr/local/bin/codex-fugu
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${OPENCLAW_BRAVE_PLUGIN_VERSION}" \
+ && openclaw plugins install "@openclaw/brave-plugin@${OPENCLAW_BRAVE_PLUGIN_VERSION}"
+
+RUN --mount=type=cache,target=/root/.npm \
+    test -n "${OPENCLAW_CODEX_PLUGIN_VERSION}" \
+ && printf 'ClawHub Codex plugin release: %s\n' "${OPENCLAW_CODEX_PLUGIN_VERSION}" \
+ && openclaw plugins install clawhub:@openclaw/codex
+
+RUN test -n "${CLOUDFLARED_VERSION}" \
+ && test -n "${CLOUDFLARED_SHA256}" \
+ && curl -fsSL --retry 3 \
+      "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" \
+      -o /usr/local/bin/cloudflared \
+ && echo "${CLOUDFLARED_SHA256}  /usr/local/bin/cloudflared" | sha256sum -c - \
+ && chmod +x /usr/local/bin/cloudflared \
+ && cloudflared --version
+
+COPY requirements.base.txt /requirements.base.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.base.txt python-multipart \
+ && python3 -c 'import dotenv, fastapi, jinja2, multipart, pymysql, psycopg, reportlab, sqlalchemy, uvicorn, yaml'
+
+COPY build/services/vditor-notes/ /usr/local/lib/vditor-notes/
+
+RUN echo '{"hasCompletedOnboarding":true}' > /root/.claude.json
+
+# Generic crypto and blockchain tooling previously installed in the upper
+# fedora44-ai image is deliberately moved into the reusable core.
+RUN mkdir -p /usr/local/share/bip39 \
+ && curl -fsSL \
+    https://github.com/iancoleman/bip39/releases/download/0.5.6/bip39-standalone.html \
+    -o /usr/local/share/bip39/index.html \
+ && echo "129b03505824879b8a4429576e3de6951c8599644c1afcaae80840f79237695a  /usr/local/share/bip39/index.html" \
+    | sha256sum -c -
+
+RUN mkdir -p /opt/electrum \
+ && cd /opt/electrum \
+ && curl -fsSLO "https://download.electrum.org/${ELECTRUM_VERSION}/electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && curl -fsSLO "https://download.electrum.org/${ELECTRUM_VERSION}/electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" \
+ && test -n "${ELECTRUM_KEYS_COMMIT}" \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/ThomasV.asc" | gpg --batch --import \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/sombernight_releasekey.asc" | gpg --batch --import \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/Emzy.asc" | gpg --batch --import \
+ && curl -fsSL "https://raw.githubusercontent.com/spesmilo/electrum/${ELECTRUM_KEYS_COMMIT}/pubkeys/felixb_f321x.asc" | gpg --batch --import \
+ && gpg --batch --verify "electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && chmod +x "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" \
+ && "./electrum-${ELECTRUM_VERSION}-x86_64.AppImage" --appimage-extract >/dev/null \
+ && rm -f "electrum-${ELECTRUM_VERSION}-x86_64.AppImage" "electrum-${ELECTRUM_VERSION}-x86_64.AppImage.asc" \
+ && printf '%s\n' '#!/usr/bin/env bash' 'cd /opt/electrum/squashfs-root' 'exec ./AppRun "$@"' > /usr/local/bin/electrum \
+ && chmod +x /usr/local/bin/electrum
+
+RUN mkdir -p /tmp/lnd \
+ && curl -fsSL \
+    "https://github.com/lightningnetwork/lnd/releases/download/${LND_VERSION}/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+    -o "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+ && echo "e01f755ba18e45a7b20f9fd645a328a250aae241e23b8c1eca06efeb2974570a  /tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" \
+    | sha256sum -c - \
+ && tar -xzf "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}.tar.gz" -C /tmp/lnd \
+ && install -m 0755 "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}/lnd" /usr/local/bin/lnd \
+ && install -m 0755 "/tmp/lnd/lnd-linux-amd64-${LND_VERSION}/lncli" /usr/local/bin/lncli \
+ && rm -rf /tmp/lnd \
+ && lnd --version \
+ && lncli --version
+
+RUN gpgconf --kill all && rm -rf /root/.gnupg \
+ && mkdir -p /tmp/geth \
+ && cd /tmp/geth \
+ && curl -fsSLO "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && curl -fsSLO "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc" \
+ && echo "56d2b4772c63b02e7487c76a56b7afd5  geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" | md5sum -c - \
+ && gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys A61A13569BA28146 \
+ && gpg --batch --verify "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz.asc" "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && tar -xzf "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}.tar.gz" \
+ && install -m 0755 "geth-linux-amd64-${GETH_VERSION}-${GETH_COMMIT}/geth" /usr/local/bin/geth \
+ && rm -rf /tmp/geth \
+ && geth version
+
+RUN test -n "${SOLANA_INSTALLER_MD5}" \
+ && curl -fsSL --retry 3 \
+      https://release.anza.xyz/stable/agave-install-init-x86_64-unknown-linux-gnu \
+      -o /tmp/agave-install-init \
+ && echo "${SOLANA_INSTALLER_MD5}  /tmp/agave-install-init" | md5sum -c - \
+ && chmod +x /tmp/agave-install-init \
+ && /tmp/agave-install-init stable \
+ && rm -f /tmp/agave-install-init \
+ && find /root/.local/share/solana/install/active_release/bin -maxdepth 1 -type f -executable \
+      -exec ln -sf {} /usr/local/bin/ \; \
+ && solana --version
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

@@ -1,58 +1,44 @@
-# fedora44-ai image builder
+# fedora44-ai layered image builder
 
-This private repository builds two Fedora 44 systemd container images:
+This directory builds the two private project layers at the end of the Fedora
+image chain:
 
-- `ghcr.io/safrano9999/fedora44-ai-base`
-- `ghcr.io/safrano9999/fedora44-ai-safrano9999`
+```text
+ghcr.io/safrano9999/fedora44-ai-core
+  -> ghcr.io/safrano9999/fedora44-ai-core2
+  -> ghcr.io/safrano9999/fedora44-ai-base
+  -> ghcr.io/safrano9999/fedora44-ai-safrano9999
+```
 
-Runtime configuration and container instances live in the separate
-`fedora44-ai-base` and `fedora44-ai-safrano9999` repositories.
+`ai-base` inherits the generic systemd, OpenClaw Ephemeral, Hermes Ephemeral,
+Tailscale, Cockpit, Vditor and named-volume runtime from `fedora44-ai-core2`.
+It adds only WELCOME, CODEANALYST, CITADEL, DIESDAS- and NEXTCLOUD plus their
+requirements and services.
 
-## Files
+`ai-safrano9999` inherits the published Base image and adds only the remaining
+Safrano repositories, their requirements and their services. Heavy Fedora,
+Node, Hermes, OpenClaw, media and crypto installations are never repeated in
+either target.
 
-- `Containerfile`: the `ai-base` and `ai-safrano9999` image targets.
-- `build.conf`: versioned build inputs for Node, Electrum, LND, Geth and webhook.
-- `build/`: image services and build helpers, hardlinked from the SOT in `SCRIPTS`.
-- `build-local.sh`: prepares the current sources and builds either image target locally.
-- `prepare-build-context.sh`: stages source repositories, requirements,
-  certificates, source manifests and the OpenClaw deterministic patch.
-- `tag.sh`: tags and dispatches the GitHub Actions image build.
+## Build-time versus runtime
 
-The canonical build helpers are stored under:
+`prepare-build-context.sh` performs build-time source staging:
+
+- shallow-clones the exact project repositories;
+- writes source manifests;
+- stages release-only plugin payloads where required;
+- generates separate Base and Safrano requirement files;
+- restores the small set of image-layer build helpers from `SCRIPTS`.
+
+At container runtime, `fedora44-ai-core2` owns environment projection, targeted
+named-volume links and complete ephemeral OpenClaw/Hermes configuration.
+`openclaw-safrano9999.service` runs after the fresh OpenClaw configuration and
+only registers the additional project plugins before the gateway starts.
+
+Canonical build helpers live below:
 
 ```text
 SCRIPTS/safrano9999/image/fedora44-ai/
 ```
 
-`prepare-build-context.sh` refreshes all local Hardlinks before staging. GitHub
-Actions clones the current SCRIPTS repository and runs the same script, so the
-SCRIPTS version remains authoritative.
-
-## Build
-
-Publish only the Safrano layer on top of the current Base image:
-
-```bash
-./tag.sh safrano9999
-```
-
-Rebuild Base first and then publish the Safrano layer:
-
-```bash
-./tag.sh all
-```
-
-Both modes publish a monthly counter tag and update `latest`.
-
-To prepare the context without building an image locally:
-
-```bash
-./prepare-build-context.sh
-```
-
-The runtime repositories call the same builder when `Build locally` is selected:
-
-```bash
-./build-local.sh base
-./build-local.sh safrano9999
-```
+The GitHub workflow always uses a fresh context and no persistent Buildx cache.

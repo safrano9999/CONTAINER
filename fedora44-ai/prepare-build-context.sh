@@ -19,7 +19,7 @@ SOT="$SCRIPTS_ROOT/safrano9999/image/fedora44-ai"
 BUILD="$CONTEXT/build"
 REPOS="$CONTEXT/safrano9999"
 
-BASE_REPOS=(WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD NOTE)
+BASE_REPOS=(WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD)
 SAFRANO_REPOS=(
     JUGO VikAI PV_D-A-CH KIWIX_BRIDGE
     NAPOLEON_HILLS_AI_MASTERMIND_CLASSES SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
@@ -37,49 +37,41 @@ link_file() {
     [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
 }
 
-link_tree() {
-    local source="$1" target="$2" file relative
-    [ -d "$source" ] || { echo "Missing SOT build tree: $source" >&2; exit 1; }
-    while IFS= read -r -d '' file; do
-        relative="${file#"$source"/}"
-        link_file "$file" "$target/$relative"
-    done < <(find "$source" -type f -not -path '*/__pycache__/*' -print0)
-}
-
 relink_build_files() {
+    local name
+    local -a layer_services=(
+        bip39.service
+        citadel-scan.service
+        citadel.service
+        codeanalyst.service
+        jugo.service
+        kiwix-bridge.service
+        napoleon.service
+        naturalgrounding.service
+        openclaw-safrano9999-build.py
+        openclaw-safrano9999.py
+        openclaw-safrano9999.service
+        pvdach-qgis-webhook.service
+        pvdach.service
+        vikai-bootstrap-openclaw-agents.py
+    )
+
     rm -rf "$BUILD"
-    mkdir -p "$BUILD/services/systemd"
-    link_tree "$SOT/services" "$BUILD/services"
-    link_file "$SOT/hermes-nous-api-key.patch" "$BUILD/hermes-nous-api-key.patch"
+    mkdir -p "$BUILD/services/systemd/openclaw.service.d"
+    for name in "${layer_services[@]}"; do
+        link_file "$SOT/services/$name" "$BUILD/services/$name"
+    done
     link_file "$SOT/resolve-build-inputs.sh" "$BUILD/resolve-build-inputs.sh"
     link_file "$SOT/build-local.sh" "$CONTEXT/build-local.sh"
     link_file "$SOT/prepare-build-context.sh" "$CONTEXT/prepare-build-context.sh"
     [ -f "$CONTEXT/build.conf" ] || { echo "Missing build.conf in $CONTEXT" >&2; exit 1; }
 
     local shared="$SCRIPTS_ROOT/safrano9999/image/services"
-    link_file "$shared/cloudflare/cloudflared.service" "$BUILD/services/cloudflared.service"
-    link_file "$shared/cockpit/cockpit.service" "$BUILD/services/cockpit.service"
-    link_file "$shared/hermes/hermes-dashboard.service" "$BUILD/services/hermes-dashboard.service"
-    link_file "$shared/hermes/hermes.service" "$BUILD/services/hermes.service"
-    link_file "$shared/openclaw/openclaw-config.service" "$BUILD/services/openclaw-config.service"
-    link_file "$shared/openclaw/openclaw.service" "$BUILD/services/openclaw.service"
     link_file "$shared/openclaw/openclaw_common.py" "$BUILD/services/openclaw_common.py"
     link_file "$shared/openclaw/safrano9999_plugins.py" "$BUILD/services/safrano9999_plugins.py"
     link_file "$shared/readme/safrano9999-welcome.service" "$BUILD/services/safrano9999-welcome.service"
-    link_file "$shared/tailscale/tailscale-up.service" "$BUILD/services/tailscale-up.service"
-    link_file "$shared/tailscale/tailscaled.service" "$BUILD/services/tailscaled.service"
-    link_file "$shared/openclaw/openclaw-config.service.d/10-fedora-openai-v1.conf" \
-        "$BUILD/services/systemd/openclaw-config.service.d/10-fedora-openai-v1.conf"
-    link_file "$shared/openclaw/openclaw.service.d/10-fedora-openai-v1.conf" \
-        "$BUILD/services/systemd/openclaw.service.d/10-fedora-openai-v1.conf"
     link_file "$shared/openclaw/openclaw.service.d/20-safrano9999.conf" \
         "$BUILD/services/systemd/openclaw.service.d/20-safrano9999.conf"
-    link_file "$shared/tailscale/tailscale-up.service.d/10-tailscale-ssh.conf" \
-        "$BUILD/services/systemd/tailscale-up.service.d/10-tailscale-ssh.conf"
-
-    link_file "$SCRIPTS_ROOT/safrano9999/named_volume_links.sh" "$BUILD/named_volume_links.sh"
-    link_file "$SCRIPTS_ROOT/safrano9999/named_volume_links_hermes.sh" "$BUILD/named_volume_links_hermes.sh"
-    link_file "$SCRIPTS_ROOT/safrano9999/named_volume_links_openclaw.sh" "$BUILD/named_volume_links_openclaw.sh"
 }
 
 stage_scripts() {
@@ -329,64 +321,7 @@ merge_requirements_and_reference() {
     )
 }
 
-github_token() {
-    if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
-        printf '%s\n' "${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-    elif command -v gh >/dev/null && gh auth status --hostname github.com >/dev/null 2>&1; then
-        gh auth token
-    fi
-}
-
-stage_openclaw_patch() {
-    local target="$CONTEXT/openclaw-deterministic-patch" temporary releases archive_url checksum_url
-    local archive checksum version digest token
-    local -a auth=()
-    token="$(github_token)"
-    [ -z "$token" ] || auth=(-H "Authorization: Bearer $token" -H "X-GitHub-Api-Version: 2022-11-28")
-    temporary="$(mktemp -d)"
-    trap 'rm -rf "$temporary"' RETURN
-    releases="$(curl -fsSL --retry 3 "${auth[@]}" \
-        'https://api.github.com/repos/safrano9999/openclaw/releases?per_page=100')"
-    IFS=$'\t' read -r archive_url checksum_url < <(jq -r 'first(.[] | select(.draft == false) | .assets as $assets | ($assets[] | select(.name | test("^openclaw-.*-deterministic-.*\\.tar\\.gz$"))) as $archive | ($assets[] | select(.name == ($archive.name + ".sha256"))) as $checksum | [$archive.browser_download_url, $checksum.browser_download_url] | @tsv)' <<< "$releases")
-    [ -n "$archive_url" ] && [ -n "$checksum_url" ] || { echo "OpenClaw patch release not found" >&2; exit 1; }
-    archive="${archive_url##*/}"
-    checksum="${checksum_url##*/}"
-    curl -fsSL --retry 3 -L "${auth[@]}" "$archive_url" -o "$temporary/$archive"
-    curl -fsSL --retry 3 -L "${auth[@]}" "$checksum_url" -o "$temporary/$checksum"
-    (cd "$temporary" && sha256sum -c "$checksum")
-    version="${archive#openclaw-}"
-    version="${version%%-deterministic-*}"
-    digest="$(awk 'NR == 1 {print $1}' "$temporary/$checksum")"
-    [[ "$version" =~ ^[A-Za-z0-9._+-]+$ && "$digest" =~ ^[0-9a-f]{64}$ ]] || {
-        echo "Invalid OpenClaw patch metadata" >&2; exit 1;
-    }
-    rm -rf "$target"
-    mkdir -p "$target"
-    install -m 0644 "$temporary/$archive" "$target/patch.tar.gz"
-    printf '%s  patch.tar.gz\n' "$digest" > "$target/patch.tar.gz.sha256"
-    printf '%s\n' "$version" > "$target/openclaw.version"
-    printf '%s\n' "$archive" > "$target/source.name"
-    rm -rf "$temporary"
-    trap - RETURN
-}
-
-stage_certificates() {
-    local source="$1" target="$CONTEXT/${1#/}" cert fingerprint count=0
-    [[ "$source" == /* ]] || { echo "CERTS must be absolute: $source" >&2; exit 1; }
-    rm -rf "$target"
-    mkdir -p "$target"
-    [ -d "$source" ] || { echo "  No custom certificates at $source"; return; }
-    while IFS= read -r -d '' cert; do
-        openssl x509 -in "$cert" -noout >/dev/null 2>&1 || continue
-        fingerprint="$(openssl x509 -in "$cert" -noout -fingerprint -sha256 \
-            | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-        install -m 0644 "$cert" "$target/fedora44-ai-${fingerprint}.crt"
-        count=$((count + 1))
-    done < <(find "$source" -type f \( -name '*.crt' -o -name '*.pem' \) -print0)
-    printf '  Staged %d certificate(s)\n' "$count"
-}
-
-for command in curl git jq openssl python3 sha256sum; do
+for command in curl git jq python3 sha256sum; do
     command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }
 done
 
@@ -399,13 +334,8 @@ write_manifest "$CONTEXT/.fedora44-ai-base-source-tags.tsv" "${BASE_REPOS[@]}"
 write_manifest "$CONTEXT/.safrano9999-source-tags.tsv" "${SAFRANO_REPOS[@]}"
 stage_release_plugins
 merge_requirements_and_reference
-stage_openclaw_patch
-
-set -a
-. "$CONTEXT/build.conf"
-set +a
-stage_certificates "$CERTS"
-"$BUILD/resolve-build-inputs.sh" "$CONTEXT/.resolved-build.env" "$NODE_VERSION" \
-    "$CONTEXT/openclaw-deterministic-patch" "$CONTEXT/.safrano9999-source-tags.tsv" \
+"$BUILD/resolve-build-inputs.sh" \
+    "$CONTEXT/.resolved-build.env" \
+    "$CONTEXT/.safrano9999-source-tags.tsv" \
     "$CONTEXT/.fedora44-ai-base-source-tags.tsv"
 printf 'Build context ready: %s\n' "$CONTEXT"

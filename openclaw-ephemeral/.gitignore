@@ -1,0 +1,23 @@
+# Generated merged examples.
+/env.example
+/config.conf_example
+/container.example
+/requirements.txt
+
+# Per-instance state is stored here after every setup run.
+/CONTAINER/
+
+# Temporary root copies protected by setup.sh's EXIT trap.
+/*.env
+/*_config.conf
+/*_container.conf
+/*_build.conf
+/*-compose.yml
+/*.container
+
+# Local interpreter and test state.
+**/__pycache__/
+**/*.py[cod]
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/

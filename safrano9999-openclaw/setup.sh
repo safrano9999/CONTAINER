@@ -20,8 +20,8 @@ DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
 SOURCE_TAG_MANIFEST="$SCRIPT_DIR/.safrano9999-source-tags.tsv"
 CONTAINER_NAME=""
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/safrano9999-openclaw:latest"
-PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN CITADEL NOTE)
-CONFIG_PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN NOTE)
+PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN CITADEL)
+CONFIG_PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN)
 
 NO_CONFIG=false
 NO_CACHE=false
@@ -503,8 +503,7 @@ render_compose_and_quadlet() {
       printf '      context: %s\n' "$(yaml_dq "$SCRIPT_DIR")"
       printf '      dockerfile: Containerfile\n'
       printf '      args:\n'
-      printf '        OPENCLAW_IMAGE: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_IMAGE")"
-      printf '        OPENCLAW_CONFIG_DIR: %s\n' "$(yaml_dq "$OPENCLAW_BUILD_CONFIG_DIR")"
+      printf '        OPENCLAW_EPHEMERAL_IMAGE: %s\n' "$(yaml_dq "$OPENCLAW_EPHEMERAL_BUILD_IMAGE")"
       printf '        SAFRANO9999_SOURCE_KEY: %s\n' "$(yaml_dq "$SAFRANO9999_SOURCE_KEY")"
     fi
     printf '    image: %s\n' "$image"
@@ -579,7 +578,11 @@ render_compose_and_quadlet() {
 
 echo "  Staging plugin release archives -> safrano9999/"
 printf 'repository\tversion_tag\tversion_commit\tartifact_sha256\n' > "$SOURCE_TAG_MANIFEST"
-rm -f "$SAFRANO_DIR/calendar-latest.zip" "$SAFRANO_DIR/calendar-latest.zip.sha256"
+rm -f \
+  "$SAFRANO_DIR/calendar-latest.zip" \
+  "$SAFRANO_DIR/calendar-latest.zip.sha256" \
+  "$SAFRANO_DIR/note-latest.zip" \
+  "$SAFRANO_DIR/note-latest.zip.sha256"
 for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"
@@ -597,14 +600,15 @@ if ! $NO_CONFIG; then
   [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
   ( cd "$SCRIPT_DIR" && bash "$config_sh" )
   rm -f "$QUADLET_FILE" "$COMPOSE_FILE" "$SCRIPT_DIR/docker-compose.yml"
-  ( cd "$SCRIPT_DIR" && bash "$SAFRANO_SCRIPTS_DIR/legacy.sh" "$SCRIPT_DIR" )
 fi
 
 DOCKER_IO_IMAGE="$(docker_io_image)"
-OPENCLAW_BUILD_IMAGE="$(config_value OPENCLAW_IMAGE || true)"
-[ -n "$OPENCLAW_BUILD_IMAGE" ] || { echo "Missing OPENCLAW_IMAGE in $(basename "$BUILD_FILE")" >&2; exit 1; }
-OPENCLAW_BUILD_CONFIG_DIR="$(config_value OPENCLAW_CONFIG_DIR || true)"
-[ -n "$OPENCLAW_BUILD_CONFIG_DIR" ] || { echo "Missing OPENCLAW_CONFIG_DIR in $(basename "$BUILD_FILE")" >&2; exit 1; }
+OPENCLAW_EPHEMERAL_BUILD_IMAGE="$(config_value OPENCLAW_EPHEMERAL_IMAGE || true)"
+[ -n "$OPENCLAW_EPHEMERAL_BUILD_IMAGE" ] || {
+  echo "Missing OPENCLAW_EPHEMERAL_IMAGE in $(basename "$BUILD_FILE")" >&2
+  exit 1
+}
+OPENCLAW_BUILD_CONFIG_DIR=/root/.openclaw
 
 EXISTING_IMAGE="$(read_kv_file "$QUADLET_FILE" Image || true)"
 RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
@@ -640,15 +644,13 @@ case "$IMG_CHOICE" in
     if $NO_CACHE; then
       echo "  Building $LOCAL_IMAGE with --no-cache ..."
       podman build --pull=always --no-cache \
-        --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
-        --build-arg "OPENCLAW_CONFIG_DIR=$OPENCLAW_BUILD_CONFIG_DIR" \
+        --build-arg "OPENCLAW_EPHEMERAL_IMAGE=$OPENCLAW_EPHEMERAL_BUILD_IMAGE" \
         --build-arg "SAFRANO9999_SOURCE_KEY=$SAFRANO9999_SOURCE_KEY" \
         -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     else
       echo "  Building $LOCAL_IMAGE ..."
       podman build \
-        --build-arg "OPENCLAW_IMAGE=$OPENCLAW_BUILD_IMAGE" \
-        --build-arg "OPENCLAW_CONFIG_DIR=$OPENCLAW_BUILD_CONFIG_DIR" \
+        --build-arg "OPENCLAW_EPHEMERAL_IMAGE=$OPENCLAW_EPHEMERAL_BUILD_IMAGE" \
         --build-arg "SAFRANO9999_SOURCE_KEY=$SAFRANO9999_SOURCE_KEY" \
         -t "$LOCAL_IMAGE" -f "$SCRIPT_DIR/Containerfile" "$SCRIPT_DIR"
     fi

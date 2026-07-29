@@ -1,0 +1,11 @@
+[Unit]
+Description=Fedora44 AI runtime initialization
+Before=openclaw-config.service openclaw.service hermes.service hermes-dashboard.service vditor-notes.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fedora44-ai-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

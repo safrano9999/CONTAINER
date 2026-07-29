@@ -43,22 +43,9 @@ set -a
 . "$ROOT/build.conf"
 set +a
 
-for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT WEBHOOK_VERSION; do
-    [ -n "${!name:-}" ] || { echo "Missing $name in build.conf" >&2; exit 1; }
-done
 [ -s "$ROOT/.resolved-build.env" ] || { echo "Missing .resolved-build.env" >&2; exit 1; }
 
-BUILD_ARGS=(
-    --build-arg "CERTS=$CERTS"
-    --build-arg "HERMES_TAG=$HERMES_TAG"
-    --build-arg "HERMES_COMMIT=$HERMES_COMMIT"
-    --build-arg "HERMES_VERSION=$HERMES_VERSION"
-    --build-arg "ELECTRUM_VERSION=$ELECTRUM_VERSION"
-    --build-arg "LND_VERSION=$LND_VERSION"
-    --build-arg "GETH_VERSION=$GETH_VERSION"
-    --build-arg "GETH_COMMIT=$GETH_COMMIT"
-    --build-arg "WEBHOOK_VERSION=$WEBHOOK_VERSION"
-)
+BUILD_ARGS=()
 while IFS='=' read -r key value; do
     [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || {
         echo "Invalid resolved build argument: $key" >&2
@@ -72,7 +59,11 @@ case "$VARIANT" in
     base)
         TARGET=ai-base
         IMAGE=localhost/fedora44-ai-base:latest
+        CORE2_IMAGE="${AI_CORE2_IMAGE:-ghcr.io/safrano9999/fedora44-ai-core2:latest}"
         PULL_POLICY=always
+        [[ "$CORE2_IMAGE" != localhost/* ]] || PULL_POLICY=missing
+        [[ "$CORE2_IMAGE" != ghcr.io/* ]] || ensure_ghcr_login
+        BUILD_ARGS+=(--build-arg "AI_CORE2_IMAGE=$CORE2_IMAGE")
         ;;
     safrano9999)
         TARGET=ai-safrano9999

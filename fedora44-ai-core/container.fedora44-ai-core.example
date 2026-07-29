@@ -1,0 +1,9 @@
+# Container port block: 2=20000-29999, TUN=no host publishing, blank=manual.
+CONTAINER_NR=
+
+#repeat-group: ADDITIONAL_LINE suffix02 ADDITIONAL_LINE
+#repeat-freeform: ADDITIONAL_LINE
+#choices: Network=slirp4netns:mtu=1500 Network=pasta:--map-host-loopback,@PODMAN_HOST_INTERNAL_IP@,--dns-host,1.1.1.1,--dns-host,9.9.9.9
+#default-preset: Network=slirp4netns:mtu=1500
+#discover-podman-host-internal
+ADDITIONAL_LINE=Network=slirp4netns:mtu=1500

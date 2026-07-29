@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Configure OpenClaw for the safcontainer plugin gateway."""
+"""Register only the additional safcontainer plugins and command aliases."""
 
 import json
 import os
 from pathlib import Path
 
 from openclaw_common import (
-    configure_gateway,
-    configure_telegram_main,
-    ensure_main_agent,
-    openclaw_cmd,
     refresh_plugin_registry,
 )
 from safrano9999_plugins import (
@@ -19,7 +15,6 @@ from safrano9999_plugins import (
 
 
 CONFIG_PATH = Path(os.environ.get("OPENCLAW_CONFIG", "/root/.openclaw/openclaw.json"))
-GATEWAY_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PORT", "18789") or "18789")
 PLUGINS_DIR = Path(os.environ.get("OPENCLAW_PLUGINS_DIR", str(CONFIG_PATH.parent / "extensions")))
 
 CONTAINER_ONLY_COMMAND_ALIASES = {
@@ -55,36 +50,6 @@ CONTAINER_ONLY_ALIAS_BLOCKS = {
 """,
 }
 
-
-def _ensure_openclaw_config() -> None:
-    if CONFIG_PATH.exists() and CONFIG_PATH.stat().st_size > 0:
-        return
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    os.environ["OPENCLAW_BIN"] = " ".join(openclaw_cmd())
-    command = openclaw_cmd(
-        "onboard",
-        "--non-interactive",
-        "--accept-risk",
-        "--skip-health",
-        "--auth-choice",
-        "skip",
-        "--skip-daemon",
-        "--skip-search",
-        "--gateway-auth",
-        "token",
-        "--gateway-token-ref-env",
-        "OPENCLAW_GATEWAY_TOKEN",
-        "--gateway-bind",
-        "lan",
-        "--gateway-port",
-        str(GATEWAY_PORT),
-        "--suppress-gateway-token-output",
-    )
-    import subprocess
-
-    subprocess.run(command, check=True)
-
-
 def _apply_container_only_command_aliases() -> None:
     for repo, (command_name, alias) in CONTAINER_ONLY_COMMAND_ALIASES.items():
         plugin_id = command_name
@@ -112,28 +77,14 @@ def _apply_container_only_command_aliases() -> None:
 
 
 def main() -> None:
-    _ensure_openclaw_config()
+    if not CONFIG_PATH.is_file() or not CONFIG_PATH.stat().st_size:
+        raise SystemExit(
+            "OpenClaw config is missing after openclaw-ephemeral.py configure"
+        )
     _apply_container_only_command_aliases()
     disable_plugin_command_auth(PLUGINS_DIR, log_prefix="OpenClaw container command auth disabled")
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    configure_gateway(
-        config,
-        port=GATEWAY_PORT,
-        include_tailscale_origins=False,
-        allow_insecure_auth=True,
-    )
-    telegram_configured = configure_telegram_main(
-        config,
-        include_account=True,
-    )
-    ensure_main_agent(
-        config,
-        config_path=CONFIG_PATH,
-        heartbeat={"every": "360m", "target": "last", "directPolicy": "allow"},
-        tools={"allow": ["*"], "deny": []},
-    )
-
     registered = register_openclaw_plugins(
         config,
         PLUGINS_DIR,
@@ -142,9 +93,6 @@ def main() -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     refresh_plugin_registry()
 
-    print("OpenClaw model provider intentionally not configured")
-    if telegram_configured:
-        print("OpenClaw Telegram configured")
     print(f"OpenClaw plugins registered: {', '.join(registered)}")
 
 

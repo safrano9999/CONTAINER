@@ -1,0 +1,84 @@
+ARG AI_CORE_IMAGE=ghcr.io/safrano9999/fedora44-ai-core:latest
+ARG OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
+
+FROM ${OPENCLAW_EPHEMERAL_IMAGE} AS openclaw-ephemeral-source
+
+USER root
+RUN find /root/.openclaw/extensions/note \
+      -type d \( -name .venv -o -name .uv -o -name __pycache__ \) \
+      -prune -exec rm -rf {} +
+
+FROM ${AI_CORE_IMAGE} AS ai-core2
+
+ARG OPENCLAW_VERSION=2026.7.1
+
+LABEL org.opencontainers.image.title="fedora44-ai-core2" \
+      org.opencontainers.image.description="Fedora 44 AI core with ephemeral OpenClaw and Hermes runtime initialization." \
+      org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
+      io.safrano9999.parent="fedora44-ai-core" \
+      io.safrano9999.openclaw.version="${OPENCLAW_VERSION}"
+
+ENV HOME=/root \
+    OPENCLAW_CONFIG_DIR=/root/.openclaw \
+    OPENCLAW_CONFIG=/root/.openclaw/openclaw.json \
+    OPENCLAW_GATEWAY_PORT=18789 \
+    OPENCLAW_DISABLE_BONJOUR=1 \
+    PYTHONPATH=/usr/local/lib/openclaw-ephemeral \
+    PYTHONUNBUFFERED=1
+
+# Build-time mutation: transplant only the verified JavaScript distribution
+# and distro-neutral runtime source. Debian executables, libraries, node_modules
+# and Python environments never cross into Fedora.
+COPY --from=openclaw-ephemeral-source /app/dist/ /tmp/openclaw-ephemeral-dist/
+COPY --from=openclaw-ephemeral-source /usr/local/lib/openclaw-ephemeral/ /usr/local/lib/openclaw-ephemeral/
+COPY --from=openclaw-ephemeral-source /usr/local/bin/openclaw-ephemeral.py /usr/local/bin/openclaw-ephemeral.py
+COPY --from=openclaw-ephemeral-source /usr/local/bin/openclaw-ephemeral-yolo /usr/local/bin/openclaw-ephemeral-yolo
+COPY --from=openclaw-ephemeral-source /root/.openclaw/extensions/note/ /root/.openclaw/extensions/note/
+
+RUN set -euo pipefail; \
+    openclaw_root="$(npm root -g)/openclaw"; \
+    test "$(jq -r .version "$openclaw_root/package.json")" = "${OPENCLAW_VERSION}"; \
+    rm -rf "$openclaw_root/dist"; \
+    mv /tmp/openclaw-ephemeral-dist "$openclaw_root/dist"; \
+    node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"; \
+    test -f /root/.openclaw/extensions/note/openclaw.plugin.json; \
+    note_python="$(/root/.openclaw/extensions/note/scripts/setup-python.sh)"; \
+    "$note_python" -c 'import dotenv, sqlalchemy, psycopg, pymysql'; \
+    find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete; \
+    chmod 0755 /usr/local/bin/openclaw-ephemeral.py \
+      /usr/local/bin/openclaw-ephemeral-yolo
+
+# Runtime ownership: environment projection, named-volume linking and fresh
+# OpenClaw/Hermes configuration happen on every container boot under systemd.
+COPY runtime/fedora44-ai-init.sh /usr/local/bin/fedora44-ai-init
+COPY runtime/fedora44-runtime-environment-generator.sh /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator
+COPY runtime/hermes-ephemeral.py /usr/local/bin/hermes-ephemeral.py
+COPY runtime/named_volume_links.sh runtime/named_volume_links_openclaw.sh runtime/named_volume_links_hermes.sh \
+     runtime/optional_persistence.sh runtime/tailscale-state-up.sh /usr/local/bin/
+COPY systemd/ /etc/systemd/system/
+
+RUN chmod 0755 \
+      /usr/local/bin/fedora44-ai-init \
+      /usr/local/bin/hermes-ephemeral.py \
+      /usr/local/bin/named_volume_links.sh \
+      /usr/local/bin/named_volume_links_openclaw.sh \
+      /usr/local/bin/named_volume_links_hermes.sh \
+      /usr/local/bin/optional_persistence.sh \
+      /usr/local/bin/tailscale-state-up.sh \
+      /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator \
+ && mkdir -p /usr/local/share/fedora44-ai/init.d \
+ && systemctl enable \
+      fedora44-ai.service \
+      tailscaled.service \
+      tailscale-up.service \
+      openclaw-config.service \
+      openclaw.service \
+      hermes.service \
+      hermes-dashboard.service \
+      vditor-notes.service \
+      cockpit.service \
+ && systemctl mask cockpit.socket \
+ && sed -i '1i auth       sufficient   pam_permit.so' /etc/pam.d/cockpit
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

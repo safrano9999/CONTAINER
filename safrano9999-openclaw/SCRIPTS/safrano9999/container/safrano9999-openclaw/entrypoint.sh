@@ -33,11 +33,11 @@ else
   log "Tailscale state and TS_AUTHKEY not set - skipping Tailscale"
 fi
 
-log "configuring OpenClaw (plugins only; no OpenClaw LLM provider)"
-/usr/local/bin/openclaw-configure
+log "rebuilding ephemeral OpenClaw configuration"
+/usr/local/bin/openclaw-ephemeral.py configure
 
-log "applying persistent trusted-container OpenClaw policy"
-/usr/local/bin/yolo.sh
+log "registering safrano9999 OpenClaw plugins"
+/usr/local/bin/safrano9999-openclaw-configure
 
 zdir="${OPENCLAW_CONFIG_DIR:-/root/.openclaw}/extensions/zeroinbox"
 if [ -f "${zdir}/scripts/gmail-init-labels" ]; then

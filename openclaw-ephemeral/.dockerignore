@@ -1,0 +1,15 @@
+**
+!Containerfile
+!build/
+!build/install-openclaw-deterministic.sh
+!build/install-note-release.sh
+!openclaw-ephemeral.py
+!openclaw_ephemeral/
+!openclaw_ephemeral/__init__.py
+!openclaw_ephemeral/cli.py
+!openclaw_ephemeral/configuration.py
+!openclaw_ephemeral/environment.py
+!openclaw_ephemeral/filesystem.py
+!openclaw_ephemeral/providers.py
+!runtime/
+!runtime/yolo.sh

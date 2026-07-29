@@ -78,11 +78,9 @@ jobs:
           set -a
           . "./$build_conf"
           set +a
-          : "${OPENCLAW_IMAGE:?Missing OPENCLAW_IMAGE}"
-          : "${OPENCLAW_CONFIG_DIR:?Missing OPENCLAW_CONFIG_DIR}"
+          : "${OPENCLAW_EPHEMERAL_IMAGE:?Missing OPENCLAW_EPHEMERAL_IMAGE}"
           {
-            echo "openclaw_image=$OPENCLAW_IMAGE"
-            echo "openclaw_config_dir=$OPENCLAW_CONFIG_DIR"
+            echo "openclaw_ephemeral_image=$OPENCLAW_EPHEMERAL_IMAGE"
             echo "source_key=$(sha256sum .safrano9999-source-tags.tsv | cut -d' ' -f1)"
           } >> "$GITHUB_OUTPUT"
 
@@ -110,6 +108,47 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
-            OPENCLAW_IMAGE=${{ steps.build.outputs.openclaw_image }}
-            OPENCLAW_CONFIG_DIR=${{ steps.build.outputs.openclaw_config_dir }}
+            OPENCLAW_EPHEMERAL_IMAGE=${{ steps.build.outputs.openclaw_ephemeral_image }}
             SAFRANO9999_SOURCE_KEY=${{ steps.build.outputs.source_key }}
+
+      - name: Test published runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${{ steps.tags.outputs.version }}"
+          docker run --rm --entrypoint bash "$image" -lc '
+            set -euo pipefail
+            test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/safrano9999-openclaw-entrypoint
+            test -x /usr/local/bin/safrano9999-openclaw-configure
+            test -f /root/.openclaw/extensions/note/openclaw.plugin.json
+            for plugin in dailynews nextcloud zeroinbox kachelmann citadel; do
+              test -f "/root/.openclaw/extensions/$plugin/openclaw.plugin.json"
+            done
+            test "$(jq -r .version /app/package.json)" = 2026.7.1
+          '
+
+      - name: Verify private Docker Hub repository
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(
+            jq -nc \
+              --arg username "$DOCKERHUB_USERNAME" \
+              --arg password "$DOCKERHUB_TOKEN" \
+              '{username: $username, password: $password}'
+          )"
+          jwt="$(
+            curl -fsSL \
+              -H 'Content-Type: application/json' \
+              -d "$payload" \
+              https://hub.docker.com/v2/users/login/ \
+              | jq -er .token
+          )"
+          curl -fsSL \
+            -H "Authorization: JWT $jwt" \
+            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/safrano9999-openclaw/" \
+            | jq -e '.is_private == true' >/dev/null

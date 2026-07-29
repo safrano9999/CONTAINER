@@ -17,6 +17,10 @@ on:
           - base
           - all
         default: safrano9999
+      core2_tag:
+        description: "fedora44-ai-core2 parent tag"
+        required: false
+        default: "latest"
       push_latest:
         description: "Also publish :latest"
         required: true
@@ -32,6 +36,7 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/safrano9999/fedora44-ai-base
       SAFRANO_IMAGE: ghcr.io/safrano9999/fedora44-ai-safrano9999
+      CORE2_IMAGE: ghcr.io/safrano9999/fedora44-ai-core2
       DOCKER_BUILD_RECORD_UPLOAD: "false"
     steps:
       - name: Checkout
@@ -51,6 +56,7 @@ jobs:
           REQUESTED_TAG: ${{ inputs.image_tag }}
           BUILD_SCOPE: ${{ inputs.build_scope }}
           PUSH_LATEST: ${{ inputs.push_latest }}
+          CORE2_TAG: ${{ inputs.core2_tag }}
         run: |
           set -euo pipefail
           version="$REQUESTED_TAG"
@@ -63,6 +69,7 @@ jobs:
           {
             echo "version=$version"
             echo "base_ref=$base_ref"
+            echo "core2_ref=${CORE2_IMAGE}:${CORE2_TAG:-latest}"
             echo "base_tags<<EOF"
             echo "${BASE_IMAGE}:${version}"
             [ "$PUSH_LATEST" != true ] || echo "${BASE_IMAGE}:latest"
@@ -90,26 +97,9 @@ jobs:
         run: |
           set -euo pipefail
           cd fedora44-ai
-          build_conf="build.conf"
-          [ -f "$build_conf" ] || { echo "Missing $build_conf" >&2; exit 1; }
-          set -a
-          . "./$build_conf"
-          set +a
-          for name in CERTS NODE_VERSION HERMES_TAG HERMES_COMMIT HERMES_VERSION ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT WEBHOOK_VERSION; do
-            [ -n "${!name:-}" ] || { echo "Missing $name" >&2; exit 1; }
-          done
           [ -s .resolved-build.env ] || { echo "Missing .resolved-build.env" >&2; exit 1; }
           {
             echo "build_args<<EOF"
-            echo "CERTS=$CERTS"
-            echo "HERMES_TAG=$HERMES_TAG"
-            echo "HERMES_COMMIT=$HERMES_COMMIT"
-            echo "HERMES_VERSION=$HERMES_VERSION"
-            echo "ELECTRUM_VERSION=$ELECTRUM_VERSION"
-            echo "LND_VERSION=$LND_VERSION"
-            echo "GETH_VERSION=$GETH_VERSION"
-            echo "GETH_COMMIT=$GETH_COMMIT"
-            echo "WEBHOOK_VERSION=$WEBHOOK_VERSION"
             cat .resolved-build.env
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -139,7 +129,9 @@ jobs:
           no-cache: true
           push: true
           tags: ${{ steps.tags.outputs.base_tags }}
-          build-args: ${{ steps.build.outputs.build_args }}
+          build-args: |
+            AI_CORE2_IMAGE=${{ steps.tags.outputs.core2_ref }}
+            ${{ steps.build.outputs.build_args }}
 
       - name: Build and push Safrano layer
         if: inputs.build_scope != 'base'
@@ -155,3 +147,50 @@ jobs:
           build-args: |
             AI_BASE_IMAGE=${{ steps.tags.outputs.base_ref }}
             ${{ steps.build.outputs.build_args }}
+
+      - name: Test published Base layer
+        if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${BASE_IMAGE}:${{ steps.tags.outputs.version }}"
+          docker pull "$image"
+          docker run --rm --entrypoint bash "$image" -lc '
+            set -euo pipefail
+            test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/hermes-ephemeral.py
+            test -f /root/.openclaw/extensions/note/openclaw.plugin.json
+            test ! -e /opt/safrano9999/NOTE
+            for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD; do
+              test -d "/opt/safrano9999/$project"
+            done
+            systemctl is-enabled fedora44-ai.service openclaw-config.service \
+              openclaw-safrano9999.service openclaw.service hermes.service \
+              hermes-dashboard.service citadel.service codeanalyst.service
+          '
+
+      - name: Test published Safrano layer
+        if: inputs.build_scope != 'base'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${SAFRANO_IMAGE}:${{ steps.tags.outputs.version }}"
+          docker pull "$image"
+          docker run --rm --entrypoint bash "$image" -lc '
+            set -euo pipefail
+            test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/hermes-ephemeral.py
+            test -f /root/.openclaw/extensions/note/openclaw.plugin.json
+            for project in JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
+              NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
+              SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
+              NaturalGrounding-Tiktok-Ying-Video-Manager \
+              DAILYNEWS ZEROINBOX SPANKER KACHELMANN; do
+              test -d "/opt/safrano9999/$project"
+            done
+            systemctl is-enabled openclaw-config.service \
+              openclaw-safrano9999.service openclaw.service hermes.service \
+              jugo.service pvdach.service kiwix-bridge.service \
+              napoleon.service naturalgrounding.service bip39.service \
+              spanker-webui.service
+          '

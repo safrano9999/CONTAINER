@@ -1,28 +1,25 @@
 # OpenClaw plugins container
 # =============================================================================
 # Bundles DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN into
-# the official OpenClaw gateway image. LLM
-# environment values are for standalone plugins only; OpenClaw itself is not
-# configured with a model provider in this image.
+# the public ephemeral OpenClaw gateway image. Native and repeated OpenAI-v1
+# providers are discovered from injected runtime environment variables.
 #
-# Base:    OPENCLAW_IMAGE from build.conf (official OpenClaw image)
-# Patch:   /app dist replaced by the safrano9999 fork build (PR #91217,
-#          deterministic dummy/dummy default model, set at image build).
-# Boot:    tini -> SCRIPTS/.../entrypoint.sh (tailscale up -> configure -> gateway)
+# Base:    public openclaw-ephemeral image with pinned OpenClaw 2026.7.1.
+# Boot:    tini -> SCRIPTS/.../entrypoint.sh
+#          (named volumes -> tailscale -> ephemeral config -> plugins -> gateway)
 # Context: all build and runtime helpers live below ./SCRIPTS.
 # =============================================================================
 
-ARG OPENCLAW_IMAGE
-FROM ${OPENCLAW_IMAGE}
-ARG OPENCLAW_CONFIG_DIR
+ARG OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
+FROM ${OPENCLAW_EPHEMERAL_IMAGE}
 ARG SAFRANO9999_SOURCE_KEY
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
       org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN with localhost and Tailscale providers."
 
 # --- system layer (root) -----------------------------------------------------
-# The base image runs as the unprivileged "node" user; we need root to install
-# packages and, at runtime, to run tailscaled (NET_ADMIN + /dev/net/tun).
+# Root installs the additional packages and runs tailscaled at runtime
+# (NET_ADMIN + /dev/net/tun).
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -47,30 +44,6 @@ RUN apt-get update \
 RUN curl -fsSL https://tailscale.com/install.sh | sh \
  && rm -rf /var/lib/apt/lists/*
 
-# --- patched OpenClaw: deterministic dummy/dummy gateway model ---------------
-# Install the checksum-verified fork dist (upstream PR #91217) before plugin
-# setup so the CI build does not compile the complete OpenClaw monorepo.
-COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
-RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
- && /usr/local/bin/openclaw-patch-deterministic
-
-# Trust the container filesystem as a local-media source. This affects only
-# outbound media path validation; agent workspaces and named volumes stay as-is.
-RUN python3 - <<'PY'
-from pathlib import Path
-
-root = Path("/app/dist")
-target = 'path.join(resolvedStateDir, "sandboxes")'
-replacement = target + ',\n\t\t"/"'
-for path in root.glob("local-roots-*.js"):
-    text = path.read_text()
-    if replacement not in text:
-        path.write_text(text.replace(target, replacement))
-    break
-else:
-    raise SystemExit("OpenClaw local-roots bundle not found")
-PY
-
 # --- shared Python requirements ----------------------------------------------
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 COPY requirements.txt /requirements.txt
@@ -78,9 +51,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /requirements.txt
 
 # --- plugins: install into OpenClaw -------------------------------------------
-ENV OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
-ENV OPENCLAW_PLUGINS_DIR=${OPENCLAW_CONFIG_DIR}/extensions
-ENV ZEROINBOX_DIR=${OPENCLAW_CONFIG_DIR}/extensions/zeroinbox
+ENV OPENCLAW_CONFIG_DIR=/root/.openclaw
+ENV OPENCLAW_PLUGINS_DIR=/root/.openclaw/extensions
+ENV ZEROINBOX_DIR=/root/.openclaw/extensions/zeroinbox
 ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 LABEL io.safrano9999.source-tags.sha256="${SAFRANO9999_SOURCE_KEY}"
 COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
@@ -92,7 +65,6 @@ RUN bash -lc 'set -eux; \
     mkdir -p "$OPENCLAW_CONFIG_DIR"; \
     chmod +x /usr/local/lib/safrano9999_container.sh; \
     . /usr/local/lib/safrano9999_container.sh; \
-    safrano9999_OC_plugins NOTE; \
     safrano9999_OC_plugins CITADEL; \
     for root in "$OPENCLAW_PLUGINS_DIR/citadel"; do \
       [ -d "$root/extensions/enabled" ] || continue; \
@@ -113,12 +85,6 @@ ENV HOME=/root \
     TS_STATE_DIR=/var/lib/tailscale \
     OPENCLAW_DISABLE_BONJOUR=1
 
-# Deterministic NOTE default needs no provider credentials
-# (https://docs.openclaw.ai/cli/models). openclaw-configure leaves it as is.
-RUN openclaw config set plugins.entries.note.hooks.allowConversationAccess true --strict-json \
- && openclaw models set dummy/note \
- && openclaw config get agents.defaults.model.primary
-
 EXPOSE 18789
 
 # Liveness against the gateway's own health endpoint.
@@ -127,7 +93,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 
 # --- runtime config + entrypoint --------------------------------------------
 # Keep these final so service-only edits rebuild only the small tail layers.
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /usr/local/bin/safrano9999-openclaw-configure
 COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/bin/openclaw_common.py
 COPY SCRIPTS/safrano9999/image/services/tailscale/tailscale-state-up.sh /usr/local/bin/tailscale-state-up.sh
 COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local/bin/safrano9999-openclaw-entrypoint
@@ -135,10 +101,10 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh 
 COPY SCRIPTS/safrano9999/named_volume_links.sh /usr/local/bin/named_volume_links.sh
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
-COPY SCRIPTS/safrano9999/container/openclaw/yolo.sh /usr/local/bin/yolo.sh
 COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/tailscale-state-up.sh /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/named_volume_links.sh /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all /usr/local/bin/yolo.sh \
+RUN chmod +x /usr/local/bin/safrano9999-openclaw-configure /usr/local/bin/tailscale-state-up.sh /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/named_volume_links.sh /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
  && mkdir -p "$OPENCLAW_CONFIG_DIR" /var/lib/tailscale
 
 # tini (already in the base image) reaps zombies; our script does the rest.
 ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]
+CMD []

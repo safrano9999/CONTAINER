@@ -65,7 +65,21 @@ PY
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 match = re.search(r"registerHttpRoute\s*\(\s*\{.*?path:\s*[\"']([^\"']+)[\"']", text, re.S)
-print(match.group(1) if match else "")
+if match:
+    print(match.group(1))
+    raise SystemExit
+constants = dict(
+    re.findall(
+        r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[\"']([^\"']+)[\"']",
+        text,
+    )
+)
+match = re.search(
+    r"registerHttpRoute\s*\(\s*\{.*?path:\s*([A-Za-z_$][\w$]*)",
+    text,
+    re.S,
+)
+print(constants.get(match.group(1), "") if match else "")
 PY
 )"
   fi
@@ -109,6 +123,36 @@ _safrano9999_write_fullrun() {
       printf '%s\n' "$cmd"
     done
   } > "$script"
+  chmod +x "$script"
+}
+
+_safrano9999_append_webhooks() {
+  local root="$1" script="${SAFRANO9999_WEBHOOK_SCRIPT:-/usr/local/bin/safrano9999-webhooks}" cmd repo
+  shift
+  if [ ! -f "$script" ]; then
+    _safrano9999_write_webhooks "$root" "$@"
+    return
+  fi
+  for repo in "$@"; do
+    cmd="$(_safrano9999_webhook_curl "$root/$repo" || true)"
+    [ -n "$cmd" ] || continue
+    grep -Fqx -- "$cmd" "$script" || printf '%s\n' "$cmd" >> "$script"
+  done
+  chmod +x "$script"
+}
+
+_safrano9999_append_fullrun() {
+  local root="$1" script="${SAFRANO9999_FULLRUN_SCRIPT:-/usr/local/bin/safrano9999-fullrun}" cmd repo
+  shift
+  if [ ! -f "$script" ]; then
+    _safrano9999_write_fullrun "$root" "$@"
+    return
+  fi
+  for repo in "$@"; do
+    cmd="$(_safrano9999_webhook_curl "$root/$repo" || true)"
+    [ -n "$cmd" ] || { echo "missing webhook curl: $repo" >&2; return 1; }
+    grep -Fqx -- "$cmd" "$script" || printf '%s\n' "$cmd" >> "$script"
+  done
   chmod +x "$script"
 }
 

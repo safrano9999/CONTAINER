@@ -139,8 +139,8 @@ RUN bash -lc '. /opt/safrano9999/SCRIPTS/safrano9999/image/safrano9999_container
       SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
       NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
       DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
- && _safrano9999_write_webhooks /opt/safrano9999 WELCOME NEXTCLOUD DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
- && _safrano9999_write_fullrun /opt/safrano9999 WELCOME NEXTCLOUD DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+ && _safrano9999_append_webhooks /opt/safrano9999 DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+ && _safrano9999_append_fullrun /opt/safrano9999 DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
  && printf "%s\n" "CET 01:23,CET 07:00,CET 09:40,CET 12:00,CET 15:30,CET 19:00" > /opt/safrano9999/.openclaw-crontab \
  && rm -rf "$SAFRANO9999_STAGE_DIR"'
 

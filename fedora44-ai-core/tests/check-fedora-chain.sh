@@ -268,6 +268,7 @@ mkdir -p \
     "$temporary/stage/ONE/fedora44-ai-container/runtime.d" \
     "$temporary/stage/ONE/fedora44-ai-container/systemd" \
     "$temporary/stage/TWO" \
+    "$temporary/stage/THREE" \
     "$temporary/image-root"
 printf '%s\n' \
     'enter this to trigger webhook from inside container' \
@@ -277,7 +278,14 @@ printf '%s\n' \
     'enter this to trigger webhook from inside container' \
     'curl -sS http://example.invalid/two' \
     > "$temporary/stage/TWO/README.md"
-printf 'ONE\tstandalone\tyes\tyes\nTWO\tstandalone\tyes\tyes\n' \
+cat > "$temporary/stage/THREE/index.js" <<'PLUGIN'
+const webhookPath = "/plugins/three";
+api.registerHttpRoute({
+  path: webhookPath,
+  auth: "gateway",
+});
+PLUGIN
+printf 'ONE\tstandalone\tyes\tyes\nTWO\tstandalone\tyes\tyes\nTHREE\tplugin\tyes\tyes\n' \
     > "$temporary/contributions.tsv"
 printf 'rootfs contribution\n' \
     > "$temporary/stage/ONE/fedora44-ai-container/rootfs/usr/local/share/fedora44-ai/rootfs-marker"
@@ -331,8 +339,11 @@ second="$(
         "$temporary/root/WEBHOOK-RUNNER/index.js"
 )"
 [ "$first" = "$second" ] || fail "contribution application is not idempotent"
-[ "$(grep -c '^curl -sS' "$temporary/webhooks")" -eq 2 ] ||
+[ "$(grep -c '^curl -sS' "$temporary/webhooks")" -eq 3 ] ||
     fail "contribution commands were duplicated"
+grep -Fq 'http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}/plugins/three' \
+    "$temporary/fullrun" ||
+    fail "variable-backed plugin webhook path was not discovered"
 grep -Fxq 'rootfs contribution' \
     "$temporary/image-root/usr/local/share/fedora44-ai/rootfs-marker" ||
     fail "repository rootfs contribution was not installed"

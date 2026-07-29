@@ -246,7 +246,22 @@ match = re.search(
     source,
     re.S,
 )
-print(match.group(1) if match else "")
+if match is None:
+    route = re.search(
+        r"registerHttpRoute\s*\(\s*\{.*?\bpath\s*:\s*"
+        r"([A-Za-z_$][A-Za-z0-9_$]*)\s*[,}]",
+        source,
+        re.S,
+    )
+    if route is not None:
+        identifier = re.escape(route.group(1))
+        match = re.search(
+            rf"\b(?:const|let|var)\s+{identifier}\s*=\s*"
+            r"[\"']([^\"']+)[\"']",
+            source,
+        )
+path = match.group(1) if match else ""
+print(path if path.startswith("/") else "")
 PY
 )"
     fi

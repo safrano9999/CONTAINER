@@ -108,7 +108,9 @@ jobs:
             test -x /usr/local/bin/openclaw-ephemeral-yolo
             test -x /usr/local/bin/hermes-ephemeral.py
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
-            test -x /root/.openclaw/extensions/note/.venv/bin/python
+            note_python="$("/root/.openclaw/extensions/note/scripts/setup-python.sh")"
+            test -x "$note_python"
+            "$note_python" -c "import dotenv, sqlalchemy, psycopg, pymysql"
             test -f /etc/systemd/system/openclaw-config.service
             test -f /etc/systemd/system/hermes.service
             test -f /etc/systemd/system/fedora44-ai.service

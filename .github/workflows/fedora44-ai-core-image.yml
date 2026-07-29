@@ -26,7 +26,7 @@ jobs:
       packages: write
     env:
       IMAGE: ghcr.io/safrano9999/fedora44-ai-core
-      # Replace this old hook-aware digest after openclaw-ephemeral publishes.
+      # Immutable runtime base validated by the published-image smoke test.
       OPENCLAW_EPHEMERAL_IMAGE: docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 

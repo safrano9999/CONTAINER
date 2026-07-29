@@ -27,9 +27,9 @@ bash -n \
 )
 
 [ "$(sed -n '1p' "$ROOT/Containerfile")" = "FROM quay.io/fedora/fedora:44 AS ai-core" ]
-rg -q '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
-rg -q '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
-rg -q 'openclaw@\$\{OPENCLAW_VERSION\}' "$ROOT/Containerfile"
+grep -Eq '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
+grep -Eq '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
+grep -Eq 'openclaw@\$\{OPENCLAW_VERSION\}' "$ROOT/Containerfile"
 
 for forbidden in \
     openclaw-ephemeral \
@@ -54,7 +54,7 @@ for forbidden in \
     KACHELMANN \
     PV_D-A-CH \
     NaturalGrounding; do
-    if rg -n -F "$forbidden" \
+    if grep -rn -F "$forbidden" \
         "$ROOT/Containerfile" \
         "$ROOT/build.conf" \
         "$ROOT/requirements.base.txt" \
@@ -68,8 +68,8 @@ done
 
 workflow="$ROOT/../.github/workflows/fedora44-core-image.yml"
 if [ -f "$workflow" ]; then
-    rg -q 'no-cache: true' "$workflow"
-    if rg -n 'cache-(from|to):' "$workflow"; then
+    grep -Fq 'no-cache: true' "$workflow"
+    if grep -En 'cache-(from|to):' "$workflow"; then
         echo "Persistent build cache configuration is forbidden" >&2
         exit 1
     fi

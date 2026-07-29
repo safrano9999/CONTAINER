@@ -263,6 +263,81 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p \
+    "$temporary/fake-gh-bin" \
+    "$temporary/fake-release" \
+    "$temporary/release-source/plugin" \
+    "$temporary/release-target/fedora44-ai-container/systemd"
+printf '%s\n' \
+    '{"id":"release-test","name":"Release test","configSchema":{"type":"object"}}' \
+    > "$temporary/release-source/plugin/openclaw.plugin.json"
+printf '%s\n' 'release payload' \
+    > "$temporary/release-source/plugin/release-only.txt"
+printf '%s\n' 'checkout source' \
+    > "$temporary/release-target/checkout-only.txt"
+cat > "$temporary/release-target/fedora44-ai-container/systemd/release-test.service" <<'UNIT'
+[Unit]
+Description=Release staging contribution test
+
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+python3 - "$temporary/release-source" "$temporary/fake-release/release-test.zip" <<'PY'
+from pathlib import Path
+import sys
+from zipfile import ZIP_DEFLATED, ZipFile
+
+source = Path(sys.argv[1])
+with ZipFile(sys.argv[2], "w", compression=ZIP_DEFLATED) as archive:
+    for path in sorted(source.rglob("*")):
+        if path.is_file():
+            archive.write(path, path.relative_to(source))
+PY
+(
+    cd "$temporary/fake-release"
+    sha256sum release-test.zip > release-test.zip.sha256
+)
+cat > "$temporary/fake-gh-bin/gh" <<'GH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = auth ] && [ "${2:-}" = status ]; then
+    exit 0
+fi
+if [ "${1:-}" = release ] && [ "${2:-}" = download ]; then
+    destination=""
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --dir) destination="${2:-}"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    [ -n "$destination" ]
+    cp -a -- "$FAKE_GH_RELEASE_DIR/." "$destination/"
+    exit 0
+fi
+echo "Unexpected fake gh invocation: $*" >&2
+exit 2
+GH
+chmod 0755 "$temporary/fake-gh-bin/gh"
+PATH="$temporary/fake-gh-bin:$PATH" \
+FAKE_GH_RELEASE_DIR="$temporary/fake-release" \
+    bash "$SAFRANO/image/build.d/stage-release-plugin.sh" \
+        test-owner/test-repository \
+        release-test.zip \
+        "$temporary/release-target"
+test -f "$temporary/release-target/openclaw.plugin.json" ||
+    fail "release plugin payload was not staged"
+test -f "$temporary/release-target/release-only.txt" ||
+    fail "release plugin content was not staged"
+test ! -e "$temporary/release-target/checkout-only.txt" ||
+    fail "release staging did not replace checkout-only content"
+test -f "$temporary/release-target/fedora44-ai-container/systemd/release-test.service" ||
+    fail "release staging discarded the repository Fedora contribution"
+
+mkdir -p \
     "$temporary/stage/ONE/fedora44-ai-container/build.d" \
     "$temporary/stage/ONE/fedora44-ai-container/rootfs/usr/local/share/fedora44-ai" \
     "$temporary/stage/ONE/fedora44-ai-container/runtime.d" \
@@ -381,6 +456,13 @@ check_setup_idempotence() {
         for repository; do
             repository="${repository%@*}"
             mkdir -p "$checkout/safrano9999/$repository"
+            if [ "$repository" = NaturalGrounding-Tiktok-Ying-Video-Manager ]; then
+                cat > "$checkout/safrano9999/$repository/config.conf_example" <<'EXAMPLE'
+#required: NaturalGrounding video storage path
+#mount-bind: NATURALGROUNDING_VIDEOS_DIR:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS
+NATURALGROUNDING_VIDEOS_DIR=VIDEOS
+EXAMPLE
+            fi
         done
     fi
 
@@ -420,5 +502,14 @@ check_setup_idempotence "$SAFRANO" safrano \
     SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
     NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
     DAILYNEWS ZEROINBOX SPANKER KACHELMANN
+
+if ! grep -Fqx \
+    "Volume=$temporary/setup-safrano/VIDEOS:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS:Z" \
+    "$temporary/setup-safrano/CONTAINER/chain-test-safrano/chain-test-safrano.container"; then
+    grep '^Volume=' \
+        "$temporary/setup-safrano/CONTAINER/chain-test-safrano/chain-test-safrano.container" \
+        >&2 || true
+    fail "explicit repository bind target was not rendered"
+fi
 
 echo "Fedora image chain checks passed"

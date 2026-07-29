@@ -544,6 +544,7 @@ normalize_volume_item() {
 
 add_repo_bind_mount() {
     local rel="$1"
+    local target_override="${2:-}"
     local source target
 
     rel="$(trim "$rel")"
@@ -554,7 +555,15 @@ add_repo_bind_mount() {
 
     source="$(cd "$DIR" && realpath -m -- "$rel")"
     mkdir -p "$source"
-    target="/opt/safrano9999/$PROJECT_NAME/$rel"
+    if [ -n "$target_override" ]; then
+        [[ "$target_override" == /* && "$target_override" != / && "$target_override" != *:* ]] || {
+            echo "Invalid container bind target: $target_override" >&2
+            return 1
+        }
+        target="$target_override"
+    else
+        target="/opt/safrano9999/$PROJECT_NAME/$rel"
+    fi
     add_unique "${source}:${target}:Z" volumes
 }
 
@@ -1847,18 +1856,19 @@ publish_host_key() {
 
 mount_bind_from_value() {
     local key="$1"
+    local target_override="${2:-}"
     local rel
 
     rel="$(config_value "$key" || true)"
     [ -n "$rel" ] || return 0
-    add_repo_bind_mount "$rel"
+    add_repo_bind_mount "$rel" "$target_override"
 }
 
 generate_container_files() {
     local source_file host image compose_file quadlet_file line stripped entry key value
     local prefix internal_key internal_port publish_port publish_host map
     local first_port="" command_host="0.0.0.0"
-    local directive condition condition_key condition_value target_list target_key rel
+    local directive condition condition_key condition_value target_list target_key target_path rel
     local host_key
     local -a ports=()
     local -a volumes=()
@@ -1894,8 +1904,13 @@ generate_container_files() {
                 directive="$(trim "${stripped#\#mount-bind:}")"
                 [ -n "$directive" ] || continue
                 for target_key in $directive; do
+                    target_path=""
+                    if [[ "$target_key" == *:* ]]; then
+                        target_path="${target_key#*:}"
+                        target_key="${target_key%%:*}"
+                    fi
                     [[ "$target_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-                    mount_bind_from_value "$target_key"
+                    mount_bind_from_value "$target_key" "$target_path"
                 done
                 continue
             fi

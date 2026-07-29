@@ -107,6 +107,17 @@ mkdir -p "$parent"
 staged="$parent/.${target##*/}.release-stage"
 rm -rf -- "$staged"
 mv -- "$payload" "$staged"
+
+contribution="$target/fedora44-ai-container"
+if [ -e "$contribution" ]; then
+    [ -d "$contribution" ] && [ ! -L "$contribution" ] || {
+        echo "Invalid Fedora container contribution: $contribution" >&2
+        exit 1
+    }
+    rm -rf -- "$staged/fedora44-ai-container"
+    cp -a -- "$contribution" "$staged/fedora44-ai-container"
+fi
+
 rm -rf -- "$target"
 mv -- "$staged" "$target"
 printf '  [%s] staged release asset %s\n' "${repository##*/}" "$asset"

@@ -5,10 +5,12 @@
 `image/contributions.tsv`, their requirements, Base services, and the Base
 OpenClaw contribution hook.
 
-`prepare-build-context.sh` stages those repositories into the ignored
-`safrano9999/` directory and records immutable source commits. The contribution
-runner is deterministic and idempotent; it does not clone or download during
-the image build.
+`prepare-build-context.sh` stages those repositories plus
+`safrano9999-paper` into the ignored `safrano9999/` directory and records
+immutable source commits. The Containerfile retains the paper source and links
+its versioned `paper.pdf` into the ephemeral `/README` directory. The
+contribution runner is deterministic and idempotent; it does not clone or
+download during the image build.
 
 Each listed repository may own an optional `fedora44-ai-container/` directory.
 The contribution runner applies it in this fixed order:

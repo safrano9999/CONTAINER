@@ -24,6 +24,7 @@ COPY safrano9999/CODEANALYST ${SAFRANO9999_STAGE_DIR}/CODEANALYST
 COPY safrano9999/CITADEL ${SAFRANO9999_STAGE_DIR}/CITADEL
 COPY safrano9999/DIESDAS- ${SAFRANO9999_STAGE_DIR}/DIESDAS-
 COPY safrano9999/NEXTCLOUD ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD
+COPY safrano9999/safrano9999-paper /opt/safrano9999/safrano9999-paper
 COPY ref.base.conf ${SAFRANO9999_STAGE_DIR}/WELCOME/ref.conf
 
 RUN mkdir -p /tmp/nextcloud-runtime \
@@ -49,7 +50,13 @@ COPY image/build.d/apply-contributions.sh /usr/local/libexec/fedora44-ai/apply-c
 COPY image/contributions.tsv /usr/local/share/fedora44-ai/base-contributions.tsv
 COPY image/openclaw-crontab /usr/local/share/fedora44-ai/base-openclaw-crontab
 
-COPY image/readme/paper.pdf /usr/local/share/fedora44-ai/paper.pdf
+RUN test -f /opt/safrano9999/safrano9999-paper/paper.pdf \
+ && ln -sfnT \
+      /opt/safrano9999/safrano9999-paper/paper.pdf \
+      /usr/local/share/fedora44-ai/paper.pdf \
+ && ln -sfnT \
+      /opt/safrano9999/safrano9999-paper/paper.pdf \
+      /README/paper.pdf
 
 RUN chmod 0755 \
       /usr/local/bin/openclaw-layer-runtime \

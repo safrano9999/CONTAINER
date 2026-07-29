@@ -234,6 +234,16 @@ safrano_repos="$(
 ! grep -Fxq NOTE <<< "$base_repos" || fail "NOTE remains a Base contribution"
 [ -z "$(comm -12 <(printf '%s\n' "$base_repos") <(printf '%s\n' "$safrano_repos"))" ] ||
     fail "a repository is processed by both downstream layers"
+grep -Fq 'safrano9999-paper' "$BASE/prepare-build-context.sh" ||
+    fail "Base build preparation does not fetch safrano9999-paper"
+grep -Fq 'safrano9999-paper' "$BASE/setup.sh" ||
+    fail "Base setup does not fetch safrano9999-paper"
+grep -Fq \
+    'COPY safrano9999/safrano9999-paper /opt/safrano9999/safrano9999-paper' \
+    "$BASE/Containerfile" ||
+    fail "Base Containerfile does not retain the paper source"
+grep -Fq '/README/paper.pdf' "$BASE/Containerfile" ||
+    fail "Base Containerfile does not link the paper into /README"
 
 grep -Fq 'After=openclaw-config.service' \
     "$BASE/image/systemd/openclaw-safrano9999-base.service"
@@ -666,7 +676,7 @@ EXAMPLE
 
 check_setup_idempotence "$CORE" core
 check_setup_idempotence "$BASE" base \
-    WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD
+    WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD safrano9999-paper
 check_setup_idempotence "$SAFRANO" safrano \
     JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
     NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \

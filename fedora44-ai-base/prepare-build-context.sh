@@ -5,7 +5,14 @@ export LC_ALL=C
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 OFFLINE=false
 NO_CACHE=false
-REPOS=(WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD)
+REPOS=(
+    WELCOME
+    CODEANALYST
+    CITADEL
+    DIESDAS-
+    NEXTCLOUD
+    safrano9999-paper
+)
 
 for argument in "$@"; do
     case "$argument" in

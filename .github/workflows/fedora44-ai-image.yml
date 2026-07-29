@@ -200,7 +200,8 @@ jobs:
             test -x /usr/local/bin/openclaw-ephemeral-yolo
             test -x /usr/local/bin/hermes-ephemeral.py
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
-            for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD; do
+            for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
+              safrano9999-paper; do
               test -d "/opt/safrano9999/$project"
             done
             for project in JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
@@ -210,6 +211,10 @@ jobs:
               DAILYNEWS ZEROINBOX SPANKER KACHELMANN; do
               test ! -e "/opt/safrano9999/$project"
             done
+            test -L /README/paper.pdf
+            test "$(readlink /README/paper.pdf)" = \
+              /opt/safrano9999/safrano9999-paper/paper.pdf
+            test -s /README/paper.pdf
             systemctl is-enabled \
               fedora44-ai.service tailscaled.service tailscale-up.service \
               cockpit.service vditor-notes.service openclaw-config.service \
@@ -247,9 +252,14 @@ jobs:
               NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
               SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
               NaturalGrounding-Tiktok-Ying-Video-Manager \
-              DAILYNEWS ZEROINBOX SPANKER KACHELMANN; do
+              DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+              safrano9999-paper; do
               test -d "/opt/safrano9999/$project"
             done
+            test -L /README/paper.pdf
+            test "$(readlink /README/paper.pdf)" = \
+              /opt/safrano9999/safrano9999-paper/paper.pdf
+            test -s /README/paper.pdf
             systemctl is-enabled \
               fedora44-ai.service tailscaled.service tailscale-up.service \
               cockpit.service vditor-notes.service openclaw-config.service \

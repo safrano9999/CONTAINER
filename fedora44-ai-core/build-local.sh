@@ -54,7 +54,7 @@ BUILD_ARGS=(
     --build-arg "WEBHOOK_VERSION=$WEBHOOK_VERSION"
     --build-arg "VDITOR_VERSION=$VDITOR_VERSION"
     --build-arg "OPENCLAW_VERSION=$OPENCLAW_VERSION"
-    --build-arg "OPENCLAW_EPHEMERAL_IMAGE=${OPENCLAW_EPHEMERAL_IMAGE:-docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce}"
+    --build-arg "OPENCLAW_EPHEMERAL_IMAGE=${OPENCLAW_EPHEMERAL_IMAGE:-docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef}"
 )
 while IFS='=' read -r key value; do
     [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || {

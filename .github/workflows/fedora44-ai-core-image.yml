@@ -27,7 +27,7 @@ jobs:
     env:
       IMAGE: ghcr.io/safrano9999/fedora44-ai-core
       # Replace this old hook-aware digest after openclaw-ephemeral publishes.
-      OPENCLAW_EPHEMERAL_IMAGE: docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
+      OPENCLAW_EPHEMERAL_IMAGE: docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:

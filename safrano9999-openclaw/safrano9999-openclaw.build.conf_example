@@ -1,5 +1,5 @@
-#default-preset: docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef
-OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef
+#default-preset: docker.io/safrano9999/openclaw-ephemeral@sha256:aa5d618e91875e77dd11cad65c6431bed450312d5eacbd510da62e9687ce8f04
+OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:aa5d618e91875e77dd11cad65c6431bed450312d5eacbd510da62e9687ce8f04
 
 #default-preset: docker.io/safrano9999/safrano9999-openclaw:latest
 SAFRANO9999_OPENCLAW_IMAGE=docker.io/safrano9999/safrano9999-openclaw:latest

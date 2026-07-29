@@ -118,6 +118,40 @@ if [ -e "$contribution" ]; then
     cp -a -- "$contribution" "$staged/fedora44-ai-container"
 fi
 
+overlay_list="$contribution/source-overlay.list"
+if [ -f "$overlay_list" ]; then
+    while IFS= read -r overlay || [ -n "$overlay" ]; do
+        overlay="${overlay%%#*}"
+        overlay="${overlay#"${overlay%%[![:space:]]*}"}"
+        overlay="${overlay%"${overlay##*[![:space:]]}"}"
+        [ -n "$overlay" ] || continue
+        [[ "$overlay" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] &&
+            [[ "/$overlay/" != */../* ]] &&
+            [[ "/$overlay/" != */./* ]] &&
+            [[ "/$overlay/" != */.git/* ]] || {
+            echo "Invalid source overlay path: $overlay" >&2
+            exit 1
+        }
+        source_overlay="$target/$overlay"
+        [ -e "$source_overlay" ] && [ ! -L "$source_overlay" ] || {
+            echo "Missing or unsafe source overlay: $source_overlay" >&2
+            exit 1
+        }
+        invalid="$(
+            find "$source_overlay" -mindepth 1 \
+                \( -type l -o \( ! -type d ! -type f \) \) \
+                -print -quit
+        )"
+        [ -z "$invalid" ] || {
+            echo "Unsafe source overlay entry: $invalid" >&2
+            exit 1
+        }
+        rm -rf -- "$staged/$overlay"
+        mkdir -p -- "$(dirname -- "$staged/$overlay")"
+        cp -a -- "$source_overlay" "$staged/$overlay"
+    done < "$overlay_list"
+fi
+
 rm -rf -- "$target"
 mv -- "$staged" "$target"
 printf '  [%s] staged release asset %s\n' "${repository##*/}" "$asset"

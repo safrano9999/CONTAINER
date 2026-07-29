@@ -61,6 +61,16 @@ safe_name() {
     printf '%s' "$1" | tr '[:upper:]_' '[:lower:]-' | sed 's/[^a-z0-9_.-]/-/g'
 }
 
+repo_selected() {
+    local name="$1" spec
+    [ -z "${FEDORA_LAYER_REPOS:-}" ] && return 0
+    while IFS= read -r spec || [ -n "$spec" ]; do
+        [ -n "$spec" ] || continue
+        [ "${spec%@*}" = "$name" ] && return 0
+    done <<< "$FEDORA_LAYER_REPOS"
+    return 1
+}
+
 repo_sqlite_enabled() {
     local env_file="$1" config_dir="$2" key default_value value
     [ -f "$env_file" ] || return 1
@@ -144,7 +154,11 @@ case "$command" in
         if [ -n "$repo" ]; then
             init_repo "$repo" "$config_dir"
         elif [ -n "$repo_root" ]; then
-            for repo in "$repo_root"/*; do [ -d "$repo" ] && init_repo "$repo" "$config_dir"; done
+            for repo in "$repo_root"/*; do
+                [ -d "$repo" ] || continue
+                repo_selected "$(basename "$repo")" || continue
+                init_repo "$repo" "$config_dir"
+            done
         else
             echo "init requires --repo or --repo-root" >&2
             exit 2
@@ -159,6 +173,7 @@ case "$command" in
             [ -n "$target_root" ] || target_root="/opt/safrano9999"
             for repo in "$repo_root"/*; do
                 [ -d "$repo" ] || continue
+                repo_selected "$(basename "$repo")" || continue
                 mount_repo "$repo" "$config_dir" "$container_name" "$target_root/$(basename "$repo")"
             done
         elif [ -n "$zip_root" ]; then

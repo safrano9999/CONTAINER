@@ -75,12 +75,16 @@ for script in \
     "$BASE/setup.sh" \
     "$BASE/build-local.sh" \
     "$BASE/prepare-build-context.sh" \
+    "$BASE/optional_persistence.sh" \
+    "$BASE/sqlite_persistence.sh" \
     "$BASE/image/build.d/apply-contributions.sh" \
     "$BASE/image/setup.d/layer-setup.sh" \
     "$BASE/image/setup.d/sync-sources.sh" \
     "$SAFRANO/setup.sh" \
     "$SAFRANO/build-local.sh" \
     "$SAFRANO/prepare-build-context.sh" \
+    "$SAFRANO/optional_persistence.sh" \
+    "$SAFRANO/sqlite_persistence.sh" \
     "$SAFRANO/image/build.d/apply-contributions.sh" \
     "$SAFRANO/image/build.d/stage-release-plugin.sh" \
     "$SAFRANO/image/setup.d/layer-setup.sh" \
@@ -207,8 +211,12 @@ done < "$consumer_manifest"
     fail "unsupported runtime variables remain in canonical examples"
 grep -Fq 'OPENAI_V1_URL=http://169.254.1.2' "$CORE/env.fedora44-ai-core.example"
 grep -Fq 'OPENAI_V1_PORT=4000' "$CORE/env.fedora44-ai-core.example"
+grep -Fq 'OPENAI_V1_STREAM=true' "$CORE/env.fedora44-ai-core.example"
 grep -Fq 'OPENCLAW_MODEL=' "$CORE/config.fedora44-ai-core.conf_example"
 grep -Fq 'NOTE_DB_BACKEND=' "$CORE/env.fedora44-ai-core.example"
+grep -Fq \
+    '#named-volume: /named_volumes/NOTE_SQLITE /named_volumes/NOTE_SQLITE /root/.openclaw/extensions/note/sqlite dir' \
+    "$CORE/env.fedora44-ai-core.example"
 grep -Fq 'CLOUDFLARED_START=' "$CORE/config.fedora44-ai-core.conf_example"
 
 base_repos="$(
@@ -233,8 +241,42 @@ grep -Fq 'After=openclaw-config.service openclaw-safrano9999-base.service vikai-
     "$SAFRANO/image/systemd/openclaw-safrano9999.service"
 grep -Fq 'After=openclaw-config.service' \
     "$SAFRANO/image/systemd/vikai-bootstrap-openclaw-agents.service"
+grep -Fq 'VIKAI_OPENCLAW_LLM OPENAI_V1_PROVIDER' \
+    "$SAFRANO/image/systemd/vikai-bootstrap-openclaw-agents.service"
 grep -Fq 'Requires=vikai-bootstrap-openclaw-agents.service openclaw-safrano9999.service' \
     "$SAFRANO/image/systemd/openclaw.service.d/30-safrano9999.conf"
+
+python3 - "$SAFRANO/image/runtime.d/vikai-bootstrap-openclaw-agents.py" <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("vikai_bootstrap", source)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+os.environ["VIKAI_OPENCLAW_LLM"] = "luna"
+os.environ.pop("OPENAI_V1_PROVIDER", None)
+config = {
+    "models": {
+        "providers": {
+            "litellm": {
+                "models": [
+                    {"id": "luna", "name": "luna"},
+                    {"id": "sol", "name": "sol"},
+                ]
+            }
+        }
+    }
+}
+assert module.configured_openclaw_model(config) == "litellm/luna"
+
+os.environ["VIKAI_OPENCLAW_LLM"] = "custom/luna"
+assert module.configured_openclaw_model(config) == "custom/luna"
+PY
 
 if command -v systemd-analyze >/dev/null 2>&1; then
     verify_output="$(
@@ -262,10 +304,125 @@ cleanup() {
 }
 trap cleanup EXIT
 
+for layer in base safrano; do
+    source_root="$temporary/source-prune-$layer"
+    mkdir -p "$source_root/SELECTED" "$source_root/STALE"
+    printf 'keep\n' > "$source_root/SELECTED/source.txt"
+    printf 'remove\n' > "$source_root/STALE/source.txt"
+    sync_script="$BASE/image/setup.d/sync-sources.sh"
+    [ "$layer" = safrano ] &&
+        sync_script="$SAFRANO/image/setup.d/sync-sources.sh"
+    FEDORA44_AI_SOURCE_DIR="$source_root" \
+        bash "$sync_script" --offline --no-cache sync SELECTED@main
+    [ -f "$source_root/SELECTED/source.txt" ] ||
+        fail "$layer source pruning removed a selected repository"
+    [ ! -e "$source_root/STALE" ] ||
+        fail "$layer source pruning retained an unselected repository"
+done
+
+for layer in base safrano; do
+    sqlite_root="$temporary/sqlite-$layer"
+    mkdir -p \
+        "$sqlite_root/repos/ACTIVE" \
+        "$sqlite_root/repos/NOTE" \
+        "$sqlite_root/repos/fedora44-ai-base" \
+        "$sqlite_root/config"
+    printf 'ACTIVE_DB_BACKEND=sqlite\n' \
+        > "$sqlite_root/repos/ACTIVE/env.example"
+    printf 'NOTE_DB_BACKEND=sqlite\n' \
+        > "$sqlite_root/repos/NOTE/env.example"
+    printf 'NOTE_DB_BACKEND=sqlite\n' \
+        > "$sqlite_root/repos/fedora44-ai-base/env.example"
+    printf 'ACTIVE_DB_BACKEND=sqlite\nNOTE_DB_BACKEND=sqlite\n' \
+        > "$sqlite_root/config/.env"
+
+    sqlite_script="$BASE/sqlite_persistence.sh"
+    [ "$layer" = safrano ] &&
+        sqlite_script="$SAFRANO/sqlite_persistence.sh"
+    FEDORA_LAYER_REPOS=$'ACTIVE@main\nMISSING' \
+        bash "$sqlite_script" init \
+            --repo-root "$sqlite_root/repos" \
+            --config-dir "$sqlite_root/config"
+    [ -d "$sqlite_root/repos/ACTIVE/sqlite" ] ||
+        fail "$layer sqlite initializer skipped the selected repository"
+    [ ! -e "$sqlite_root/repos/NOTE/sqlite" ] ||
+        fail "$layer sqlite initializer consumed stale NOTE staging"
+    [ ! -e "$sqlite_root/repos/fedora44-ai-base/sqlite" ] ||
+        fail "$layer sqlite initializer consumed stale Base staging"
+
+    sqlite_mounts="$(
+        FEDORA_LAYER_REPOS=$'ACTIVE@main\nMISSING' \
+            bash "$sqlite_script" mounts \
+                --repo-root "$sqlite_root/repos" \
+                --config-dir "$sqlite_root/config" \
+                --container chain-note
+    )"
+    [ "$sqlite_mounts" = \
+        'chain-note-active-sqlite:/opt/safrano9999/ACTIVE/sqlite:Z' ] ||
+        fail "$layer sqlite mounts were not limited to FEDORA_LAYER_REPOS: $sqlite_mounts"
+done
+
+note_mounts="$(
+    NOTE_DB_BACKEND=sqlite CONFIG_CONTAINER_NAME=chain-note \
+        bash "$CORE/optional_persistence.sh" mounts \
+            --config-dir "$CORE" \
+            --container chain-note
+)"
+[ "$(grep -Fxc \
+    'chain-note-note-sqlite:/named_volumes/NOTE_SQLITE:Z' \
+    <<< "$note_mounts")" -eq 1 ] ||
+    fail "NOTE sqlite did not render exactly one reusable named volume"
+note_links="$(
+    NOTE_DB_BACKEND=sqlite CONFIG_CONTAINER_NAME=chain-note \
+        bash "$CORE/optional_persistence.sh" entries \
+            --config-dir "$CORE"
+)"
+grep -Fq \
+    '/named_volumes/NOTE_SQLITE|/named_volumes/NOTE_SQLITE|/root/.openclaw/extensions/note/sqlite|dir' \
+    <<< "$note_links" ||
+    fail "NOTE sqlite named-volume link does not target the installed extension"
+file_mounts="$(
+    NOTE_DB_BACKEND=file CONFIG_CONTAINER_NAME=chain-note \
+        bash "$CORE/optional_persistence.sh" mounts \
+            --config-dir "$CORE" \
+            --container chain-note
+)"
+! grep -Fq '/named_volumes/NOTE_SQLITE' <<< "$file_mounts" ||
+    fail "NOTE sqlite volume was enabled for the file backend"
+
+note_source="$temporary/named-volumes/NOTE_SQLITE"
+note_target="$temporary/root/.openclaw/extensions/note/sqlite"
+mkdir -p "$note_source" "$note_target"
+printf 'existing note state\n' > "$note_target/note.sqlite3"
+NAMED_VOLUME_LINKS="$note_source|$note_source|$note_target|dir" \
+    bash "$CORE/image/runtime.d/named_volume_links.sh"
+[ -L "$note_target" ] ||
+    fail "NOTE sqlite runtime target was not projected as a symlink"
+[ "$(readlink "$note_target")" = "$note_source" ] ||
+    fail "NOTE sqlite runtime target points to the wrong named-volume path"
+grep -Fxq 'existing note state' "$note_source/note.sqlite3" ||
+    fail "NOTE sqlite runtime projection did not preserve existing state"
+
+package_mount="$temporary/package-volume/OPENCLAW"
+declared_source="$package_mount/extensions/note/sqlite"
+declared_target="$temporary/package-root/.openclaw/extensions/note/sqlite"
+undeclared_target="$temporary/package-root/.openclaw/openclaw.json"
+mkdir -p "$declared_source" "$(dirname "$declared_target")"
+printf 'declared note state\n' > "$declared_source/note.sqlite3"
+printf 'must remain unlinked\n' > "$package_mount/openclaw.json"
+NAMED_VOLUME_LINKS="$package_mount|$declared_source|$declared_target|dir" \
+    bash "$CORE/image/runtime.d/named_volume_links.sh"
+[ -L "$declared_target" ] ||
+    fail "explicit nested named-volume path was not projected"
+[ ! -e "$undeclared_target" ] ||
+    fail "undeclared package-root state was linked implicitly"
+
 mkdir -p \
     "$temporary/fake-gh-bin" \
     "$temporary/fake-release" \
     "$temporary/release-source/plugin" \
+    "$temporary/release-target/hermes" \
+    "$temporary/release-target/fedora44-ai-container" \
     "$temporary/release-target/fedora44-ai-container/systemd"
 printf '%s\n' \
     '{"id":"release-test","name":"Release test","configSchema":{"type":"object"}}' \
@@ -274,6 +431,10 @@ printf '%s\n' 'release payload' \
     > "$temporary/release-source/plugin/release-only.txt"
 printf '%s\n' 'checkout source' \
     > "$temporary/release-target/checkout-only.txt"
+printf '%s\n' 'name: release-test' \
+    > "$temporary/release-target/hermes/plugin.yaml"
+printf '%s\n' 'hermes' \
+    > "$temporary/release-target/fedora44-ai-container/source-overlay.list"
 cat > "$temporary/release-target/fedora44-ai-container/systemd/release-test.service" <<'UNIT'
 [Unit]
 Description=Release staging contribution test
@@ -336,6 +497,8 @@ test ! -e "$temporary/release-target/checkout-only.txt" ||
     fail "release staging did not replace checkout-only content"
 test -f "$temporary/release-target/fedora44-ai-container/systemd/release-test.service" ||
     fail "release staging discarded the repository Fedora contribution"
+test -f "$temporary/release-target/hermes/plugin.yaml" ||
+    fail "release staging discarded a declared source-only adapter"
 
 mkdir -p \
     "$temporary/stage/ONE/fedora44-ai-container/build.d" \
@@ -449,10 +612,18 @@ check_setup_idempotence() {
         'OPENAI_V1_API_KEY_ALIAS=OPENAI_V1_KEY' \
         'OPENCLAW_TELEGRAMTOKEN=test-only-token' \
         'OPENCLAW_TELEGRAM_CHAT_ID=0' \
+        'NOTE_DB_BACKEND=sqlite' \
         > "$checkout/CONTAINER/$instance/$instance.env"
     if [ "$name" != core ]; then
         arguments=(--offline --config-only "$instance")
-        mkdir -p "$checkout/safrano9999"
+        mkdir -p \
+            "$checkout/safrano9999" \
+            "$checkout/safrano9999/NOTE" \
+            "$checkout/safrano9999/fedora44-ai-base"
+        printf 'NOTE_DB_BACKEND=sqlite\n' \
+            > "$checkout/safrano9999/NOTE/env.example"
+        printf 'NOTE_DB_BACKEND=sqlite\n' \
+            > "$checkout/safrano9999/fedora44-ai-base/env.example"
         for repository; do
             repository="${repository%@*}"
             mkdir -p "$checkout/safrano9999/$repository"
@@ -502,6 +673,23 @@ check_setup_idempotence "$SAFRANO" safrano \
     SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
     NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual \
     DAILYNEWS ZEROINBOX SPANKER KACHELMANN
+
+for name in core base safrano; do
+    instance="chain-test-$name"
+    quadlet="$temporary/setup-$name/CONTAINER/$instance/$instance.container"
+    [ "$(grep -Fxc \
+        "Volume=$instance-note-sqlite:/named_volumes/NOTE_SQLITE:Z" \
+        "$quadlet")" -eq 1 ] ||
+        fail "$name Quadlet does not contain exactly one NOTE sqlite volume"
+    ! grep -Eq \
+        'Volume=.*:/opt/safrano9999/(NOTE|fedora44-ai-base)/sqlite:Z$' \
+        "$quadlet" ||
+        fail "$name Quadlet leaked stale NOTE sqlite staging mounts"
+    grep -Fq \
+        '/named_volumes/NOTE_SQLITE|/named_volumes/NOTE_SQLITE|/root/.openclaw/extensions/note/sqlite|dir' \
+        "$quadlet" ||
+        fail "$name Quadlet does not project NOTE sqlite into the installed extension"
+done
 
 if ! grep -Fqx \
     "Volume=$temporary/setup-safrano/VIDEOS:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS:Z" \

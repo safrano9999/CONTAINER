@@ -31,6 +31,30 @@ valid_repo() {
     [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
 }
 
+prune_unselected() {
+    local path name spec repo
+    declare -A selected=()
+
+    for spec; do
+        repo="$(repo_name "$spec")"
+        valid_repo "$repo" || {
+            echo "Invalid repository name: $repo" >&2
+            return 2
+        }
+        selected["$repo"]=1
+    done
+
+    while IFS= read -r -d '' path; do
+        name="${path##*/}"
+        [ -n "${selected[$name]+x}" ] || {
+            rm -rf -- "$path"
+            printf '  [%s] pruned stale source\n' "$name"
+        }
+    done < <(
+        find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -print0
+    )
+}
+
 sync_one() {
     local spec="$1" repo branch path
     repo="$(repo_name "$spec")"
@@ -108,6 +132,7 @@ mkdir -p "$SOURCE_DIR"
 case "$command_name" in
     sync)
         [ "$#" -gt 0 ] || { echo "No repositories selected" >&2; exit 2; }
+        $NO_CACHE && prune_unselected "$@"
         for spec; do sync_one "$spec"; done
         ;;
     manifest)

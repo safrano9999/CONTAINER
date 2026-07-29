@@ -89,7 +89,34 @@ def save_config(config: dict) -> None:
         handle.write("\n")
 
 
-def ensure_agent_config(config: dict, agent: dict) -> Path:
+def configured_openclaw_model(config: dict) -> str:
+    model = os.environ.get("VIKAI_OPENCLAW_LLM", "").strip()
+    if not model or "/" in model:
+        return model
+
+    matches = []
+    providers = config.get("models", {}).get("providers", {})
+    if isinstance(providers, dict):
+        for provider_name, provider in providers.items():
+            if not isinstance(provider, dict):
+                continue
+            provider_models = provider.get("models", [])
+            if any(
+                isinstance(candidate, dict) and candidate.get("id") == model
+                for candidate in provider_models
+            ):
+                matches.append(f"{provider_name}/{model}")
+
+    if len(matches) == 1:
+        return matches[0]
+
+    provider_name = os.environ.get("OPENAI_V1_PROVIDER", "").strip()
+    if provider_name:
+        return f"{provider_name}/{model}"
+    return model
+
+
+def ensure_agent_config(config: dict, agent: dict, model: str) -> Path:
     agents = config.setdefault("agents", {})
     agents.setdefault("defaults", {}).setdefault("workspace", str(STATE_DIR / "workspace"))
     agent_list = agents.setdefault("list", [])
@@ -107,6 +134,8 @@ def ensure_agent_config(config: dict, agent: dict) -> Path:
     entry["name"] = entry.get("name") or agent_id
     entry["workspace"] = str(workspace)
     entry["agentDir"] = str(agent_dir)
+    if model:
+        entry["model"] = model
     entry["heartbeat"] = {
         "every": HEARTBEAT_EVERY,
         "target": "last",
@@ -179,9 +208,10 @@ def write_workspace(agent: dict, token: str, workspace: Path, target: str) -> No
 def main() -> None:
     tokens = require_tokens()
     config = load_config()
+    model = configured_openclaw_model(config)
     target = vikunja_target()
     for agent in AGENTS:
-        workspace = ensure_agent_config(config, agent)
+        workspace = ensure_agent_config(config, agent, model)
         write_workspace(agent, tokens[agent["id"]], workspace, target)
     save_config(config)
     print("VikAI OpenClaw agents provisioned: worker, architect, qc")

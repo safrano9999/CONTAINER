@@ -60,5 +60,37 @@ grep -Fq '#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/workspa
 grep -Fq '#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/agents /root/.openclaw/agents dir' \
   "$ROOT/env.safrano9999-openclaw.example"
 
+temporary="$(mktemp -d "${TMPDIR:-/tmp}/debian-note-persistence.XXXXXX")"
+cleanup() {
+  rm -rf -- "$temporary"
+}
+trap cleanup EXIT
+mkdir -p "$temporary/plugin" "$temporary/releases" "$temporary/config"
+printf '%s\n' \
+  '{"id":"note","name":"NOTE","configSchema":{"type":"object"}}' \
+  > "$temporary/plugin/openclaw.plugin.json"
+printf 'NOTE_DB_BACKEND=sqlite\n' > "$temporary/plugin/env.example"
+printf 'NOTE_DB_BACKEND=sqlite\n' > "$temporary/config/.env"
+python3 - "$temporary/plugin" "$temporary/releases/note-latest.zip" <<'PY'
+from pathlib import Path
+import sys
+from zipfile import ZIP_DEFLATED, ZipFile
+
+source = Path(sys.argv[1])
+with ZipFile(sys.argv[2], "w", compression=ZIP_DEFLATED) as archive:
+    for path in sorted(source.iterdir()):
+        archive.write(path, path.name)
+PY
+debian_note_mount="$(
+  CONFIG_CONTAINER_NAME=debian-note \
+    bash "$ROOT/setup-lib/sqlite_persistence.sh" mounts \
+      --zip-root "$temporary/releases" \
+      --config-dir "$temporary/config" \
+      --container debian-note \
+      --target-root /root/.openclaw/extensions
+)"
+[ "$debian_note_mount" = \
+  'debian-note-note-sqlite:/root/.openclaw/extensions/note/sqlite:Z' ]
+
 "$ROOT/setup.sh" --help >/dev/null
 echo "safrano9999-openclaw repo-local static checks passed"

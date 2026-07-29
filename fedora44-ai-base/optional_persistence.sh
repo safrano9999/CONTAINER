@@ -74,7 +74,7 @@ enabled_named_volume_specs() {
     while IFS=$'\t ' read -r key mount source target kind; do
         [ -n "$key" ] && [ -n "$mount" ] && [ -n "$source" ] && [ -n "$target" ] || continue
         value="$(configured_value "$config_dir" "$key")"
-        case "${value,,}" in 1|true|yes|on) ;; *) continue ;; esac
+        case "${value,,}" in 1|true|yes|on|sqlite|sqlite3) ;; *) continue ;; esac
         valid_path "$mount" && valid_path "$source" && valid_target "$target" || {
             echo "Invalid #named-volume for $key" >&2
             return 1

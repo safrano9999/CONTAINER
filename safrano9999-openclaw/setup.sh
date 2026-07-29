@@ -3,20 +3,16 @@
 #
 #   1) stage plugin release archives into ./safrano9999
 #   2) merge env.example / requirements.txt / config.conf_example
-#   3) run shared config.sh, delete generated compose/quadlet, render them here
+#   3) run repo-local config.sh, delete generated compose/quadlet, render them here
 #   4) choose Docker Hub pull or local build
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAFRANO_DIR="$SCRIPT_DIR/safrano9999"
-SCRIPTS_DIR="$SCRIPT_DIR/SCRIPTS"
-SAFRANO_SCRIPTS_DIR="$SCRIPTS_DIR/safrano9999"
-SQLITE_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/sqlite_persistence.sh"
-OPTIONAL_PERSISTENCE="$SAFRANO_SCRIPTS_DIR/optional_persistence.sh"
-IMAGE_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/image"
-CONTAINER_SCRIPTS_DIR="$SAFRANO_SCRIPTS_DIR/container"
-INSTALL_DIR="$IMAGE_SCRIPTS_DIR/install"
-DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
+SETUP_LIB_DIR="$SCRIPT_DIR/setup-lib"
+SQLITE_PERSISTENCE="$SETUP_LIB_DIR/sqlite_persistence.sh"
+OPTIONAL_PERSISTENCE="$SETUP_LIB_DIR/optional_persistence.sh"
+INSTALL_DIR="$SETUP_LIB_DIR/image/install"
 SOURCE_TAG_MANIFEST="$SCRIPT_DIR/.safrano9999-source-tags.tsv"
 CONTAINER_NAME=""
 DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/safrano9999-openclaw:latest"
@@ -78,7 +74,7 @@ done
 INSTANCE_ROOT="$SCRIPT_DIR/CONTAINER"
 SELECT_ARGS=("$SCRIPT_DIR")
 [ -z "${CONFIG_CONTAINER_NAME:-}" ] || SELECT_ARGS+=(--name "$CONFIG_CONTAINER_NAME")
-CONTAINER_NAME="$(python3 "$SAFRANO_SCRIPTS_DIR/container_instance.py" "${SELECT_ARGS[@]}")"
+CONTAINER_NAME="$(python3 "$SETUP_LIB_DIR/container_instance.py" "${SELECT_ARGS[@]}")"
 export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
 INSTANCE_DIR="$INSTANCE_ROOT/$CONTAINER_NAME"
 mkdir -p "$INSTANCE_DIR"
@@ -93,26 +89,6 @@ for file in "${INSTANCE_FILES[@]}"; do [ ! -f "$INSTANCE_DIR/$file" ] || cp -f "
 trap persist_instance_files EXIT
 LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 
-relink_dev_scripts() {
-  local path source target
-
-  [ -d "$DEV_SCRIPTS_DIR/.git" ] || return 0
-  while IFS= read -r -d '' source; do
-    path="${source#"$DEV_SCRIPTS_DIR/"}"
-    target="$SCRIPTS_DIR/$path"
-    mkdir -p "$(dirname "$target")"
-    [ -e "$target" ] && [ "$source" -ef "$target" ] || ln -f "$source" "$target"
-  done < <(
-    find "$DEV_SCRIPTS_DIR/safrano9999" -type f \
-      ! -path '*/__pycache__/*' \
-      ! -name '*.pyc' \
-      -print0
-  )
-  ln -f "$SAFRANO_SCRIPTS_DIR/merge.sh" "$SCRIPT_DIR/merge.sh"
-  ln -f "$SAFRANO_SCRIPTS_DIR/quadlet_finish.py" "$SCRIPT_DIR/quadlet_finish.py"
-}
-
-relink_dev_scripts
 "$INSTALL_DIR/github_auth.sh" safrano9999
 
 trim() {
@@ -279,19 +255,16 @@ download_plugin_zip() {
   echo "  staged $name release archive"
 }
 
-append_scripts_source_tag() {
-  local tags version version_commit content_hash
+append_repo_local_source_tag() {
+  local content_hash
 
-  tags="$(gh api 'repos/safrano9999/SCRIPTS/tags?per_page=100')"
-  version="$(jq -r '.[].name | select(test("^20[0-9]{2}\\.[0-9]+\\.[0-9]+$"))' \
-    <<< "$tags" | sort -V | tail -n 1)"
-  version_commit="$(gh api "repos/safrano9999/SCRIPTS/commits/$version" --jq .sha)"
-  [ -n "$version" ] && [ -n "$version_commit" ] \
-    || { echo "No SCRIPTS counter tag found" >&2; return 1; }
-  content_hash="$(cd "$SCRIPTS_DIR" && find . -type f \
-    ! -path '*/__pycache__/*' ! -name '*.pyc' -print0 \
-    | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
-  printf 'SCRIPTS\t%s\t%s\t%s\n' "$version" "$version_commit" "$content_hash" \
+  content_hash="$(
+    cd "$SCRIPT_DIR"
+    find Containerfile requirements.txt setup-lib image -type f \
+      ! -path '*/__pycache__/*' ! -name '*.pyc' -print0 \
+      | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1
+  )"
+  printf 'SAFRANO9999-OPENCLAW-LOCAL\trepo-local\trepo-local\t%s\n' "$content_hash" \
     >> "$SOURCE_TAG_MANIFEST"
 }
 
@@ -587,16 +560,17 @@ for p in "${PLUGINS[@]}"; do
   download_plugin_zip "$p"
   stage_provider_conf "$p"
 done
-append_scripts_source_tag
+
+echo "  Merging examples + requirements.txt..."
+( cd "$SCRIPT_DIR" && bash "$SETUP_LIB_DIR/merge.sh" "${CONFIG_PLUGINS[@]}" )
+
+append_repo_local_source_tag
 SAFRANO9999_SOURCE_KEY="$(sha256sum "$SOURCE_TAG_MANIFEST" | cut -d' ' -f1)"
 echo "  Source counter tags: $SAFRANO9999_SOURCE_KEY"
 rm -f "$SCRIPT_DIR"/*_init*
 
-echo "  Merging examples + requirements.txt..."
-bash "$SCRIPT_DIR/merge.sh" "${CONFIG_PLUGINS[@]}"
-
 if ! $NO_CONFIG; then
-  config_sh="$SAFRANO_SCRIPTS_DIR/config.sh"
+  config_sh="$SETUP_LIB_DIR/config.sh"
   [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
   ( cd "$SCRIPT_DIR" && bash "$config_sh" )
   rm -f "$QUADLET_FILE" "$COMPOSE_FILE" "$SCRIPT_DIR/docker-compose.yml"
@@ -635,7 +609,11 @@ case "$IMG_CHOICE" in
     PULL_ENGINE="$(choose_pull_engine)"
     ensure_docker_io_login "$PULL_ENGINE"
     echo "  Pulling $DOCKER_IO_IMAGE ..."
-    "$PULL_ENGINE" pull "$DOCKER_IO_IMAGE"
+    if [ "$PULL_ENGINE" = podman ]; then
+      podman pull --retry 10 --retry-delay 5s "$DOCKER_IO_IMAGE"
+    else
+      docker pull "$DOCKER_IO_IMAGE"
+    fi
     render_compose_and_quadlet "$DOCKER_IO_IMAGE" false
     echo "  Done. Image ready: $DOCKER_IO_IMAGE"
     ;;
@@ -665,4 +643,4 @@ esac
 
 echo ""
 fix_instance_paths
-python3 "$SCRIPT_DIR/quadlet_finish.py" "$INSTANCE_DIR/$(basename "$COMPOSE_FILE")" "$INSTANCE_DIR/$(basename "$QUADLET_FILE")" "$CONTAINER_NAME"
+python3 "$SETUP_LIB_DIR/quadlet_finish.py" "$INSTANCE_DIR/$(basename "$COMPOSE_FILE")" "$INSTANCE_DIR/$(basename "$QUADLET_FILE")" "$CONTAINER_NAME"

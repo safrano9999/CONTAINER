@@ -6,17 +6,17 @@ This document maps the current `Containerfile` to its logical image instructions
 
 `setup.sh` is the host-side entrypoint. Before Podman or Docker reads the `Containerfile`, it performs the following work:
 
-1. Recreate every file below `./SCRIPTS/safrano9999/` as a hardlink to `../../SCRIPTS/safrano9999/`.
-2. Hardlink the canonical `SCRIPTS/safrano9999/merge.sh` to `./merge.sh`.
-3. Download the signed release ZIP and SHA-256 file for DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, and CITADEL.
-4. Verify every downloaded ZIP with `sha256sum`.
-5. Run the single SOT `merge.sh` for `env.example`, `config.conf_example`, `container.example`, and `requirements.txt`.
-6. Exclude CITADEL's standalone configuration from the merge; this image supplies a focused OpenClaw plugin profile with localhost and Tailscale providers.
-7. Run the shared `config.sh`, producing `.env`, `config.conf`, `container.conf`, and `build.conf`.
-8. Render `compose.yml` and `safrano9999-openclaw.container` from the generated configuration.
-9. Ask whether to pull `docker.io/safrano9999/safrano9999-openclaw:latest` or build `localhost/safrano9999-openclaw:latest`.
+1. Use the repository-owned helpers below `setup-lib/`.
+2. Download the signed release ZIP and SHA-256 file for DAILYNEWS, NEXTCLOUD, ZEROINBOX, KACHELMANN, and CITADEL.
+3. Verify every downloaded ZIP with `sha256sum`.
+4. Run `setup-lib/merge.sh` for `env.example`, `config.conf_example`, `container.example`, and `requirements.txt`.
+5. Exclude CITADEL's standalone configuration from the merge; this image supplies a focused OpenClaw plugin profile with localhost and Tailscale providers.
+6. Run `setup-lib/config.sh`, producing `.env`, `config.conf`, `container.conf`, and `build.conf`.
+7. Render `compose.yml` and `safrano9999-openclaw.container` from the generated configuration.
+8. Ask whether to pull `docker.io/safrano9999/safrano9999-openclaw:latest` or build `localhost/safrano9999-openclaw:latest`.
 
-The host checkout preserves SOT identity through hardlinks. `COPY` creates normal image files; host inode identity does not cross the image-build boundary.
+Image build helpers live below `image/build.d/lib/`; runtime files mirror their
+container destinations below `image/runtime.d/rootfs/`.
 
 ## Configuration model
 
@@ -26,27 +26,31 @@ The host checkout preserves SOT identity through hardlinks. `COPY` creates norma
 - `build.conf` contains the OpenClaw base image, output image, and plugin release tag. It is not injected at runtime.
 - The generated Quadlet injects `.env`, `config.conf`, and `container.conf` with `EnvironmentFile=`.
 - CITADEL runs as an OpenClaw command plugin. Its standalone FastAPI WebUI and Cloudflare, subnet, and Tailscale extensions are disabled in this image.
-- PID 1 is `tini`, which executes the shared Debian entrypoint. This image does not use systemd.
+- PID 1 and the gateway command are inherited from `openclaw-ephemeral`. This
+  image contributes ordered lifecycle hooks and does not use systemd.
 
 ## Image instructions
 
 ### 01 - OpenClaw base-image argument
 
 ```dockerfile
-ARG OPENCLAW_IMAGE
+ARG OPENCLAW_EPHEMERAL_IMAGE
 ```
 
-- **Purpose:** Receives the official OpenClaw image used by the next instruction.
-- **Source:** `safrano9999-openclaw.build.conf_example` is resolved to `build.conf`; `setup.sh` passes the value as `--build-arg OPENCLAW_IMAGE=...`.
+- **Purpose:** Receives the `openclaw-ephemeral` image used by the next instruction.
+- **Source:** `safrano9999-openclaw.build.conf_example` is resolved to
+  `build.conf`; `setup.sh` passes the value as
+  `--build-arg OPENCLAW_EPHEMERAL_IMAGE=...`.
 - **Scope:** Build-time only.
 
 ### 02 - OpenClaw base image
 
 ```dockerfile
-FROM ${OPENCLAW_IMAGE}
+FROM ${OPENCLAW_EPHEMERAL_IMAGE}
 ```
 
-- **Purpose:** Supplies Node.js, OpenClaw, `tini`, and the official `/app` layout.
+- **Purpose:** Supplies Node.js, OpenClaw, `tini`, ephemeral environment-derived
+  configuration, and the lifecycle-hook contract.
 - **Runtime:** The final gateway still uses the official OpenClaw CLI and application paths.
 
 ### 03 - Image metadata
@@ -65,7 +69,8 @@ LABEL org.opencontainers.image.title="safrano9999-openclaw" \
 USER root
 ```
 
-- **Purpose:** Permits apt installation and allows the runtime entrypoint to start `tailscaled` when `TS_AUTHKEY` is configured.
+- **Purpose:** Permits apt installation and allows the pre-config hook to start
+  `tailscaled` when authentication or reusable state is available.
 - **Runtime:** OpenClaw also runs as root, with state below `/root/.openclaw`.
 
 ### 05 - Non-interactive apt mode
@@ -107,28 +112,14 @@ RUN curl -fsSL https://tailscale.com/install.sh | sh \
 ```
 
 - **Purpose:** Installs `tailscaled` and the Tailscale CLI.
-- **Runtime activation:** The entrypoint starts Tailscale only when `TS_AUTHKEY` exists.
+- **Runtime activation:** The pre-config hook starts Tailscale when `TS_AUTHKEY`
+  exists or persistent state can be reused.
 - **Container requirements:** `NET_ADMIN`, `NET_RAW`, and `/dev/net/tun` come from `container.conf`.
 
-### 08 - Deterministic OpenClaw patch installer
+### 08-09 - Deterministic OpenClaw patch
 
-```dockerfile
-COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh /usr/local/bin/openclaw-patch-deterministic
-```
-
-- **SOT:** `../../SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh`.
-- **Purpose:** Copies the checksum-verifying release installer into the image.
-
-### 09 - Deterministic OpenClaw dist
-
-```dockerfile
-RUN chmod +x /usr/local/bin/openclaw-patch-deterministic \
- && /usr/local/bin/openclaw-patch-deterministic
-```
-
-- **Purpose:** Downloads, verifies, and installs the patched OpenClaw `/app/dist` implementing the deterministic `dummy/dummy` model behavior.
-- **Verification:** The helper checks SHA-256 and runs `node /app/openclaw.mjs --version`.
-- **Current pin:** OpenClaw `2026.6.10`.
+The deterministic OpenClaw patch, its checksum verification, and the patched
+`/app/dist` are supplied by the inherited `openclaw-ephemeral` base image.
 
 ### 10 - Global Python package policy
 
@@ -179,16 +170,16 @@ ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 ### 15 - Shared plugin installer
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
+COPY image/build.d/lib/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
 ```
 
-- **SOT:** Shared Python installer under `SCRIPTS`.
+- **SOT:** Repository-local Python installer under `image/build.d/lib/`.
 - **Purpose:** Validates manifests, installs OpenClaw extensions, and registers plugin IDs.
 
 ### 16 - Shared container helper
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
+COPY image/build.d/lib/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
 ```
 
 - **Purpose:** Provides `safrano9999_OC_plugins`, release extraction, webhook generation, and fullrun generation.
@@ -244,15 +235,11 @@ ENV HOME=/root \
 - **Tailscale:** State defaults to `/var/lib/tailscale`.
 - **Bonjour:** Disabled to avoid container multicast discovery.
 
-### 20 - Deterministic default model
+### 20 - Ephemeral model configuration
 
-```dockerfile
-RUN openclaw models set dummy/dummy \
- && openclaw config get agents.defaults.model.primary
-```
-
-- **Purpose:** Sets and verifies the credential-free deterministic gateway model.
-- **Boundary:** Plugin-specific OpenAI-v1 settings remain plugin runtime configuration; this image does not configure an OpenClaw LLM provider.
+The inherited runtime selects and writes the OpenClaw model from injected
+native or OpenAI-v1 provider variables on each start. The child image does not
+persist or override that configuration.
 
 ### 21 - Gateway port metadata
 
@@ -275,32 +262,36 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 ### 23 - OpenClaw runtime configurator
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /usr/local/bin/openclaw-configure
+COPY image/runtime.d/rootfs/ /
 ```
 
-- **Purpose:** Generates OpenClaw plugin, Telegram, and gateway configuration from injected environment values.
-- **Runtime caller:** The entrypoint invokes it before starting the gateway.
+- **Purpose:** Registers the additional plugins and their container-only command
+  aliases in the ephemeral OpenClaw configuration.
+- **Runtime caller:** The post-config plugin-registration hook invokes it before
+  the gateway starts.
 
 ### 24 - Shared OpenClaw functions
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/bin/openclaw_common.py
+COPY image/runtime.d/rootfs/ /
 ```
 
 - **Purpose:** Supplies shared OpenClaw command and configuration helpers used by `openclaw-configure`.
 
-### 25 - Container entrypoint
+### 25 - Inherited lifecycle hooks
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local/bin/safrano9999-openclaw-entrypoint
+COPY image/runtime.d/rootfs/ /
 ```
 
-- **Runtime sequence:** Optional Tailscale, OpenClaw configuration, ZEROINBOX labels, KACHELMANN WebUI, CITADEL localhost scan, cron setup, optional fullrun, then the gateway.
+- **Runtime sequence:** Named-volume linking and optional Tailscale run in
+  `pre-config.d`; plugin registration, ZEROINBOX labels, KACHELMANN, and CITADEL
+  run in `post-config.d`; schedules launch from `pre-gateway.d`.
 
 ### 26 - Routine helper
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
+COPY image/runtime.d/rootfs/ /
 ```
 
 - **Purpose:** Provides the shared deterministic plugin routine wrapper.
@@ -308,7 +299,7 @@ COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh 
 ### 27 - Cron installer
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
+COPY image/runtime.d/rootfs/ /
 ```
 
 - **Purpose:** Converts configured CET schedules into OpenClaw cron jobs after gateway startup.
@@ -316,7 +307,7 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/
 ### 28 - Command-authorization helper
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
+COPY image/runtime.d/rootfs/ /
 ```
 
 - **Purpose:** Repairs command authorization if cron registration requires it.
@@ -324,7 +315,7 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bi
 ### 29 - Cron defaults
 
 ```dockerfile
-COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
+COPY image/runtime.d/rootfs/ /
 ```
 
 - **Purpose:** Installs the shared cron configuration source below `/etc/safrano9999`.
@@ -332,38 +323,37 @@ COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9
 ### 30 - Runtime modes and state directories
 
 ```dockerfile
-RUN chmod +x /usr/local/bin/openclaw-configure /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
+RUN chmod 0755 /usr/local/bin/safrano9999-openclaw-configure /usr/local/bin/safrano9999-routines /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
  && mkdir -p /root/.openclaw /var/lib/tailscale
 ```
 
 - **Purpose:** Marks runtime helpers executable and creates OpenClaw and Tailscale state roots.
 
-### 31 - PID 1
+### 31 - PID 1 and command
 
-```dockerfile
-ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]
-```
-
-- **Purpose:** Uses the base image's `tini` to reap child processes and forward signals.
-- **Final process:** The entrypoint uses `exec` to replace itself with `openclaw gateway run`.
+The child image deliberately sets neither `ENTRYPOINT` nor `CMD`.
+`openclaw-ephemeral` therefore retains PID 1, runs the lifecycle hooks for its
+`run` mode, and finally executes `openclaw gateway run`.
 
 ## Runtime startup sequence
 
-1. Resolve the OpenClaw CLI command.
-2. Start and join Tailscale only when `TS_AUTHKEY` exists.
-3. Run `openclaw-configure`.
-4. Initialize ZEROINBOX Gmail labels when its Python environment and helper exist.
-5. Start the KACHELMANN FastAPI WebUI on `KACHELMANN_PORT` and wait briefly for it to accept connections.
-6. Run the CITADEL scan from the installed extension. Only localhost routing is enabled, so the initial HTTP service list contains KACHELMANN rather than host-level providers.
-7. Schedule asynchronous OpenClaw cron setup.
-8. Optionally schedule the generated fullrun script.
-9. Execute the OpenClaw gateway with LAN binding and optional token authentication.
+1. Link the targeted named-volume state, including OpenClaw `workspace` and `agents`.
+2. Start and join Tailscale when an auth key or reusable state exists.
+3. Let the inherited runtime rebuild ephemeral OpenClaw configuration and apply its trusted-container policy.
+4. Register the additional plugins.
+5. Initialize ZEROINBOX Gmail labels when its Python environment and helper exist.
+6. Start the KACHELMANN FastAPI WebUI on `KACHELMANN_PORT` and wait briefly for it to accept connections.
+7. Run the CITADEL scan from the installed extension. Only localhost routing is enabled, so the initial HTTP service list contains KACHELMANN rather than host-level providers.
+8. Schedule asynchronous OpenClaw cron setup.
+9. Optionally schedule the generated fullrun script.
+10. Let the inherited runtime execute the OpenClaw gateway with LAN binding and optional token authentication.
 
 ## Remaining release work
 
-1. Build and publish the deterministic OpenClaw patch asset for the tested OpenClaw `2026.6.10` code, then update `openclaw-patch-deterministic.sh`; its current default asset is `2026.6.5`.
-2. Commit and tag the plugin repositories with the corrected shared ZIP builder so `container.example` is present in release archives. KACHELMANN needs this for `KACHELMANN_PUBLISH_PORT`.
-3. Add build-context ignore rules before a release build. The repository currently has no `.containerignore` or `.dockerignore`, so local `.env`, generated configuration, and `tmp/` are sent to the local build engine even though the `Containerfile` does not copy them into an image layer.
-4. Run a fresh local image build and smoke-test OpenClaw startup, all five plugin registrations, KACHELMANN health, the initial CITADEL scan, `/citadel`, and the gateway health check.
+1. Publish an `openclaw-ephemeral` image containing the documented lifecycle
+   hook contract, then update this repository's pinned digest.
+2. Run a fresh local image build and smoke-test OpenClaw startup, all five
+   additional plugin registrations, KACHELMANN health, the initial CITADEL scan,
+   `/citadel`, and the gateway health check.
 
 The shared SQLite persistence helper inspects each staged plugin ZIP. For every local `*_DB_BACKEND=sqlite`, `setup.sh` creates an isolated named volume and mounts it at `/root/.openclaw/extensions/<plugin-id>/sqlite`; plugin code remains in the image layer.

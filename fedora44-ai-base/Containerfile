@@ -1,0 +1,105 @@
+ARG AI_CORE_IMAGE=ghcr.io/safrano9999/fedora44-ai-core:latest
+FROM ${AI_CORE_IMAGE} AS ai-base
+
+ARG NEXTCLOUD_PLUGIN_SHA256
+ARG FEDORA44_AI_BASE_SOURCE_KEY
+
+LABEL org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
+      org.opencontainers.image.title="fedora44-ai-base" \
+      org.opencontainers.image.description="Fedora 44 AI Base repository and service contributions." \
+      io.safrano9999.parent="fedora44-ai-core" \
+      io.safrano9999.base-source-tags.sha256="${FEDORA44_AI_BASE_SOURCE_KEY}"
+
+USER root
+
+COPY requirements.base.txt /requirements.base.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.base.txt \
+ && pip check
+
+ENV SAFRANO9999_STAGE_DIR=/opt/safrano9999/.stage
+COPY .fedora44-ai-base-source-tags.tsv /README/fedora44-ai-base-source-tags.tsv
+COPY safrano9999/WELCOME ${SAFRANO9999_STAGE_DIR}/WELCOME
+COPY safrano9999/CODEANALYST ${SAFRANO9999_STAGE_DIR}/CODEANALYST
+COPY safrano9999/CITADEL ${SAFRANO9999_STAGE_DIR}/CITADEL
+COPY safrano9999/DIESDAS- ${SAFRANO9999_STAGE_DIR}/DIESDAS-
+COPY safrano9999/NEXTCLOUD ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD
+COPY ref.base.conf ${SAFRANO9999_STAGE_DIR}/WELCOME/ref.conf
+
+RUN mkdir -p /tmp/nextcloud-runtime \
+ && test -n "${NEXTCLOUD_PLUGIN_SHA256}" \
+ && curl -fsSL https://github.com/safrano9999/NEXTCLOUD/releases/download/latest/nextcloud-fedora64-plugin-latest.zip \
+      -o /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip \
+ && echo "${NEXTCLOUD_PLUGIN_SHA256}  /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip" \
+      | sha256sum -c - \
+ && unzip -q /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip 'runtime/*' \
+      -d ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD \
+ && rm -rf /tmp/nextcloud-runtime
+
+COPY image/runtime.d/openclaw_common.py /usr/local/bin/openclaw_common.py
+COPY image/runtime.d/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
+COPY image/runtime.d/openclaw-layer-runtime.py /usr/local/bin/openclaw-layer-runtime
+COPY image/build.d/openclaw-layer-build.py /usr/local/bin/openclaw-layer-build
+COPY image/runtime.d/python_header.py /usr/local/bin/python_header.py
+COPY image/runtime.d/openai_v1.py /usr/local/bin/openai_v1.py
+COPY image/runtime.d/readme_welcome.py /usr/local/bin/safrano9999-welcome
+COPY image/runtime.d/openclaw-crontabs.sh /usr/local/bin/openclaw-crontabs
+COPY image/runtime.d/openclaw-allow-all.mjs /usr/local/bin/openclaw-allow-all
+COPY image/build.d/apply-contributions.sh /usr/local/libexec/fedora44-ai/apply-contributions
+COPY image/contributions.tsv /usr/local/share/fedora44-ai/base-contributions.tsv
+COPY image/openclaw-crontab /usr/local/share/fedora44-ai/base-openclaw-crontab
+
+COPY image/readme/paper.pdf /usr/local/share/fedora44-ai/paper.pdf
+
+RUN chmod 0755 \
+      /usr/local/bin/openclaw-layer-runtime \
+      /usr/local/bin/openclaw-layer-build \
+      /usr/local/bin/safrano9999_plugins.py \
+      /usr/local/bin/safrano9999-welcome \
+      /usr/local/bin/openclaw-crontabs \
+      /usr/local/bin/openclaw-allow-all \
+      /usr/local/libexec/fedora44-ai/apply-contributions \
+ && /usr/local/libexec/fedora44-ai/apply-contributions \
+      --stage "${SAFRANO9999_STAGE_DIR}" \
+      --root /opt/safrano9999 \
+      --image-root / \
+      --manifest /usr/local/share/fedora44-ai/base-contributions.tsv \
+      --crontab-file /usr/local/share/fedora44-ai/base-openclaw-crontab \
+ && rm -rf "${SAFRANO9999_STAGE_DIR}"
+
+RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
+ && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
+      mv /opt/safrano9999/CITADEL/extensions/disabled/subnet \
+         /opt/safrano9999/CITADEL/extensions/enabled/subnet; \
+    fi \
+ && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/tailscale ]; then \
+      mv /opt/safrano9999/CITADEL/extensions/disabled/tailscale \
+         /opt/safrano9999/CITADEL/extensions/enabled/tailscale; \
+    fi \
+ && chmod 0755 /opt/safrano9999/CITADEL/scan.sh
+
+RUN /usr/local/bin/openclaw-ephemeral.py configure \
+ && /usr/local/bin/openclaw-layer-build \
+      --repos WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
+ && find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
+
+COPY image/systemd/ /etc/systemd/system/
+RUN install -m 0644 \
+      /opt/safrano9999/NEXTCLOUD/systemd/nextcloud-sync@.service \
+      /etc/systemd/system/nextcloud-sync@.service \
+ && install -m 0755 \
+      /opt/safrano9999/NEXTCLOUD/systemd/nextcloud-timer-generator \
+      /usr/lib/systemd/system-generators/nextcloud-timer-generator \
+ && sed -i 's#file:///app/dist/#file:///usr/local/lib/node_modules/openclaw/dist/#' \
+      /usr/local/bin/openclaw-allow-all \
+ && systemctl enable \
+      codeanalyst.service \
+      citadel.service \
+      citadel-scan.service \
+      safrano9999-welcome.service \
+      openclaw-safrano9999-base.service
+
+USER root
+WORKDIR /root
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

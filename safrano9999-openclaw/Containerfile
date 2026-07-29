@@ -5,9 +5,10 @@
 # providers are discovered from injected runtime environment variables.
 #
 # Base:    public openclaw-ephemeral image with pinned OpenClaw 2026.7.1.
-# Boot:    tini -> SCRIPTS/.../entrypoint.sh
-#          (named volumes -> tailscale -> ephemeral config -> plugins -> gateway)
-# Context: all build and runtime helpers live below ./SCRIPTS.
+# Boot:    inherited openclaw-ephemeral run contract
+#          (pre-config hooks -> ephemeral config -> post-config hooks
+#           -> pre-gateway hooks -> gateway)
+# Context: build helpers and the runtime rootfs live below ./image.
 # =============================================================================
 
 ARG OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
@@ -56,8 +57,8 @@ ENV OPENCLAW_PLUGINS_DIR=/root/.openclaw/extensions
 ENV ZEROINBOX_DIR=/root/.openclaw/extensions/zeroinbox
 ENV SAFRANO9999_STAGE_DIR=/tmp/safrano9999-plugins
 LABEL io.safrano9999.source-tags.sha256="${SAFRANO9999_SOURCE_KEY}"
-COPY SCRIPTS/safrano9999/image/services/openclaw/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
-COPY SCRIPTS/safrano9999/image/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
+COPY image/build.d/lib/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
+COPY image/build.d/lib/safrano9999_container.sh /usr/local/lib/safrano9999_container.sh
 COPY .safrano9999-source-tags.tsv /README/safrano9999-source-tags.tsv
 COPY safrano9999/*.zip safrano9999/*.zip.sha256 ${SAFRANO9999_STAGE_DIR}/
 
@@ -91,20 +92,17 @@ EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:${OPENCLAW_GATEWAY_PORT}/healthz" >/dev/null || exit 1
 
-# --- runtime config + entrypoint --------------------------------------------
+# --- runtime config + inherited lifecycle hooks -----------------------------
 # Keep these final so service-only edits rebuild only the small tail layers.
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/openclaw-configure.py /usr/local/bin/safrano9999-openclaw-configure
-COPY SCRIPTS/safrano9999/image/services/openclaw/openclaw_common.py /usr/local/bin/openclaw_common.py
-COPY SCRIPTS/safrano9999/image/services/tailscale/tailscale-state-up.sh /usr/local/bin/tailscale-state-up.sh
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/entrypoint.sh /usr/local/bin/safrano9999-openclaw-entrypoint
-COPY SCRIPTS/safrano9999/container/safrano9999-openclaw/safrano9999-routines.sh /usr/local/bin/safrano9999-routines
-COPY SCRIPTS/safrano9999/named_volume_links.sh /usr/local/bin/named_volume_links.sh
-COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.sh /usr/local/bin/openclaw-crontabs
-COPY SCRIPTS/safrano9999/container/openclaw/openclaw_allow_all.mjs /usr/local/bin/openclaw-allow-all
-COPY SCRIPTS/safrano9999/container/openclaw/openclaw_crontabs.conf /etc/safrano9999/openclaw-crontabs.conf
-RUN chmod +x /usr/local/bin/safrano9999-openclaw-configure /usr/local/bin/tailscale-state-up.sh /usr/local/bin/safrano9999-openclaw-entrypoint /usr/local/bin/safrano9999-routines /usr/local/bin/named_volume_links.sh /usr/local/bin/openclaw-crontabs /usr/local/bin/openclaw-allow-all \
+COPY image/runtime.d/rootfs/ /
+RUN chmod 0755 \
+      /usr/local/bin/safrano9999-openclaw-configure \
+      /usr/local/bin/tailscale-state-up.sh \
+      /usr/local/bin/safrano9999-routines \
+      /usr/local/bin/named_volume_links.sh \
+      /usr/local/bin/openclaw-crontabs \
+      /usr/local/bin/openclaw-allow-all \
+      /usr/local/share/openclaw-ephemeral/runtime.d/pre-config.d/*.sh \
+      /usr/local/share/openclaw-ephemeral/runtime.d/post-config.d/*.sh \
+      /usr/local/share/openclaw-ephemeral/runtime.d/pre-gateway.d/*.sh \
  && mkdir -p "$OPENCLAW_CONFIG_DIR" /var/lib/tailscale
-
-# tini (already in the base image) reaps zombies; our script does the rest.
-ENTRYPOINT ["tini", "-s", "--", "/usr/local/bin/safrano9999-openclaw-entrypoint"]
-CMD []

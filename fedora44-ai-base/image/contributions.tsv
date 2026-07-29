@@ -1,0 +1,6 @@
+# repository	kind	webhook	fullrun
+CODEANALYST	standalone	no	no
+DIESDAS-	standalone	no	no
+CITADEL	plugin	yes	no
+WELCOME	plugin	yes	yes
+NEXTCLOUD	plugin	yes	yes

@@ -32,10 +32,6 @@ container.example
 compose.yml
 VIDEOS/
 services/runtime-pass-environment.local.conf
-!SCRIPTS/
-!SCRIPTS/**
-SCRIPTS/**/__pycache__/
-SCRIPTS/**/*.pyc
 /safrano9999/
 /shared-scripts/
 /srv/

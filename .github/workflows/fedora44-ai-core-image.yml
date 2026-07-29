@@ -26,6 +26,8 @@ jobs:
       packages: write
     env:
       IMAGE: ghcr.io/safrano9999/fedora44-ai-core
+      # Replace this old hook-aware digest after openclaw-ephemeral publishes.
+      OPENCLAW_EPHEMERAL_IMAGE: docker.io/safrano9999/openclaw-ephemeral@sha256:8efeaf268d61e64fe3c4a4743384604718a8a728d7f0003e670897801f66ebce
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:
@@ -64,14 +66,21 @@ jobs:
           set +a
           for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION \
             ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT \
-            WEBHOOK_VERSION VDITOR_VERSION OPENCLAW_VERSION; do
+            WEBHOOK_VERSION VDITOR_VERSION OPENCLAW_VERSION \
+            OPENCLAW_EPHEMERAL_IMAGE; do
             [ -n "${!name:-}" ] || {
-              echo "Missing $name in build.conf" >&2
+              echo "Missing required build input: $name" >&2
               exit 1
             }
           done
+          [[ "$OPENCLAW_EPHEMERAL_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || {
+            echo "OPENCLAW_EPHEMERAL_IMAGE must use an immutable digest" >&2
+            exit 1
+          }
           {
+            echo "openclaw_version=$OPENCLAW_VERSION"
             echo "build_args<<EOF"
+            echo "OPENCLAW_EPHEMERAL_IMAGE=$OPENCLAW_EPHEMERAL_IMAGE"
             echo "CERTS=$CERTS"
             echo "HERMES_TAG=$HERMES_TAG"
             echo "HERMES_COMMIT=$HERMES_COMMIT"
@@ -82,7 +91,6 @@ jobs:
             echo "GETH_COMMIT=$GETH_COMMIT"
             echo "WEBHOOK_VERSION=$WEBHOOK_VERSION"
             echo "VDITOR_VERSION=$VDITOR_VERSION"
-            echo "OPENCLAW_VERSION=$OPENCLAW_VERSION"
             cat .resolved-build.env
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -120,12 +128,16 @@ jobs:
       - name: Test published image
         env:
           IMAGE_TAG: ${{ steps.tags.outputs.version }}
+          EXPECTED_OPENCLAW_VERSION: ${{ steps.build.outputs.openclaw_version }}
         shell: bash
         run: |
           set -euo pipefail
           image="${IMAGE}:${IMAGE_TAG}"
           docker pull "$image"
-          docker run --rm --entrypoint bash "$image" -lc '
+          docker run --rm \
+            -e EXPECTED_OPENCLAW_VERSION \
+            --entrypoint bash \
+            "$image" -lc '
             set -euo pipefail
             grep -q "Fedora release 44" /etc/fedora-release
             for command in node npm python3 pip uv codex claude openclaw \
@@ -133,15 +145,39 @@ jobs:
               lnd lncli geth solana; do
               command -v "$command" >/dev/null
             done
-            test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = 2026.7.1
+            test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" \
+              = "$EXPECTED_OPENCLAW_VERSION"
             test -f /usr/local/lib/vditor/dist/index.min.js
             test -f /usr/local/lib/vditor-notes/app.py
             test -f /usr/local/share/bip39/index.html
             test -x /usr/local/bin/electrum
+            test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/openclaw-ephemeral-yolo
+            test -x /usr/local/bin/hermes-ephemeral.py
+            test -f /root/.openclaw/extensions/note/openclaw.plugin.json
+            note_python="$("/root/.openclaw/extensions/note/scripts/setup-python.sh")"
+            test -x "$note_python"
+            "$note_python" -c "import dotenv, sqlalchemy, psycopg, pymysql"
+            python3 -c "import yaml; import openclaw_ephemeral"
+            for unit in fedora44-ai.service tailscaled.service \
+              tailscale-up.service cockpit.service vditor-notes.service \
+              openclaw-config.service openclaw.service hermes.service \
+              hermes-dashboard.service; do
+              test -f "/etc/systemd/system/$unit" \
+                || test -f "/usr/lib/systemd/system/$unit"
+              systemctl is-enabled "$unit"
+            done
+            test "$(systemctl is-enabled cockpit.socket)" = masked
             test ! -e /opt/safrano9999
-            test ! -e /usr/local/bin/openclaw-ephemeral.py
-            test ! -e /root/.openclaw/extensions/note
           '
+          docker run --rm \
+            --entrypoint /usr/local/bin/openclaw-ephemeral.py \
+            "$image" configure
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
+          test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
+            = '["/sbin/init"]'
+          test "$(docker image inspect --format '{{.Config.StopSignal}}' "$image")" \
+            = 'SIGRTMIN+3'
           docker buildx imagetools inspect "$image" >/dev/null
 
       - name: Verify private GHCR package

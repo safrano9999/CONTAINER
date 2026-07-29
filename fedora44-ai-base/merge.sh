@@ -18,8 +18,8 @@ collect_base_files() {
     local output="$2"
     local result_name="$3"
     local -n base_result_ref="$result_name"
-    local file
-    local -a candidates=()
+    local file example_dir
+    local -a candidates=() example_dirs=()
 
     case "$kind" in
         env) candidates=("$DIR"/env*example) ;;
@@ -27,6 +27,15 @@ collect_base_files() {
         container) candidates=("$DIR"/container*example "$DIR"/config*.container) ;;
         *) return 2 ;;
     esac
+    IFS=: read -ra example_dirs <<< "${FEDORA44_AI_EXAMPLE_DIRS:-}"
+    for example_dir in "${example_dirs[@]}"; do
+        [ -d "$example_dir" ] || continue
+        case "$kind" in
+            env) candidates+=("$example_dir"/env*example) ;;
+            config) candidates+=("$example_dir"/config*example) ;;
+            container) candidates+=("$example_dir"/container*example "$example_dir"/config*.container) ;;
+        esac
+    done
     for file in "${candidates[@]}"; do
         [ -f "$file" ] || continue
         [ "$file" = "$output" ] && continue

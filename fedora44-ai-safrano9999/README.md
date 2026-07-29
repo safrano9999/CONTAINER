@@ -1,7 +1,22 @@
 # fedora44-ai-safrano9999
 
-Private runtime configuration for `ghcr.io/safrano9999/fedora44-ai-safrano9999`.
+`ghcr.io/safrano9999/fedora44-ai-safrano9999` is built directly from
+`fedora44-ai-base`. Its Containerfile adds only the eleven repositories listed
+in `image/contributions.tsv`, their requirements and services, and the final
+OpenClaw contribution hook.
 
-`setup.sh` manages any number of full Safrano container instances below `CONTAINER/<name>/`. Its merged environment, config, container, Compose and Quadlet behavior matches the former full `fedora44-ai` setup. Every normal setup run asks whether to pull the private GHCR image or build it locally through the sibling `fedora44-ai` build repository. `--pull` and `--build` are the explicit non-interactive alternatives.
+Repositories use the same optional, fail-closed `fedora44-ai-container/`
+contract documented by the Base layer for build, rootfs, systemd, and runtime
+contributions.
 
-Setup pulls and distills the complete `fedora44-ai-base` examples first. The local variant examples contain only Safrano-specific overrides and additions.
+The VikAI bootstrap is a separate oneshot service ordered after the fresh
+Core OpenClaw configuration and before the Safrano contribution hook. Partial
+VikAI token configuration fails explicitly; no tokens make it a no-op.
+
+The example cascade is Core, then Base, then the two Safrano-owned BIP39 keys
+in this directory. `setup.sh` stages only Safrano sources and keeps generated
+instances below `CONTAINER/<name>/`. Use `--offline --config-only` for a
+network-free render, or select `--pull`/`--build` noninteractively.
+
+Run the whole Fedora chain check from
+`../fedora44-ai-core/tests/check-build-context.sh`.

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -x /usr/local/bin/openclaw-crontabs ]; then
+  ( sleep "${OPENCLAW_CRON_SETUP_DELAY:-20}"; /usr/local/bin/openclaw-crontabs ) &
+fi
+if [ "${SAFRANO9999_FULLRUN_ON_START:-1}" = "1" ] && [ -x "${SAFRANO9999_FULLRUN_SCRIPT:-/usr/local/bin/safrano9999-fullrun}" ]; then
+  ( sleep "${SAFRANO9999_FULLRUN_DELAY:-100}"; "${SAFRANO9999_FULLRUN_SCRIPT:-/usr/local/bin/safrano9999-fullrun}" ) &
+fi

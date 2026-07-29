@@ -18,5 +18,3 @@ shared-scripts
 /CONTAINER/
 /.resolved-build.env
 /container_backup.env
-/SCRIPTS/safrano9999/container_backup.sh
-/SCRIPTS/safrano9999/container_backup.env_example

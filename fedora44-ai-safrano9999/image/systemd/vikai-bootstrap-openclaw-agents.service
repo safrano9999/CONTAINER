@@ -1,0 +1,14 @@
+[Unit]
+Description=Provision VikAI OpenClaw agents from injected runtime tokens
+After=openclaw-config.service
+Requires=openclaw-config.service
+Before=openclaw-safrano9999.service openclaw.service
+
+[Service]
+Type=oneshot
+PassEnvironment=OPENCLAW_CONFIG OPENCLAW_STATE_DIR VIKAI_DIR VIKAI_HEARTBEAT_EVERY VIKUNJA_URL VIKUNJA_HOST TOKEN_WORKER TOKEN_ARCHITECT TOKEN_QC
+ExecStart=/bin/bash -lc 'if [ -n "$${TOKEN_WORKER:-}$${TOKEN_ARCHITECT:-}$${TOKEN_QC:-}" ]; then exec /usr/local/bin/vikai-bootstrap-openclaw-agents; fi'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -8,6 +8,9 @@ bash -n \
     "$ROOT/build-local.sh" \
     "$ROOT/prepare-build-context.sh" \
     "$ROOT/build/resolve-build-inputs.sh" \
+    "$ROOT/setup.sh" \
+    "$ROOT/optional_persistence.sh" \
+    "$ROOT"/image/runtime.d/*.sh \
     "$0"
 
 (
@@ -26,20 +29,20 @@ bash -n \
     [ "$WEBHOOK_VERSION" = 2.8.3 ]
 )
 
-[ "$(sed -n '1p' "$ROOT/Containerfile")" = "FROM quay.io/fedora/fedora:44 AS ai-core" ]
-grep -Eq '^PyYAML([<>=].*)?$' "$ROOT/requirements.base.txt"
+grep -Fq 'FROM ${OPENCLAW_EPHEMERAL_IMAGE} AS openclaw-ephemeral-source' \
+    "$ROOT/Containerfile"
+grep -Fq 'FROM quay.io/fedora/fedora:44 AS ai-core' "$ROOT/Containerfile"
+grep -Fq 'openclaw-ephemeral.py configure' \
+    "$ROOT/image/systemd/openclaw-config.service"
+grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' \
+    "$ROOT/image/systemd/hermes.service"
 grep -Eq '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
 grep -Eq '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
-grep -Eq 'openclaw@\$\{OPENCLAW_VERSION\}' "$ROOT/Containerfile"
+grep -Eq '^USER root$' "$ROOT/Containerfile"
 
 for forbidden in \
-    openclaw-ephemeral \
-    openclaw-deterministic \
-    patch.tar.gz \
-    note-latest.zip \
     /opt/safrano9999 \
     SAFRANO9999_STAGE_DIR \
-    WELCOME \
     CODEANALYST \
     CITADEL \
     DIESDAS- \
@@ -60,9 +63,10 @@ for forbidden in \
         "$ROOT/build.conf" \
         "$ROOT/requirements.base.txt" \
         "$ROOT/build" \
+        "$ROOT/image" \
         "$ROOT/prepare-build-context.sh" \
         "$ROOT/build-local.sh"; then
-        echo "Forbidden Base-layer content found in core: $forbidden" >&2
+        echo "Project-layer content found in Core: $forbidden" >&2
         exit 1
     fi
 done
@@ -76,4 +80,5 @@ if [ -f "$workflow" ]; then
     fi
 fi
 
+"$ROOT/tests/check-fedora-chain.sh"
 echo "fedora44-ai-core static checks passed"

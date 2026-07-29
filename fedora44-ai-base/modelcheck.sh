@@ -6,7 +6,7 @@ set -a
 source "$SCRIPT_DIR/${CONFIG_CONTAINER_NAME:-fedora44-ai}.env"
 set +a
 
-PYTHONPATH="$SCRIPT_DIR/SCRIPTS/safrano9999-lib/py-core${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY'
+PYTHONPATH="$SCRIPT_DIR/image/runtime.d${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY'
 from openai_v1 import openai_v1_models, openai_v1_providers
 
 for provider in openai_v1_providers():

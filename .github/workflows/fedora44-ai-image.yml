@@ -17,8 +17,12 @@ on:
           - base
           - all
         default: safrano9999
-      core2_tag:
-        description: "fedora44-ai-core2 parent tag"
+      core_tag:
+        description: "fedora44-ai-core parent tag"
+        required: false
+        default: "latest"
+      base_tag:
+        description: "fedora44-ai-base parent tag for a Safrano-only build"
         required: false
         default: "latest"
       push_latest:
@@ -27,6 +31,10 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: fedora44-ai-images
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -34,42 +42,40 @@ jobs:
       contents: read
       packages: write
     env:
+      CORE_IMAGE: ghcr.io/safrano9999/fedora44-ai-core
       BASE_IMAGE: ghcr.io/safrano9999/fedora44-ai-base
       SAFRANO_IMAGE: ghcr.io/safrano9999/fedora44-ai-safrano9999
-      CORE2_IMAGE: ghcr.io/safrano9999/fedora44-ai-core2
       DOCKER_BUILD_RECORD_UPLOAD: "false"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout shared scripts
-        env:
-          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
-        run: |
-          : "${GH_TOKEN:?GH_RELEASE_TOKEN is required}"
-          gh repo clone safrano9999/SCRIPTS "$RUNNER_TEMP/SCRIPTS" -- --depth 1
-
-      - name: Resolve image tags
-        id: tags
+      - name: Resolve image references
+        id: refs
         shell: bash
         env:
           REQUESTED_TAG: ${{ inputs.image_tag }}
           BUILD_SCOPE: ${{ inputs.build_scope }}
+          CORE_TAG: ${{ inputs.core_tag }}
+          BASE_TAG: ${{ inputs.base_tag }}
           PUSH_LATEST: ${{ inputs.push_latest }}
-          CORE2_TAG: ${{ inputs.core2_tag }}
         run: |
           set -euo pipefail
           version="$REQUESTED_TAG"
           [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
+
+          core_ref="${CORE_IMAGE}:${CORE_TAG:-latest}"
           if [ "$BUILD_SCOPE" = all ] || [ "$BUILD_SCOPE" = base ]; then
             base_ref="${BASE_IMAGE}:${version}"
           else
-            base_ref="${BASE_IMAGE}:latest"
+            base_ref="${BASE_IMAGE}:${BASE_TAG:-latest}"
           fi
+
           {
             echo "version=$version"
+            echo "core_ref=$core_ref"
             echo "base_ref=$base_ref"
-            echo "core2_ref=${CORE2_IMAGE}:${CORE2_TAG:-latest}"
             echo "base_tags<<EOF"
             echo "${BASE_IMAGE}:${version}"
             [ "$PUSH_LATEST" != true ] || echo "${BASE_IMAGE}:latest"
@@ -80,27 +86,57 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Stage source repositories
+      - name: Run Fedora chain static checks
+        run: fedora44-ai-core/tests/check-build-context.sh
+
+      - name: Configure source authentication
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
-          DEV_SCRIPTS_DIR: ${{ runner.temp }}/SCRIPTS
-        run: |
-          gh auth setup-git
-          cd fedora44-ai
-          ./prepare-build-context.sh "$GITHUB_WORKSPACE/fedora44-ai"
+        run: gh auth setup-git
 
-      - name: Resolve image build configuration
-        id: build
-        shell: bash
+      - name: Prepare Base build context
+        if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
         env:
-          BUILD_SCOPE: ${{ inputs.build_scope }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: fedora44-ai-base/prepare-build-context.sh --no-cache
+
+      - name: Resolve Base build configuration
+        if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
+        id: base_build
+        shell: bash
         run: |
           set -euo pipefail
-          cd fedora44-ai
-          [ -s .resolved-build.env ] || { echo "Missing .resolved-build.env" >&2; exit 1; }
+          resolved=fedora44-ai-base/.resolved-build.env
+          [ -s "$resolved" ] || {
+            echo "Missing $resolved" >&2
+            exit 1
+          }
           {
             echo "build_args<<EOF"
-            cat .resolved-build.env
+            cat "$resolved"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Safrano build context
+        if: inputs.build_scope != 'base'
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: fedora44-ai-safrano9999/prepare-build-context.sh --no-cache
+
+      - name: Resolve Safrano build configuration
+        if: inputs.build_scope != 'base'
+        id: safrano_build
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved=fedora44-ai-safrano9999/.resolved-build.env
+          [ -s "$resolved" ] || {
+            echo "Missing $resolved" >&2
+            exit 1
+          }
+          {
+            echo "build_args<<EOF"
+            cat "$resolved"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -111,7 +147,7 @@ jobs:
           keep-state: false
           cleanup: true
 
-      - name: Log in to GHCR
+      - name: Log in to private GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -122,75 +158,115 @@ jobs:
         if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
         uses: docker/build-push-action@v6
         with:
-          context: ./fedora44-ai
-          file: ./fedora44-ai/Containerfile
+          context: ./fedora44-ai-base
+          file: ./fedora44-ai-base/Containerfile
           target: ai-base
+          platforms: linux/amd64
           pull: true
           no-cache: true
           push: true
-          tags: ${{ steps.tags.outputs.base_tags }}
+          tags: ${{ steps.refs.outputs.base_tags }}
           build-args: |
-            AI_CORE2_IMAGE=${{ steps.tags.outputs.core2_ref }}
-            ${{ steps.build.outputs.build_args }}
+            AI_CORE_IMAGE=${{ steps.refs.outputs.core_ref }}
+            ${{ steps.base_build.outputs.build_args }}
 
       - name: Build and push Safrano layer
         if: inputs.build_scope != 'base'
         uses: docker/build-push-action@v6
         with:
-          context: ./fedora44-ai
-          file: ./fedora44-ai/Containerfile
+          context: ./fedora44-ai-safrano9999
+          file: ./fedora44-ai-safrano9999/Containerfile
           target: ai-safrano9999
+          platforms: linux/amd64
           pull: true
           no-cache: true
           push: true
-          tags: ${{ steps.tags.outputs.safrano_tags }}
+          tags: ${{ steps.refs.outputs.safrano_tags }}
           build-args: |
-            AI_BASE_IMAGE=${{ steps.tags.outputs.base_ref }}
-            ${{ steps.build.outputs.build_args }}
+            AI_BASE_IMAGE=${{ steps.refs.outputs.base_ref }}
+            ${{ steps.safrano_build.outputs.build_args }}
 
       - name: Test published Base layer
         if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
         shell: bash
         run: |
           set -euo pipefail
-          image="${BASE_IMAGE}:${{ steps.tags.outputs.version }}"
+          image="${BASE_IMAGE}:${{ steps.refs.outputs.version }}"
           docker pull "$image"
           docker run --rm --entrypoint bash "$image" -lc '
             set -euo pipefail
+            grep -q "Fedora release 44" /etc/fedora-release
             test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/openclaw-ephemeral-yolo
             test -x /usr/local/bin/hermes-ephemeral.py
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
-            test ! -e /opt/safrano9999/NOTE
             for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD; do
               test -d "/opt/safrano9999/$project"
             done
-            systemctl is-enabled fedora44-ai.service openclaw-config.service \
-              openclaw-safrano9999.service openclaw.service hermes.service \
-              hermes-dashboard.service citadel.service codeanalyst.service
+            for project in JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
+              NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
+              SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
+              NaturalGrounding-Tiktok-Ying-Video-Manager \
+              DAILYNEWS ZEROINBOX SPANKER KACHELMANN; do
+              test ! -e "/opt/safrano9999/$project"
+            done
+            systemctl is-enabled \
+              fedora44-ai.service tailscaled.service tailscale-up.service \
+              cockpit.service vditor-notes.service openclaw-config.service \
+              openclaw.service hermes.service hermes-dashboard.service \
+              codeanalyst.service citadel.service citadel-scan.service \
+              safrano9999-welcome.service openclaw-safrano9999-base.service
           '
+          test "$(
+            docker image inspect \
+              --format '{{ index .Config.Labels "io.safrano9999.parent" }}' \
+              "$image"
+          )" = fedora44-ai-core
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
+          test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
+            = '["/sbin/init"]'
+          docker buildx imagetools inspect "$image" >/dev/null
 
       - name: Test published Safrano layer
         if: inputs.build_scope != 'base'
         shell: bash
         run: |
           set -euo pipefail
-          image="${SAFRANO_IMAGE}:${{ steps.tags.outputs.version }}"
+          image="${SAFRANO_IMAGE}:${{ steps.refs.outputs.version }}"
           docker pull "$image"
           docker run --rm --entrypoint bash "$image" -lc '
             set -euo pipefail
+            grep -q "Fedora release 44" /etc/fedora-release
             test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/openclaw-ephemeral-yolo
             test -x /usr/local/bin/hermes-ephemeral.py
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
-            for project in JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
+            for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
+              JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
               NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
               SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
               NaturalGrounding-Tiktok-Ying-Video-Manager \
               DAILYNEWS ZEROINBOX SPANKER KACHELMANN; do
               test -d "/opt/safrano9999/$project"
             done
-            systemctl is-enabled openclaw-config.service \
-              openclaw-safrano9999.service openclaw.service hermes.service \
-              jugo.service pvdach.service kiwix-bridge.service \
+            systemctl is-enabled \
+              fedora44-ai.service tailscaled.service tailscale-up.service \
+              cockpit.service vditor-notes.service openclaw-config.service \
+              openclaw.service hermes.service hermes-dashboard.service \
+              codeanalyst.service citadel.service citadel-scan.service \
+              safrano9999-welcome.service openclaw-safrano9999-base.service \
+              vikai-bootstrap-openclaw-agents.service \
+              openclaw-safrano9999.service jugo.service pvdach.service \
+              pvdach-qgis-webhook.service kiwix-bridge.service \
               napoleon.service naturalgrounding.service bip39.service \
               spanker-webui.service
           '
+          test "$(
+            docker image inspect \
+              --format '{{ index .Config.Labels "io.safrano9999.parent" }}' \
+              "$image"
+          )" = fedora44-ai-base
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
+          test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
+            = '["/sbin/init"]'
+          docker buildx imagetools inspect "$image" >/dev/null

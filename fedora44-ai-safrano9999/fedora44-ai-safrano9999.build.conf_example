@@ -1,0 +1,2 @@
+#default-preset: ghcr.io/safrano9999/fedora44-ai-safrano9999:latest
+FEDORA44_AI_SAFRANO9999_IMAGE=ghcr.io/safrano9999/fedora44-ai-safrano9999:latest

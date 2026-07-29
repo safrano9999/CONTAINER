@@ -1,0 +1,69 @@
+# key	kind	consumer or explicit injection purpose
+ADDITIONAL_LINE	generator	fedora44-ai-core/config.sh
+BIP39_PORT	source	fedora44-ai-safrano9999/image/systemd/bip39.service
+BIP39_PUBLISH_PORT	generator	fedora44-ai-core/config.sh
+BRAVE_API_KEY	injection	OpenClaw discovers native providers from injected *_API_KEY variables
+CITADEL_CLOUDFLARE	source	fedora44-ai-base/image/systemd/citadel.service
+CLAUDE_CODE_OAUTH_TOKEN	source	fedora44-ai-safrano9999/image/systemd/jugo.service
+CLOUDFLARED_START	source	fedora44-ai-core/image/runtime.d/fedora44-runtime-environment-generator.sh
+CLOUDFLARE_API_TOKEN	source	fedora44-ai-base/image/systemd/citadel.service
+COCKPIT_PUBLISH_PORT	generator	fedora44-ai-core/config.sh
+CODEX_AUTH_PERSISTENCE	directive	fedora44-ai-core/config.fedora44-ai-core.conf_example
+CONTAINER_NAME	generator	fedora44-ai-core/config.sh
+CONTAINER_NR	generator	fedora44-ai-core/config.sh
+DISPLAY	injection	GUI applications receive the host display through the generated environment file
+FEDORA44_AI_BASE_IMAGE	source	fedora44-ai-base/build-local.sh
+FEDORA44_AI_CAPABILITIES	generator	fedora44-ai-core/config.sh
+FEDORA44_AI_CORE_IMAGE	source	fedora44-ai-core/build-local.sh
+FEDORA44_AI_DEVICES	generator	fedora44-ai-core/config.sh
+FEDORA44_AI_SAFRANO9999_IMAGE	source	fedora44-ai-safrano9999/build-local.sh
+GH_TOKEN	injection	The installed GitHub CLI receives its standard credential variable
+HERMES_API_SERVER_KEY	source	fedora44-ai-core/image/systemd/hermes.service
+HERMES_API_SERVER_PORT	source	fedora44-ai-core/image/systemd/hermes.service
+HERMES_API_SERVER_PUBLISH_PORT	generator	fedora44-ai-core/config.sh
+HERMES_DASHBOARD_PORT	source	fedora44-ai-core/image/systemd/hermes-dashboard.service
+HERMES_DASHBOARD_PUBLISH_PORT	generator	fedora44-ai-core/config.sh
+HERMES_MODEL	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
+HERMES_PERSISTENT	directive	fedora44-ai-core/config.fedora44-ai-core.conf_example
+HERMES_START	source	fedora44-ai-core/image/systemd/hermes.service
+HERMES_TELEGRAMTOKEN	source	fedora44-ai-core/image/systemd/hermes.service
+NOTE_DB_BACKEND	injection	The packaged NOTE runtime selects its persistence backend from this variable
+NOTE_DB_NAME	injection	The packaged NOTE runtime receives its database name
+NOTE_DB_PORT	injection	The packaged NOTE runtime receives its database port
+NOTE_DB_PREFIX	injection	The packaged NOTE runtime receives its database table prefix
+NOTE_DB_PW	injection	The packaged NOTE runtime receives its database password
+NOTE_DB_URL	injection	The packaged NOTE runtime receives its database host
+NOTE_DB_USER	injection	The packaged NOTE runtime receives its database user
+NOTE_FEEDBACK	injection	The packaged NOTE runtime controls feedback processing with this variable
+NOTE_PATH	injection	The packaged NOTE runtime receives its file-backend inbox path
+NOTE_PROMPT	injection	The packaged NOTE runtime receives its prompt filename
+NOTE_TRIGGER	injection	The packaged NOTE runtime receives its optional trigger command or URL
+NOTE_TRIGGER_TYPE	injection	The packaged NOTE runtime selects its trigger adapter from this variable
+NO_AT_BRIDGE	injection	GUI applications receive the accessibility bridge setting
+OPENAI_V1_API_KEY_ALIAS	source	openclaw-ephemeral/openclaw_ephemeral/environment.py
+OPENAI_V1_KEY	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
+OPENAI_V1_PORT	source	openclaw-ephemeral/openclaw_ephemeral/providers.py
+OPENAI_V1_PROVIDER	injection	The repeated OpenAI-v1 provider parser consumes its generated PROVIDER field name
+OPENAI_V1_STREAM	injection	The repeated OpenAI-v1 provider parser consumes its generated STREAM field name
+OPENAI_V1_URL	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
+OPENCLAW_CRONTAB	source	fedora44-ai-base/image/runtime.d/openclaw-crontabs.sh
+OPENCLAW_GATEWAY_PORT	source	fedora44-ai-core/image/systemd/openclaw.service
+OPENCLAW_GATEWAY_PUBLISH_PORT	source	openclaw-ephemeral/openclaw_ephemeral/configuration.py
+OPENCLAW_GATEWAY_TOKEN	source	fedora44-ai-core/image/systemd/openclaw.service
+OPENCLAW_MODEL	source	openclaw-ephemeral/openclaw_ephemeral/configuration.py
+OPENCLAW_NOTE_FULL_MODE	source	openclaw-ephemeral/openclaw_ephemeral/configuration.py
+OPENCLAW_OPENAI_V1_DEFAULT_LLM	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
+OPENCLAW_PERSISTENT	directive	fedora44-ai-core/config.fedora44-ai-core.conf_example
+OPENCLAW_START	source	fedora44-ai-core/image/systemd/openclaw.service
+OPENCLAW_TELEGRAMTOKEN	source	openclaw-ephemeral/openclaw_ephemeral/configuration.py
+OPENCLAW_TELEGRAM_CHAT_ID	source	fedora44-ai-base/image/runtime.d/openclaw-layer-runtime.py
+SAFRANO9999_FULLRUN_ON_START	source	fedora44-ai-base/image/systemd/openclaw.service.d/20-safrano9999-base.conf
+TAILSCALE_VOLUMES	generator	fedora44-ai-core/config.sh
+TS_AUTHKEY	source	fedora44-ai-core/image/runtime.d/tailscale-state-up.sh
+TS_EXTRA_ARGS	source	fedora44-ai-core/image/runtime.d/tailscale-state-up.sh
+TS_HOSTNAME	source	fedora44-ai-core/image/runtime.d/tailscale-state-up.sh
+TUNNEL_TOKEN	source	fedora44-ai-core/image/systemd/cloudflared.service
+VDITOR_NOTES_PATH	source	fedora44-ai-core/image/systemd/vditor-notes.service
+VDITOR_NOTES_PORT	source	fedora44-ai-core/image/systemd/vditor-notes.service
+VDITOR_NOTES_PUBLISH_PORT	generator	fedora44-ai-core/config.sh
+XDG_RUNTIME_DIR	injection	GUI and desktop applications receive the generated runtime directory

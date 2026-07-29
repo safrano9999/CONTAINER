@@ -10,7 +10,7 @@ description: Rapidly port and publish the existing deterministic OpenClaw patch 
 3. Run the focused model-resolution tests and one `dummy/dummy` smoke test. Do not run a full OpenClaw release build.
 4. Build only the Docker runtime `dist` required to replace `/app/dist` in the official image.
 5. Package `dist/`, create its SHA-256 file, tag `<version>-deterministic.1`, and publish both assets to `safrano9999/openclaw`.
-6. Pin `OPENCLAW_IMAGE` to the same upstream version, then update only `OPENCLAW_PATCH_TAG` and `OPENCLAW_PATCH_ASSET` in `/home/openclaw/safcontainer/SCRIPTS/safrano9999/image/services/openclaw/openclaw-patch-deterministic.sh`.
+6. Pin `OPENCLAW_IMAGE` to the same upstream version, then update the deterministic installer inputs in the `openclaw-ephemeral` repository.
 7. Commit and push only that installer update. Report the release URL, asset name, and successful smoke test.
 
 Stop immediately if the patch does not apply cleanly. In that case, show only the conflicting files before changing anything.

@@ -1,0 +1,12 @@
+# repository	kind	webhook	fullrun
+JUGO	standalone	no	no
+VikAI	standalone	no	no
+PV_D-A-CH	standalone	no	no
+KIWIX_BRIDGE	standalone	no	no
+NAPOLEON_HILLS_AI_MASTERMIND_CLASSES	standalone	no	no
+SOLANA_AIRGAPPED_DEBIAN_WORKFLOW	standalone	no	no
+NaturalGrounding-Tiktok-Ying-Video-Manager@feature/webui-db-backend-dual	standalone	no	no
+DAILYNEWS	standalone	yes	yes
+ZEROINBOX	standalone	yes	yes
+SPANKER	standalone	yes	yes
+KACHELMANN	standalone	yes	yes

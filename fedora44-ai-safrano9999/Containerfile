@@ -1,0 +1,84 @@
+ARG AI_BASE_IMAGE=ghcr.io/safrano9999/fedora44-ai-base:latest
+FROM ${AI_BASE_IMAGE} AS ai-safrano9999
+
+ARG SAFRANO9999_SOURCE_KEY
+
+LABEL org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
+      org.opencontainers.image.title="fedora44-ai-safrano9999" \
+      org.opencontainers.image.description="Fedora 44 AI Safrano repository and service contributions." \
+      io.safrano9999.parent="fedora44-ai-base" \
+      io.safrano9999.source-tags.sha256="${SAFRANO9999_SOURCE_KEY}"
+
+USER root
+
+COPY requirements.safrano9999.txt /requirements.safrano9999.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.safrano9999.txt \
+ && pip check
+
+ENV SAFRANO9999_STAGE_DIR=/opt/safrano9999/.stage \
+    ZEROINBOX_DIR=/opt/safrano9999/ZEROINBOX \
+    KACHELMANN_PYTHON=/usr/bin/python3
+
+COPY .safrano9999-source-tags.tsv /README/safrano9999-source-tags.tsv
+COPY ref.safrano9999.conf /opt/safrano9999/WELCOME/ref.conf
+COPY safrano9999/JUGO ${SAFRANO9999_STAGE_DIR}/JUGO
+COPY safrano9999/VikAI ${SAFRANO9999_STAGE_DIR}/VikAI
+COPY safrano9999/PV_D-A-CH ${SAFRANO9999_STAGE_DIR}/PV_D-A-CH
+COPY safrano9999/KIWIX_BRIDGE ${SAFRANO9999_STAGE_DIR}/KIWIX_BRIDGE
+COPY safrano9999/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES ${SAFRANO9999_STAGE_DIR}/NAPOLEON_HILLS_AI_MASTERMIND_CLASSES
+COPY safrano9999/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW ${SAFRANO9999_STAGE_DIR}/SOLANA_AIRGAPPED_DEBIAN_WORKFLOW
+COPY safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager ${SAFRANO9999_STAGE_DIR}/NaturalGrounding-Tiktok-Ying-Video-Manager
+COPY safrano9999/DAILYNEWS ${SAFRANO9999_STAGE_DIR}/DAILYNEWS
+COPY safrano9999/ZEROINBOX ${SAFRANO9999_STAGE_DIR}/ZEROINBOX
+COPY safrano9999/SPANKER ${SAFRANO9999_STAGE_DIR}/SPANKER
+COPY safrano9999/KACHELMANN ${SAFRANO9999_STAGE_DIR}/KACHELMANN
+
+COPY image/build.d/apply-contributions.sh /usr/local/libexec/fedora44-ai/apply-safrano9999-contributions
+COPY image/contributions.tsv /usr/local/share/fedora44-ai/safrano9999-contributions.tsv
+RUN chmod 0755 /usr/local/libexec/fedora44-ai/apply-safrano9999-contributions \
+ && /usr/local/libexec/fedora44-ai/apply-safrano9999-contributions \
+      --stage "${SAFRANO9999_STAGE_DIR}" \
+      --root /opt/safrano9999 \
+      --image-root / \
+      --manifest /usr/local/share/fedora44-ai/safrano9999-contributions.tsv \
+ && rm -rf "${SAFRANO9999_STAGE_DIR}"
+
+RUN /usr/local/bin/openclaw-ephemeral.py configure \
+ && /usr/local/bin/openclaw-layer-build \
+      --repos \
+        JUGO \
+        VikAI \
+        PV_D-A-CH \
+        KIWIX_BRIDGE \
+        NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
+        SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
+        NaturalGrounding-Tiktok-Ying-Video-Manager \
+        DAILYNEWS \
+        ZEROINBOX \
+        SPANKER \
+        KACHELMANN \
+ && find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
+
+COPY image/runtime.d/vikai-bootstrap-openclaw-agents.py /usr/local/bin/vikai-bootstrap-openclaw-agents
+COPY image/systemd/ /etc/systemd/system/
+RUN chmod 0755 /usr/local/bin/vikai-bootstrap-openclaw-agents \
+ && install -m 0644 \
+      /opt/safrano9999/SPANKER/systemd/spanker-webui.service \
+      /etc/systemd/system/spanker-webui.service \
+ && systemctl enable \
+      vikai-bootstrap-openclaw-agents.service \
+      openclaw-safrano9999.service \
+      jugo.service \
+      pvdach.service \
+      pvdach-qgis-webhook.service \
+      kiwix-bridge.service \
+      napoleon.service \
+      naturalgrounding.service \
+      bip39.service \
+      spanker-webui.service
+
+USER root
+WORKDIR /root
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

@@ -1,0 +1,9 @@
+/.resolved-build.env
+/srv/
+*.env
+*_config.conf
+*_container.conf
+*_build.conf
+*.container
+*-compose.yml
+

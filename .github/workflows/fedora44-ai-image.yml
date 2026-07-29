@@ -199,7 +199,6 @@ jobs:
             test -x /usr/local/bin/openclaw-ephemeral.py
             test -x /usr/local/bin/openclaw-ephemeral-yolo
             test -x /usr/local/bin/hermes-ephemeral.py
-            test -x /opt/safrano9999/CITADEL/tailscale-rescan.sh
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
             for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD; do
               test -d "/opt/safrano9999/$project"
@@ -216,7 +215,6 @@ jobs:
               cockpit.service vditor-notes.service openclaw-config.service \
               openclaw.service hermes.service hermes-dashboard.service \
               codeanalyst.service citadel.service citadel-scan.service \
-              citadel-tailscale-rescan.timer \
               safrano9999-welcome.service openclaw-safrano9999-base.service
           '
           test "$(
@@ -242,7 +240,7 @@ jobs:
             test -x /usr/local/bin/openclaw-ephemeral.py
             test -x /usr/local/bin/openclaw-ephemeral-yolo
             test -x /usr/local/bin/hermes-ephemeral.py
-            test -x /opt/safrano9999/CITADEL/tailscale-rescan.sh
+            /usr/local/lib/hermes-agent/venv/bin/python -c "import sqlalchemy"
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
             for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
               JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
@@ -257,7 +255,6 @@ jobs:
               cockpit.service vditor-notes.service openclaw-config.service \
               openclaw.service hermes.service hermes-dashboard.service \
               codeanalyst.service citadel.service citadel-scan.service \
-              citadel-tailscale-rescan.timer \
               safrano9999-welcome.service openclaw-safrano9999-base.service \
               vikai-bootstrap-openclaw-agents.service \
               openclaw-safrano9999.service jugo.service pvdach.service \

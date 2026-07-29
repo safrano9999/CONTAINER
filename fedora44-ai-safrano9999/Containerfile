@@ -44,6 +44,12 @@ RUN chmod 0755 /usr/local/libexec/fedora44-ai/apply-safrano9999-contributions \
       --manifest /usr/local/share/fedora44-ai/safrano9999-contributions.tsv \
  && rm -rf "${SAFRANO9999_STAGE_DIR}"
 
+RUN uv pip install \
+      --python /usr/local/lib/hermes-agent/venv/bin/python \
+      --no-cache \
+      "SQLAlchemy>=2.0" \
+ && /usr/local/lib/hermes-agent/venv/bin/python -c 'import sqlalchemy'
+
 RUN /usr/local/bin/openclaw-ephemeral.py configure \
  && /usr/local/bin/openclaw-layer-build \
       --repos \

@@ -259,7 +259,8 @@ jobs:
               openclaw-safrano9999.service jugo.service pvdach.service \
               pvdach-qgis-webhook.service kiwix-bridge.service \
               napoleon.service naturalgrounding.service bip39.service \
-              spanker-webui.service
+              spanker-webui.service kachelmann-webui.service \
+              kachelmann-mcp.service
           '
           test "$(
             docker image inspect \

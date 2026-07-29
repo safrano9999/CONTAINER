@@ -4,6 +4,9 @@ FROM ${AI_CORE2_IMAGE} AS ai-base
 
 ARG NEXTCLOUD_PLUGIN_SHA256
 ARG FEDORA44_AI_BASE_SOURCE_KEY
+LABEL org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
+      org.opencontainers.image.title="fedora44-ai-base" \
+      org.opencontainers.image.description="Fedora 44 AI base services and OpenClaw plugins."
 COPY requirements.base.txt /requirements.base.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -102,6 +105,9 @@ CMD ["/sbin/init"]
 FROM ${AI_BASE_IMAGE} AS ai-safrano9999
 
 ARG SAFRANO9999_SOURCE_KEY
+LABEL org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
+      org.opencontainers.image.title="fedora44-ai-safrano9999" \
+      org.opencontainers.image.description="Fedora 44 AI Safrano service and plugin layer."
 
 COPY requirements.safrano9999.txt /requirements.safrano9999.txt
 RUN --mount=type=cache,target=/root/.cache/pip \

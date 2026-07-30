@@ -142,7 +142,7 @@ jobs:
             grep -q "Fedora release 44" /etc/fedora-release
             for command in node npm python3 pip uv codex claude openclaw \
               hermes webhook cloudflared git gh jq tailscale cockpit-bridge \
-              lnd lncli geth solana; do
+              nmap lnd lncli geth solana; do
               command -v "$command" >/dev/null
             done
             test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" \

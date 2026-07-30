@@ -39,6 +39,7 @@ grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' \
 grep -Eq '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
 grep -Eq '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
 grep -Eq '^USER root$' "$ROOT/Containerfile"
+grep -Fq 'lsof strace tcpdump nmap nmap-ncat' "$ROOT/Containerfile"
 
 for forbidden in \
     /opt/safrano9999 \

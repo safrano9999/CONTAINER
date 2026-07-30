@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     iputils iproute procps-ng psmisc util-linux \
     findutils grep sed gawk diffutils \
     hostname bind-utils net-tools traceroute \
-    lsof strace tcpdump nmap-ncat \
+    lsof strace tcpdump nmap nmap-ncat \
     v4l-utils zbar qrencode bc ffmpeg mpv libv4l \
     dbus-x11 xauth mesa-dri-drivers \
     cockpit cockpit-podman \

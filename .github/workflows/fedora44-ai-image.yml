@@ -51,6 +51,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free runner disk space
+        run: .github/scripts/free-runner-disk-space.sh
+
       - name: Resolve image references
         id: refs
         shell: bash
@@ -170,6 +173,10 @@ jobs:
             AI_CORE_IMAGE=${{ steps.refs.outputs.core_ref }}
             ${{ steps.base_build.outputs.build_args }}
 
+      - name: Reclaim space after Base build
+        if: inputs.build_scope == 'all' || inputs.build_scope == 'base'
+        run: .github/scripts/prune-container-build-space.sh
+
       - name: Build and push Safrano layer
         if: inputs.build_scope != 'base'
         uses: docker/build-push-action@v6
@@ -185,6 +192,10 @@ jobs:
           build-args: |
             AI_BASE_IMAGE=${{ steps.refs.outputs.base_ref }}
             ${{ steps.safrano_build.outputs.build_args }}
+
+      - name: Reclaim space after Safrano build
+        if: inputs.build_scope != 'base'
+        run: .github/scripts/prune-container-build-space.sh
 
       - name: Test published Base layer
         if: inputs.build_scope == 'all' || inputs.build_scope == 'base'

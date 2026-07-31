@@ -34,6 +34,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free runner disk space
+        run: .github/scripts/free-runner-disk-space.sh
+
       - name: Resolve image tags
         id: tags
         shell: bash
@@ -124,6 +127,9 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: ${{ steps.build.outputs.build_args }}
+
+      - name: Reclaim container build space
+        run: .github/scripts/prune-container-build-space.sh
 
       - name: Test published image
         env:

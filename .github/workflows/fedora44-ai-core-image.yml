@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: true
+      cascade:
+        description: "Build Base and Safrano after Core succeeds"
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: fedora44-ai-core-image
@@ -24,6 +29,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: write
     env:
       IMAGE: ghcr.io/safrano9999/fedora44-ai-core
       # Immutable runtime base validated by the published-image smoke test.
@@ -208,3 +214,20 @@ jobs:
             sleep 3
           done
           [ "$verified" = true ]
+
+      - name: Trigger Base cascade
+        if: inputs.cascade
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_TAG: ${{ steps.tags.outputs.version }}
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run fedora44-ai-base-image.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$GITHUB_REF_NAME" \
+            -f "image_tag=$IMAGE_TAG" \
+            -f "core_tag=$IMAGE_TAG" \
+            -f "push_latest=$PUSH_LATEST" \
+            -f "cascade=true"

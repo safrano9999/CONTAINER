@@ -17,6 +17,11 @@ on:
         required: true
         type: boolean
         default: true
+      cascade:
+        description: "Build Safrano after Base succeeds"
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: fedora44-ai-base-image
@@ -28,6 +33,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: write
     env:
       CORE_IMAGE: ghcr.io/safrano9999/fedora44-ai-core
       BASE_IMAGE: ghcr.io/safrano9999/fedora44-ai-base
@@ -167,3 +173,19 @@ jobs:
           test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
             = '["/sbin/init"]'
           docker buildx imagetools inspect "$image" >/dev/null
+
+      - name: Trigger Safrano cascade
+        if: inputs.cascade
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_TAG: ${{ steps.refs.outputs.version }}
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run fedora44-ai-safrano9999-image.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$GITHUB_REF_NAME" \
+            -f "image_tag=$IMAGE_TAG" \
+            -f "base_tag=$IMAGE_TAG" \
+            -f "push_latest=$PUSH_LATEST"

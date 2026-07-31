@@ -33,6 +33,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free runner disk space
+        run: .github/scripts/free-runner-disk-space.sh
+
       - name: Resolve tags
         id: tags
         shell: bash
@@ -110,6 +113,9 @@ jobs:
           build-args: |
             OPENCLAW_EPHEMERAL_IMAGE=${{ steps.build.outputs.openclaw_ephemeral_image }}
             SAFRANO9999_SOURCE_KEY=${{ steps.build.outputs.source_key }}
+
+      - name: Reclaim container build space
+        run: .github/scripts/prune-container-build-space.sh
 
       - name: Test published runtime
         shell: bash

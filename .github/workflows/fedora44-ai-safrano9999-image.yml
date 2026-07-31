@@ -1,0 +1,174 @@
+# Source of truth: SCRIPTS/githubactions. Generated copies are overwritten.
+name: fedora44-ai-safrano9999 image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag. Empty uses YYYY.M.D."
+        required: false
+        default: ""
+      base_tag:
+        description: "fedora44-ai-base parent tag"
+        required: false
+        default: "latest"
+      push_latest:
+        description: "Also publish :latest"
+        required: true
+        type: boolean
+        default: true
+
+concurrency:
+  group: fedora44-ai-safrano9999-image
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      BASE_IMAGE: ghcr.io/safrano9999/fedora44-ai-base
+      SAFRANO_IMAGE: ghcr.io/safrano9999/fedora44-ai-safrano9999
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: .github/scripts/free-runner-disk-space.sh
+
+      - name: Resolve image references
+        id: refs
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+          BASE_TAG: ${{ inputs.base_tag }}
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        run: |
+          set -euo pipefail
+          version="$REQUESTED_TAG"
+          [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
+          base_ref="${BASE_IMAGE}:${BASE_TAG:-latest}"
+
+          {
+            echo "version=$version"
+            echo "base_ref=$base_ref"
+            echo "tags<<EOF"
+            echo "${SAFRANO_IMAGE}:${version}"
+            [ "$PUSH_LATEST" != true ] || echo "${SAFRANO_IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Fedora chain static checks
+        run: fedora44-ai-core/tests/check-build-context.sh
+
+      - name: Configure source authentication
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: gh auth setup-git
+
+      - name: Prepare Safrano build context
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: fedora44-ai-safrano9999/prepare-build-context.sh --no-cache
+
+      - name: Resolve Safrano build configuration
+        id: safrano_build
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved=fedora44-ai-safrano9999/.resolved-build.env
+          [ -s "$resolved" ] || {
+            echo "Missing $resolved" >&2
+            exit 1
+          }
+          {
+            echo "build_args<<EOF"
+            cat "$resolved"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          cache-binary: false
+          keep-state: false
+          cleanup: true
+
+      - name: Log in to private GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push Safrano layer
+        uses: docker/build-push-action@v6
+        with:
+          context: ./fedora44-ai-safrano9999
+          file: ./fedora44-ai-safrano9999/Containerfile
+          target: ai-safrano9999
+          platforms: linux/amd64
+          pull: true
+          no-cache: true
+          push: true
+          tags: ${{ steps.refs.outputs.tags }}
+          build-args: |
+            AI_BASE_IMAGE=${{ steps.refs.outputs.base_ref }}
+            ${{ steps.safrano_build.outputs.build_args }}
+
+      - name: Reclaim space after Safrano build
+        run: .github/scripts/prune-container-build-space.sh
+
+      - name: Test published Safrano layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${SAFRANO_IMAGE}:${{ steps.refs.outputs.version }}"
+          docker pull "$image"
+          docker run --rm --entrypoint bash "$image" -lc '
+            set -euo pipefail
+            grep -q "Fedora release 44" /etc/fedora-release
+            test -x /usr/local/bin/openclaw-ephemeral.py
+            test -x /usr/local/bin/openclaw-ephemeral-yolo
+            test -x /usr/local/bin/hermes-ephemeral.py
+            /usr/local/lib/hermes-agent/venv/bin/python -c "import sqlalchemy"
+            test -f /root/.openclaw/extensions/note/openclaw.plugin.json
+            for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
+              JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \
+              NAPOLEON_HILLS_AI_MASTERMIND_CLASSES \
+              SOLANA_AIRGAPPED_DEBIAN_WORKFLOW \
+              NaturalGrounding-Tiktok-Ying-Video-Manager \
+              DAILYNEWS ZEROINBOX SPANKER KACHELMANN \
+              safrano9999-paper; do
+              test -d "/opt/safrano9999/$project"
+            done
+            test -L /README/paper.pdf
+            test "$(readlink /README/paper.pdf)" = \
+              /opt/safrano9999/safrano9999-paper/paper.pdf
+            test -s /README/paper.pdf
+            systemctl is-enabled \
+              fedora44-ai.service tailscaled.service tailscale-up.service \
+              cockpit.service vditor-notes.service openclaw-config.service \
+              openclaw.service hermes.service hermes-dashboard.service \
+              codeanalyst.service citadel.service citadel-scan.service \
+              safrano9999-welcome.service openclaw-safrano9999-base.service \
+              vikai-bootstrap-openclaw-agents.service \
+              openclaw-safrano9999.service jugo.service pvdach.service \
+              pvdach-qgis-webhook.service kiwix-bridge.service \
+              napoleon.service naturalgrounding.service bip39.service \
+              spanker-webui.service kachelmann-webui.service \
+              kachelmann-mcp.service
+          '
+          test "$(
+            docker image inspect \
+              --format '{{ index .Config.Labels "io.safrano9999.parent" }}' \
+              "$image"
+          )" = fedora44-ai-base
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
+          test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
+            = '["/sbin/init"]'
+          docker buildx imagetools inspect "$image" >/dev/null

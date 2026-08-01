@@ -1,12 +1,3 @@
-ARG OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef
-
-FROM ${OPENCLAW_EPHEMERAL_IMAGE} AS openclaw-ephemeral-source
-
-USER root
-RUN find /root/.openclaw/extensions/note \
-      -type d \( -name .venv -o -name .uv -o -name __pycache__ \) \
-      -prune -exec rm -rf {} +
-
 FROM quay.io/fedora/fedora:44 AS ai-core
 
 ARG WEBHOOK_VERSION=2.8.3
@@ -23,6 +14,17 @@ ARG FUGU_COMMIT
 ARG CLOUDFLARED_VERSION
 ARG CLOUDFLARED_SHA256
 ARG OPENCLAW_VERSION=2026.7.1
+ARG OPENCLAW_NPM_INTEGRITY
+ARG OPENCLAW_DETERMINISTIC_REPOSITORY
+ARG OPENCLAW_DETERMINISTIC_TAG
+ARG OPENCLAW_DETERMINISTIC_ASSET
+ARG OPENCLAW_DETERMINISTIC_SHA256
+ARG OPENCLAW_EPHEMERAL_REPOSITORY
+ARG OPENCLAW_EPHEMERAL_COMMIT
+ARG NOTE_REPOSITORY
+ARG NOTE_RELEASE_TAG
+ARG NOTE_RELEASE_ASSET
+ARG NOTE_RELEASE_SHA256
 ARG CODEX_VERSION
 ARG CLAUDE_CODE_VERSION
 ARG OPENCLAW_BRAVE_PLUGIN_VERSION
@@ -37,7 +39,14 @@ ARG ELECTRUM_KEYS_COMMIT
 LABEL org.opencontainers.image.title="fedora44-ai-core" \
       org.opencontainers.image.description="Fedora 44 AI base with ephemeral OpenClaw and Hermes runtime initialization." \
       org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
-      io.safrano9999.openclaw.version="${OPENCLAW_VERSION}"
+      io.safrano9999.openclaw.version="${OPENCLAW_VERSION}" \
+      io.safrano9999.openclaw.npm-integrity="${OPENCLAW_NPM_INTEGRITY}" \
+      io.safrano9999.openclaw-deterministic.repository="${OPENCLAW_DETERMINISTIC_REPOSITORY}" \
+      io.safrano9999.openclaw-deterministic.release="${OPENCLAW_DETERMINISTIC_TAG}" \
+      io.safrano9999.openclaw-ephemeral.repository="${OPENCLAW_EPHEMERAL_REPOSITORY}" \
+      io.safrano9999.openclaw-ephemeral.commit="${OPENCLAW_EPHEMERAL_COMMIT}" \
+      io.safrano9999.note.repository="${NOTE_REPOSITORY}" \
+      io.safrano9999.note.release="${NOTE_RELEASE_TAG}"
 
 # Keep the package set and order aligned with the existing fedora44-ai image.
 RUN --mount=type=cache,target=/var/cache/dnf \
@@ -138,6 +147,8 @@ RUN --mount=type=cache,target=/root/.npm \
     test -n "${CODEX_VERSION}" \
  && test -n "${CLAUDE_CODE_VERSION}" \
  && test -n "${OPENCLAW_VERSION}" \
+ && test -n "${OPENCLAW_NPM_INTEGRITY}" \
+ && test "$(npm view "openclaw@${OPENCLAW_VERSION}" dist.integrity)" = "${OPENCLAW_NPM_INTEGRITY}" \
  && npm install -g --include=optional \
       "@openai/codex@${CODEX_VERSION}" \
       "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
@@ -246,9 +257,8 @@ RUN test -n "${SOLANA_INSTALLER_MD5}" \
       -exec ln -sf {} /usr/local/bin/ \; \
  && solana --version
 
-# Transplant only the verified JavaScript distribution and distro-neutral
-# runtime source. Debian executables, libraries, node_modules and Python
-# environments never cross into Fedora.
+# Assemble the verified, distro-neutral OpenClaw payload directly on Fedora.
+# No container image is used as a source stage.
 ENV HOME=/root \
     OPENCLAW_CONFIG_DIR=/root/.openclaw \
     OPENCLAW_CONFIG=/root/.openclaw/openclaw.json \
@@ -257,24 +267,68 @@ ENV HOME=/root \
     PYTHONPATH=/usr/local/lib/openclaw-ephemeral \
     PYTHONUNBUFFERED=1
 
-COPY --from=openclaw-ephemeral-source /app/dist/ /tmp/openclaw-ephemeral-dist/
-COPY --from=openclaw-ephemeral-source /usr/local/lib/openclaw-ephemeral/ /usr/local/lib/openclaw-ephemeral/
-COPY --from=openclaw-ephemeral-source /usr/local/bin/openclaw-ephemeral.py /usr/local/bin/openclaw-ephemeral.py
-COPY --from=openclaw-ephemeral-source /usr/local/bin/openclaw-ephemeral-yolo /usr/local/bin/openclaw-ephemeral-yolo
-COPY --from=openclaw-ephemeral-source /root/.openclaw/extensions/note/ /root/.openclaw/extensions/note/
+RUN install -d -o root -g root -m 0700 "${OPENCLAW_CONFIG_DIR}"
+
+COPY build/vendor/openclaw-deterministic/openclaw-2026.7.1-deterministic-810bafba.tar.gz /tmp/openclaw-deterministic.tar.gz
 
 RUN set -euo pipefail; \
     openclaw_root="$(npm root -g)/openclaw"; \
+    printf '%s  %s\n' \
+      "${OPENCLAW_DETERMINISTIC_SHA256}" \
+      /tmp/openclaw-deterministic.tar.gz | sha256sum -c -; \
     test "$(jq -r .version "$openclaw_root/package.json")" = "${OPENCLAW_VERSION}"; \
     rm -rf "$openclaw_root/dist"; \
-    mv /tmp/openclaw-ephemeral-dist "$openclaw_root/dist"; \
-    node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"; \
+    tar -xzf /tmp/openclaw-deterministic.tar.gz -C "$openclaw_root"; \
+    rm -f /tmp/openclaw-deterministic.tar.gz; \
+    test -d "$openclaw_root/dist"; \
+    node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"
+
+# Preserve the trusted-container local-media behavior after the deterministic
+# distribution overlay. This only extends OpenClaw's outbound media roots.
+RUN OPENCLAW_ROOT="$(npm root -g)/openclaw" python3 - <<'PY'
+import os
+from pathlib import Path
+
+root = Path(os.environ["OPENCLAW_ROOT"]) / "dist"
+target = 'path.join(resolvedStateDir, "sandboxes")'
+replacement = target + ',\n\t\t"/"'
+for path in root.glob("local-roots-*.js"):
+    text = path.read_text()
+    if replacement not in text:
+        path.write_text(text.replace(target, replacement))
+    break
+else:
+    raise SystemExit("OpenClaw local-roots bundle not found")
+PY
+
+COPY build/vendor/openclaw-ephemeral.commit /tmp/openclaw-ephemeral.commit
+COPY build/vendor/openclaw-ephemeral/openclaw_ephemeral/ /usr/local/lib/openclaw-ephemeral/openclaw_ephemeral/
+COPY build/vendor/openclaw-ephemeral/openclaw-ephemeral.py /usr/local/bin/openclaw-ephemeral.py
+COPY build/vendor/openclaw-ephemeral/runtime/yolo.sh /usr/local/bin/openclaw-ephemeral-yolo
+
+RUN test "$(cat /tmp/openclaw-ephemeral.commit)" = "${OPENCLAW_EPHEMERAL_COMMIT}" \
+ && rm -f /tmp/openclaw-ephemeral.commit \
+ && chmod 0755 /usr/local/bin/openclaw-ephemeral.py \
+      /usr/local/bin/openclaw-ephemeral-yolo \
+ && chown -R root:root /usr/local/lib/openclaw-ephemeral \
+      /usr/local/bin/openclaw-ephemeral.py \
+      /usr/local/bin/openclaw-ephemeral-yolo
+
+COPY build/vendor/note/note-latest.zip /tmp/note-latest.zip
+
+RUN set -euo pipefail; \
+    printf '%s  %s\n' "${NOTE_RELEASE_SHA256}" /tmp/note-latest.zip | sha256sum -c -; \
+    openclaw plugins install \
+      --force \
+      --dangerously-force-unsafe-install \
+      /tmp/note-latest.zip; \
+    rm -f /tmp/note-latest.zip; \
     test -f /root/.openclaw/extensions/note/openclaw.plugin.json; \
     note_python="$(/root/.openclaw/extensions/note/scripts/setup-python.sh)"; \
     "$note_python" -c 'import dotenv, sqlalchemy, psycopg, pymysql'; \
-    find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete; \
-    chmod 0755 /usr/local/bin/openclaw-ephemeral.py \
-      /usr/local/bin/openclaw-ephemeral-yolo
+    rm -rf /root/.openclaw/extensions/note/.uv; \
+    node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"; \
+    find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
 
 # Runtime order is owned here: named-volume projection, Tailscale, Cockpit,
 # Vditor, fresh OpenClaw configuration/gateway, then Hermes.

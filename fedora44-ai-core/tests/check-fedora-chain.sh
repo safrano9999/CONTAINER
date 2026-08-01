@@ -36,7 +36,13 @@ if rg -n '^COPY[[:space:]]+SCRIPTS([[:space:]]|$)' \
     fail "a complete SCRIPTS tree is copied into an image"
 fi
 
-grep -Fq 'openclaw-ephemeral-source' "$CORE/Containerfile"
+if rg -n 'OPENCLAW_EPHEMERAL_IMAGE|openclaw-ephemeral-source|COPY --from=.*openclaw-ephemeral' \
+    "$CORE/Containerfile" "$CORE/build.conf" "$CORE/build-local.sh"; then
+    fail "Ephemeral container-image donor remains in Core"
+fi
+grep -Fq 'COPY build/vendor/openclaw-deterministic/' "$CORE/Containerfile"
+grep -Fq 'COPY build/vendor/openclaw-ephemeral/' "$CORE/Containerfile"
+grep -Fq 'COPY build/vendor/note/note-latest.zip' "$CORE/Containerfile"
 grep -Fq 'USER root' "$CORE/Containerfile"
 grep -Fq 'USER root' "$BASE/Containerfile"
 grep -Fq 'USER root' "$SAFRANO/Containerfile"

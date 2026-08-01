@@ -51,4 +51,81 @@ stage_certificates "$CERTS"
     "$CONTEXT/.resolved-build.env" \
     "$NODE_VERSION" \
     "$OPENCLAW_VERSION"
+
+set -a
+# shellcheck source=/dev/null
+. "$CONTEXT/.resolved-build.env"
+set +a
+
+vendor_stage="$(mktemp -d "$BUILD/.vendor.XXXXXX")"
+cleanup_vendor_stage() {
+    rm -rf -- "$vendor_stage"
+}
+trap cleanup_vendor_stage EXIT
+
+stage_release_asset() {
+    local repository="$1" tag="$2" asset="$3" expected_sha256="$4" destination="$5"
+    mkdir -p "$(dirname "$destination")"
+    curl -fsSL --retry 3 --connect-timeout 15 \
+        "https://github.com/${repository}/releases/download/${tag}/${asset}" \
+        -o "$destination"
+    printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum -c -
+}
+
+stage_release_asset \
+    "$OPENCLAW_DETERMINISTIC_REPOSITORY" \
+    "$OPENCLAW_DETERMINISTIC_TAG" \
+    "$OPENCLAW_DETERMINISTIC_ASSET" \
+    "$OPENCLAW_DETERMINISTIC_SHA256" \
+    "$vendor_stage/openclaw-deterministic/$OPENCLAW_DETERMINISTIC_ASSET"
+
+stage_release_asset \
+    "$NOTE_REPOSITORY" \
+    "$NOTE_RELEASE_TAG" \
+    "$NOTE_RELEASE_ASSET" \
+    "$NOTE_RELEASE_SHA256" \
+    "$vendor_stage/note/$NOTE_RELEASE_ASSET"
+
+ephemeral_checkout="$vendor_stage/.openclaw-ephemeral-checkout"
+git init -q "$ephemeral_checkout"
+git -C "$ephemeral_checkout" remote add origin \
+    "https://github.com/${OPENCLAW_EPHEMERAL_REPOSITORY}.git"
+git -C "$ephemeral_checkout" fetch -q --depth=1 origin "$OPENCLAW_EPHEMERAL_COMMIT"
+git -C "$ephemeral_checkout" checkout -q --detach FETCH_HEAD
+[ "$(git -C "$ephemeral_checkout" rev-parse HEAD)" = "$OPENCLAW_EPHEMERAL_COMMIT" ] || {
+    echo "Ephemeral source commit mismatch" >&2
+    exit 1
+}
+
+ephemeral_files=(
+    openclaw-ephemeral.py
+    runtime/yolo.sh
+    openclaw_ephemeral/__init__.py
+    openclaw_ephemeral/cli.py
+    openclaw_ephemeral/configuration.py
+    openclaw_ephemeral/environment.py
+    openclaw_ephemeral/filesystem.py
+    openclaw_ephemeral/providers.py
+)
+for relative in "${ephemeral_files[@]}"; do
+    [ -f "$ephemeral_checkout/$relative" ] || {
+        echo "Missing Ephemeral runtime file at $OPENCLAW_EPHEMERAL_COMMIT: $relative" >&2
+        exit 1
+    }
+    install -D -m 0644 \
+        "$ephemeral_checkout/$relative" \
+        "$vendor_stage/openclaw-ephemeral/$relative"
+done
+printf '%s\n' "$OPENCLAW_EPHEMERAL_COMMIT" \
+    > "$vendor_stage/openclaw-ephemeral.commit"
+rm -rf -- "$ephemeral_checkout"
+
+[ "$(find "$vendor_stage/openclaw-ephemeral" -type f | wc -l)" -eq 8 ] || {
+    echo "Ephemeral vendor payload must contain exactly eight runtime files" >&2
+    exit 1
+}
+
+rm -rf -- "$BUILD/vendor"
+mv -- "$vendor_stage" "$BUILD/vendor"
+trap - EXIT
 printf 'Build context ready: %s\n' "$CONTEXT"

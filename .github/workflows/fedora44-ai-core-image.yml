@@ -32,8 +32,6 @@ jobs:
       actions: write
     env:
       IMAGE: ghcr.io/safrano9999/fedora44-ai-core
-      # Immutable runtime base validated by the published-image smoke test.
-      OPENCLAW_EPHEMERAL_IMAGE: docker.io/safrano9999/openclaw-ephemeral@sha256:3676317cf31585ea468ae7184b119216db8af1b7a3b822cd40cf9bf62d7b10ef
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:
@@ -76,20 +74,63 @@ jobs:
           for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION \
             ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT \
             WEBHOOK_VERSION VDITOR_VERSION OPENCLAW_VERSION \
-            OPENCLAW_EPHEMERAL_IMAGE; do
+            OPENCLAW_NPM_INTEGRITY OPENCLAW_DETERMINISTIC_REPOSITORY \
+            OPENCLAW_DETERMINISTIC_TAG OPENCLAW_DETERMINISTIC_ASSET \
+            OPENCLAW_DETERMINISTIC_SHA256 \
+            OPENCLAW_EPHEMERAL_REPOSITORY OPENCLAW_EPHEMERAL_COMMIT \
+            NOTE_REPOSITORY NOTE_RELEASE_TAG NOTE_RELEASE_ASSET \
+            NOTE_RELEASE_SHA256; do
             [ -n "${!name:-}" ] || {
               echo "Missing required build input: $name" >&2
               exit 1
             }
           done
-          [[ "$OPENCLAW_EPHEMERAL_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || {
-            echo "OPENCLAW_EPHEMERAL_IMAGE must use an immutable digest" >&2
+          [ "$OPENCLAW_NPM_INTEGRITY" = \
+            'sha512-ge/Xss99CHAjPL/ikmH/UFoiOrjcxDB4sW3y9mhyCD+dYW3wzV7TKbAVdkrXFgAG2d2BjpJofP97zUZ+umxo8g==' ]
+          [ "$OPENCLAW_DETERMINISTIC_REPOSITORY" = \
+            safrano9999/openclaw-deterministic ]
+          [ "$OPENCLAW_DETERMINISTIC_TAG" = 2026.7.1-deterministic.1 ]
+          [ "$OPENCLAW_DETERMINISTIC_ASSET" = \
+            openclaw-2026.7.1-deterministic-810bafba.tar.gz ]
+          [ "$OPENCLAW_EPHEMERAL_REPOSITORY" = \
+            safrano9999/openclaw-ephemeral ]
+          [ "$OPENCLAW_EPHEMERAL_COMMIT" = \
+            40d29af55bab4331eddfa40809c5f3eb25e7600b ]
+          [ "$NOTE_REPOSITORY" = safrano9999/NOTE ]
+          [ "$NOTE_RELEASE_TAG" = 2026.7.36 ]
+          [ "$NOTE_RELEASE_ASSET" = note-latest.zip ]
+          for name in OPENCLAW_DETERMINISTIC_SHA256 NOTE_RELEASE_SHA256; do
+            [[ "${!name}" =~ ^[0-9a-f]{64}$ ]] || {
+              echo "$name must be a lowercase SHA256" >&2
+              exit 1
+            }
+          done
+
+          vendor_files=(
+            build/vendor/openclaw-deterministic/openclaw-2026.7.1-deterministic-810bafba.tar.gz
+            build/vendor/note/note-latest.zip
+            build/vendor/openclaw-ephemeral/openclaw-ephemeral.py
+            build/vendor/openclaw-ephemeral/runtime/yolo.sh
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/__init__.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/cli.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/configuration.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/environment.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/filesystem.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/providers.py
+          )
+          for file in "${vendor_files[@]}"; do
+            [ -s "$file" ] || {
+              echo "Missing staged vendor file: $file" >&2
+              exit 1
+            }
+          done
+          [ "$(find build/vendor/openclaw-ephemeral -type f | wc -l)" -eq 8 ] || {
+            echo "Unexpected openclaw-ephemeral vendor file set" >&2
             exit 1
           }
           {
             echo "openclaw_version=$OPENCLAW_VERSION"
             echo "build_args<<EOF"
-            echo "OPENCLAW_EPHEMERAL_IMAGE=$OPENCLAW_EPHEMERAL_IMAGE"
             echo "CERTS=$CERTS"
             echo "HERMES_TAG=$HERMES_TAG"
             echo "HERMES_COMMIT=$HERMES_COMMIT"

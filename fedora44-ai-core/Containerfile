@@ -319,6 +319,7 @@ RUN test "$(cat /tmp/openclaw-ephemeral.commit)" = "${OPENCLAW_EPHEMERAL_COMMIT}
 COPY build/vendor/note/note-latest.zip /tmp/note-latest.zip
 
 RUN set -euo pipefail; \
+    openclaw_root="$(npm root -g)/openclaw"; \
     printf '%s  %s\n' "${NOTE_RELEASE_SHA256}" /tmp/note-latest.zip | sha256sum -c -; \
     openclaw plugins install \
       --force \

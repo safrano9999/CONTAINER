@@ -200,6 +200,7 @@ jobs:
             done
             test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" \
               = "$EXPECTED_OPENCLAW_VERSION"
+            test -s "$(npm root -g)/openclaw/dist/control-ui/index.html"
             test -f /usr/local/lib/vditor/dist/index.min.js
             test -f /usr/local/lib/vditor-notes/app.py
             test -f /usr/local/share/bip39/index.html

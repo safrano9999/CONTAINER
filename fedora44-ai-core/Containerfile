@@ -277,10 +277,12 @@ RUN set -euo pipefail; \
       "${OPENCLAW_DETERMINISTIC_SHA256}" \
       /tmp/openclaw-deterministic.tar.gz | sha256sum -c -; \
     test "$(jq -r .version "$openclaw_root/package.json")" = "${OPENCLAW_VERSION}"; \
+    cp -a "$openclaw_root/dist/control-ui" /tmp/openclaw-control-ui; \
     rm -rf "$openclaw_root/dist"; \
     tar -xzf /tmp/openclaw-deterministic.tar.gz -C "$openclaw_root"; \
+    mv /tmp/openclaw-control-ui "$openclaw_root/dist/control-ui"; \
     rm -f /tmp/openclaw-deterministic.tar.gz; \
-    test -d "$openclaw_root/dist"; \
+    test -s "$openclaw_root/dist/control-ui/index.html"; \
     node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"
 
 # Preserve the trusted-container local-media behavior after the deterministic

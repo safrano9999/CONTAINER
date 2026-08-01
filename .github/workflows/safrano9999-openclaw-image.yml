@@ -1,5 +1,6 @@
 # Source of truth: SCRIPTS/githubactions. Generated copies are overwritten.
-name: safrano9999 container images
+name: safrano9999-openclaw build_image
+run-name: safrano9999-openclaw ${{ inputs.image_tag || github.ref_name }}
 
 on:
   push:

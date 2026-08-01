@@ -153,7 +153,8 @@ def register_openclaw_plugins(
     for _repo, plugin_id, repo_path in plugin_dirs(plugins_dir, plugin_names):
         manifest = _load_plugin_manifest(repo_path)
         repo_path_text = str(repo_path)
-        paths[:] = [path for path in paths if path != repo_path_text]
+        if repo_path_text not in paths:
+            paths.append(repo_path_text)
         entry = entries.setdefault(plugin_id, {})
         entry["enabled"] = True
         registered.append(plugin_id)

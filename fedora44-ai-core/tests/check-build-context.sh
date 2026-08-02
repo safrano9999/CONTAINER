@@ -23,7 +23,7 @@ bash -n \
     [ "$OPENCLAW_DETERMINISTIC_REPOSITORY" = safrano9999/openclaw-deterministic ]
     [ "$OPENCLAW_DETERMINISTIC_TAG" = 2026.7.1-deterministic.1 ]
     [ "$OPENCLAW_DETERMINISTIC_ASSET" = openclaw-2026.7.1-deterministic.tar.gz ]
-    [ "$OPENCLAW_DETERMINISTIC_SHA256" = 8d13b120b2e8f7a4876ea4b3f4d38148466b025f56c511a9ea209a69ab87c2a9 ]
+    [ "$OPENCLAW_DETERMINISTIC_SHA256" = c81e4482151ad1be347f630d5ab779e1fa9f6c05a34bb6f026282dd8427db5c8 ]
     [ "$OPENCLAW_EPHEMERAL_REPOSITORY" = safrano9999/openclaw-ephemeral ]
     [ "$OPENCLAW_EPHEMERAL_COMMIT" = 40d29af55bab4331eddfa40809c5f3eb25e7600b ]
     [ "$NOTE_REPOSITORY" = safrano9999/NOTE ]

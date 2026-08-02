@@ -269,7 +269,7 @@ ENV HOME=/root \
 
 RUN install -d -o root -g root -m 0700 "${OPENCLAW_CONFIG_DIR}"
 
-COPY build/vendor/openclaw-deterministic/openclaw-2026.7.1-deterministic-810bafba.tar.gz /tmp/openclaw-deterministic.tar.gz
+COPY build/vendor/openclaw-deterministic/openclaw-2026.7.1-deterministic.tar.gz /tmp/openclaw-deterministic.tar.gz
 
 RUN set -euo pipefail; \
     openclaw_root="$(npm root -g)/openclaw"; \

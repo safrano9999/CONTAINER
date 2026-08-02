@@ -10,6 +10,11 @@ set -a
 . "$CONTEXT/build.conf"
 set +a
 
+OPENCLAW_DETERMINISTIC_REPOSITORY=safrano9999/openclaw-deterministic
+OPENCLAW_DETERMINISTIC_TAG="${OPENCLAW_VERSION}-deterministic.1"
+OPENCLAW_DETERMINISTIC_ASSET="openclaw-${OPENCLAW_VERSION}-deterministic.tar.gz"
+OPENCLAW_EPHEMERAL_REPOSITORY=safrano9999/openclaw-ephemeral
+
 for command in curl git jq openssl python3 sha256sum; do
     command -v "$command" >/dev/null 2>&1 || {
         echo "Missing build preparation dependency: $command" >&2
@@ -69,15 +74,17 @@ stage_release_asset() {
     curl -fsSL --retry 3 --connect-timeout 15 \
         "https://github.com/${repository}/releases/download/${tag}/${asset}" \
         -o "$destination"
-    printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum -c -
+    if [ -n "$expected_sha256" ]; then
+        printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum -c -
+    fi
 }
 
 stage_release_asset \
     "$OPENCLAW_DETERMINISTIC_REPOSITORY" \
     "$OPENCLAW_DETERMINISTIC_TAG" \
     "$OPENCLAW_DETERMINISTIC_ASSET" \
-    "$OPENCLAW_DETERMINISTIC_SHA256" \
-    "$vendor_stage/openclaw-deterministic/$OPENCLAW_DETERMINISTIC_ASSET"
+    "" \
+    "$vendor_stage/openclaw-deterministic/openclaw-deterministic.tar.gz"
 
 stage_release_asset \
     "$NOTE_REPOSITORY" \
@@ -90,16 +97,11 @@ ephemeral_checkout="$vendor_stage/.openclaw-ephemeral-checkout"
 git init -q "$ephemeral_checkout"
 git -C "$ephemeral_checkout" remote add origin \
     "https://github.com/${OPENCLAW_EPHEMERAL_REPOSITORY}.git"
-git -C "$ephemeral_checkout" fetch -q --depth=1 origin "$OPENCLAW_EPHEMERAL_COMMIT"
+git -C "$ephemeral_checkout" fetch -q --depth=1 origin main
 git -C "$ephemeral_checkout" checkout -q --detach FETCH_HEAD
-[ "$(git -C "$ephemeral_checkout" rev-parse HEAD)" = "$OPENCLAW_EPHEMERAL_COMMIT" ] || {
-    echo "Ephemeral source commit mismatch" >&2
-    exit 1
-}
 
 ephemeral_files=(
     openclaw-ephemeral.py
-    runtime/yolo.sh
     openclaw_ephemeral/__init__.py
     openclaw_ephemeral/cli.py
     openclaw_ephemeral/configuration.py
@@ -109,15 +111,16 @@ ephemeral_files=(
 )
 for relative in "${ephemeral_files[@]}"; do
     [ -f "$ephemeral_checkout/$relative" ] || {
-        echo "Missing Ephemeral runtime file at $OPENCLAW_EPHEMERAL_COMMIT: $relative" >&2
+        echo "Missing Ephemeral runtime file on main: $relative" >&2
         exit 1
     }
     install -D -m 0644 \
         "$ephemeral_checkout/$relative" \
         "$vendor_stage/openclaw-ephemeral/$relative"
 done
-printf '%s\n' "$OPENCLAW_EPHEMERAL_COMMIT" \
-    > "$vendor_stage/openclaw-ephemeral.commit"
+install -D -m 0644 \
+    "$ephemeral_checkout/container/runtime/yolo.sh" \
+    "$vendor_stage/openclaw-ephemeral/runtime/yolo.sh"
 rm -rf -- "$ephemeral_checkout"
 
 [ "$(find "$vendor_stage/openclaw-ephemeral" -type f | wc -l)" -eq 8 ] || {

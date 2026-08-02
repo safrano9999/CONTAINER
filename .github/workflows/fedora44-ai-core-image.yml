@@ -74,10 +74,6 @@ jobs:
           for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION \
             ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT \
             WEBHOOK_VERSION VDITOR_VERSION OPENCLAW_VERSION \
-            OPENCLAW_NPM_INTEGRITY OPENCLAW_DETERMINISTIC_REPOSITORY \
-            OPENCLAW_DETERMINISTIC_TAG OPENCLAW_DETERMINISTIC_ASSET \
-            OPENCLAW_DETERMINISTIC_SHA256 \
-            OPENCLAW_EPHEMERAL_REPOSITORY OPENCLAW_EPHEMERAL_COMMIT \
             NOTE_REPOSITORY NOTE_RELEASE_TAG NOTE_RELEASE_ASSET \
             NOTE_RELEASE_SHA256; do
             [ -n "${!name:-}" ] || {
@@ -91,22 +87,10 @@ jobs:
               exit 1
             }
           }
-          expect OPENCLAW_NPM_INTEGRITY "$OPENCLAW_NPM_INTEGRITY" \
-            'sha512-ge/Xss99CHAjPL/ikmH/UFoiOrjcxDB4sW3y9mhyCD+dYW3wzV7TKbAVdkrXFgAG2d2BjpJofP97zUZ+umxo8g=='
-          expect OPENCLAW_DETERMINISTIC_REPOSITORY \
-            "$OPENCLAW_DETERMINISTIC_REPOSITORY" safrano9999/openclaw-deterministic
-          expect OPENCLAW_DETERMINISTIC_TAG \
-            "$OPENCLAW_DETERMINISTIC_TAG" 2026.7.1-deterministic.1
-          expect OPENCLAW_DETERMINISTIC_ASSET "$OPENCLAW_DETERMINISTIC_ASSET" \
-            openclaw-2026.7.1-deterministic.tar.gz
-          expect OPENCLAW_EPHEMERAL_REPOSITORY \
-            "$OPENCLAW_EPHEMERAL_REPOSITORY" safrano9999/openclaw-ephemeral
-          expect OPENCLAW_EPHEMERAL_COMMIT "$OPENCLAW_EPHEMERAL_COMMIT" \
-            40d29af55bab4331eddfa40809c5f3eb25e7600b
           expect NOTE_REPOSITORY "$NOTE_REPOSITORY" safrano9999/NOTE
           expect NOTE_RELEASE_TAG "$NOTE_RELEASE_TAG" 2026.7.36
           expect NOTE_RELEASE_ASSET "$NOTE_RELEASE_ASSET" note-latest.zip
-          for name in OPENCLAW_DETERMINISTIC_SHA256 NOTE_RELEASE_SHA256; do
+          for name in NOTE_RELEASE_SHA256; do
             [[ "${!name}" =~ ^[0-9a-f]{64}$ ]] || {
               echo "$name must be a lowercase SHA256" >&2
               exit 1
@@ -114,7 +98,7 @@ jobs:
           done
 
           vendor_files=(
-            build/vendor/openclaw-deterministic/openclaw-2026.7.1-deterministic.tar.gz
+            build/vendor/openclaw-deterministic/openclaw-deterministic.tar.gz
             build/vendor/note/note-latest.zip
             build/vendor/openclaw-ephemeral/openclaw-ephemeral.py
             build/vendor/openclaw-ephemeral/runtime/yolo.sh

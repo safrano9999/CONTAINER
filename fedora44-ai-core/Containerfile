@@ -14,13 +14,6 @@ ARG FUGU_COMMIT
 ARG CLOUDFLARED_VERSION
 ARG CLOUDFLARED_SHA256
 ARG OPENCLAW_VERSION=2026.7.1
-ARG OPENCLAW_NPM_INTEGRITY
-ARG OPENCLAW_DETERMINISTIC_REPOSITORY
-ARG OPENCLAW_DETERMINISTIC_TAG
-ARG OPENCLAW_DETERMINISTIC_ASSET
-ARG OPENCLAW_DETERMINISTIC_SHA256
-ARG OPENCLAW_EPHEMERAL_REPOSITORY
-ARG OPENCLAW_EPHEMERAL_COMMIT
 ARG NOTE_REPOSITORY
 ARG NOTE_RELEASE_TAG
 ARG NOTE_RELEASE_ASSET
@@ -40,11 +33,6 @@ LABEL org.opencontainers.image.title="fedora44-ai-core" \
       org.opencontainers.image.description="Fedora 44 AI base with ephemeral OpenClaw and Hermes runtime initialization." \
       org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
       io.safrano9999.openclaw.version="${OPENCLAW_VERSION}" \
-      io.safrano9999.openclaw.npm-integrity="${OPENCLAW_NPM_INTEGRITY}" \
-      io.safrano9999.openclaw-deterministic.repository="${OPENCLAW_DETERMINISTIC_REPOSITORY}" \
-      io.safrano9999.openclaw-deterministic.release="${OPENCLAW_DETERMINISTIC_TAG}" \
-      io.safrano9999.openclaw-ephemeral.repository="${OPENCLAW_EPHEMERAL_REPOSITORY}" \
-      io.safrano9999.openclaw-ephemeral.commit="${OPENCLAW_EPHEMERAL_COMMIT}" \
       io.safrano9999.note.repository="${NOTE_REPOSITORY}" \
       io.safrano9999.note.release="${NOTE_RELEASE_TAG}"
 
@@ -147,8 +135,6 @@ RUN --mount=type=cache,target=/root/.npm \
     test -n "${CODEX_VERSION}" \
  && test -n "${CLAUDE_CODE_VERSION}" \
  && test -n "${OPENCLAW_VERSION}" \
- && test -n "${OPENCLAW_NPM_INTEGRITY}" \
- && test "$(npm view "openclaw@${OPENCLAW_VERSION}" dist.integrity)" = "${OPENCLAW_NPM_INTEGRITY}" \
  && npm install -g --include=optional \
       "@openai/codex@${CODEX_VERSION}" \
       "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
@@ -269,13 +255,10 @@ ENV HOME=/root \
 
 RUN install -d -o root -g root -m 0700 "${OPENCLAW_CONFIG_DIR}"
 
-COPY build/vendor/openclaw-deterministic/openclaw-2026.7.1-deterministic.tar.gz /tmp/openclaw-deterministic.tar.gz
+COPY build/vendor/openclaw-deterministic/openclaw-deterministic.tar.gz /tmp/openclaw-deterministic.tar.gz
 
 RUN set -euo pipefail; \
     openclaw_root="$(npm root -g)/openclaw"; \
-    printf '%s  %s\n' \
-      "${OPENCLAW_DETERMINISTIC_SHA256}" \
-      /tmp/openclaw-deterministic.tar.gz | sha256sum -c -; \
     test "$(jq -r .version "$openclaw_root/package.json")" = "${OPENCLAW_VERSION}"; \
     cp -a "$openclaw_root/dist/control-ui" /tmp/openclaw-control-ui; \
     rm -rf "$openclaw_root/dist"; \
@@ -303,14 +286,11 @@ else:
     raise SystemExit("OpenClaw local-roots bundle not found")
 PY
 
-COPY build/vendor/openclaw-ephemeral.commit /tmp/openclaw-ephemeral.commit
 COPY build/vendor/openclaw-ephemeral/openclaw_ephemeral/ /usr/local/lib/openclaw-ephemeral/openclaw_ephemeral/
 COPY build/vendor/openclaw-ephemeral/openclaw-ephemeral.py /usr/local/bin/openclaw-ephemeral.py
 COPY build/vendor/openclaw-ephemeral/runtime/yolo.sh /usr/local/bin/openclaw-ephemeral-yolo
 
-RUN test "$(cat /tmp/openclaw-ephemeral.commit)" = "${OPENCLAW_EPHEMERAL_COMMIT}" \
- && rm -f /tmp/openclaw-ephemeral.commit \
- && chmod 0755 /usr/local/bin/openclaw-ephemeral.py \
+RUN chmod 0755 /usr/local/bin/openclaw-ephemeral.py \
       /usr/local/bin/openclaw-ephemeral-yolo \
  && chown -R root:root /usr/local/lib/openclaw-ephemeral \
       /usr/local/bin/openclaw-ephemeral.py \

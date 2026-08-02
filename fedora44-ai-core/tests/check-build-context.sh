@@ -19,13 +19,7 @@ bash -n \
     . "$ROOT/build.conf"
     set +a
     [ "$OPENCLAW_VERSION" = 2026.7.1 ]
-    [ "$OPENCLAW_NPM_INTEGRITY" = 'sha512-ge/Xss99CHAjPL/ikmH/UFoiOrjcxDB4sW3y9mhyCD+dYW3wzV7TKbAVdkrXFgAG2d2BjpJofP97zUZ+umxo8g==' ]
-    [ "$OPENCLAW_DETERMINISTIC_REPOSITORY" = safrano9999/openclaw-deterministic ]
-    [ "$OPENCLAW_DETERMINISTIC_TAG" = 2026.7.1-deterministic.1 ]
-    [ "$OPENCLAW_DETERMINISTIC_ASSET" = openclaw-2026.7.1-deterministic.tar.gz ]
-    [ "$OPENCLAW_DETERMINISTIC_SHA256" = c81e4482151ad1be347f630d5ab779e1fa9f6c05a34bb6f026282dd8427db5c8 ]
-    [ "$OPENCLAW_EPHEMERAL_REPOSITORY" = safrano9999/openclaw-ephemeral ]
-    [ "$OPENCLAW_EPHEMERAL_COMMIT" = 40d29af55bab4331eddfa40809c5f3eb25e7600b ]
+    [ "$(grep -c '^OPENCLAW_' "$ROOT/build.conf")" -eq 1 ]
     [ "$NOTE_REPOSITORY" = safrano9999/NOTE ]
     [ "$NOTE_RELEASE_TAG" = 2026.7.36 ]
     [ "$NOTE_RELEASE_ASSET" = note-latest.zip ]
@@ -46,7 +40,8 @@ if rg -n 'OPENCLAW_EPHEMERAL_IMAGE|openclaw-ephemeral-source|COPY --from=.*openc
     exit 1
 fi
 grep -Fq 'FROM quay.io/fedora/fedora:44 AS ai-core' "$ROOT/Containerfile"
-grep -Fq 'COPY build/vendor/openclaw-deterministic/' "$ROOT/Containerfile"
+grep -Fq 'COPY build/vendor/openclaw-deterministic/openclaw-deterministic.tar.gz' \
+    "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-ephemeral/' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/note/note-latest.zip' "$ROOT/Containerfile"
 grep -Fq 'local-roots-*.js' "$ROOT/Containerfile"

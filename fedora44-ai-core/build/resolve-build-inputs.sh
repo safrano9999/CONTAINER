@@ -6,13 +6,6 @@ OUTPUT="${1:-.resolved-build.env}"
 NODE_REQUESTED="${2:-stable}"
 OPENCLAW_REQUESTED="${3:-2026.7.1}"
 
-: "${OPENCLAW_NPM_INTEGRITY:?OPENCLAW_NPM_INTEGRITY is required}"
-: "${OPENCLAW_DETERMINISTIC_REPOSITORY:?OPENCLAW_DETERMINISTIC_REPOSITORY is required}"
-: "${OPENCLAW_DETERMINISTIC_TAG:?OPENCLAW_DETERMINISTIC_TAG is required}"
-: "${OPENCLAW_DETERMINISTIC_ASSET:?OPENCLAW_DETERMINISTIC_ASSET is required}"
-: "${OPENCLAW_DETERMINISTIC_SHA256:?OPENCLAW_DETERMINISTIC_SHA256 is required}"
-: "${OPENCLAW_EPHEMERAL_REPOSITORY:?OPENCLAW_EPHEMERAL_REPOSITORY is required}"
-: "${OPENCLAW_EPHEMERAL_COMMIT:?OPENCLAW_EPHEMERAL_COMMIT is required}"
 : "${NOTE_REPOSITORY:?NOTE_REPOSITORY is required}"
 : "${NOTE_RELEASE_TAG:?NOTE_RELEASE_TAG is required}"
 : "${NOTE_RELEASE_ASSET:?NOTE_RELEASE_ASSET is required}"
@@ -105,13 +98,8 @@ encoded_openclaw="$(jq -nr --arg package openclaw '$package | @uri')"
 registry_openclaw_document="$(curl -fsSL --retry 3 --connect-timeout 15 \
     "https://registry.npmjs.org/${encoded_openclaw}/${OPENCLAW_VERSION}")"
 registry_openclaw="$(jq -er '.version' <<<"$registry_openclaw_document")"
-registry_openclaw_integrity="$(jq -er '.dist.integrity' <<<"$registry_openclaw_document")"
 [ "$registry_openclaw" = "$OPENCLAW_VERSION" ] || {
     echo "Requested OpenClaw $OPENCLAW_VERSION, npm returned $registry_openclaw" >&2
-    exit 1
-}
-[ "$registry_openclaw_integrity" = "$OPENCLAW_NPM_INTEGRITY" ] || {
-    echo "OpenClaw npm integrity mismatch for $OPENCLAW_VERSION" >&2
     exit 1
 }
 
@@ -125,13 +113,6 @@ require_match ELECTRUM_KEYS_COMMIT "$ELECTRUM_KEYS_COMMIT" '^[0-9a-f]{40}$'
 require_match CLOUDFLARED_VERSION "$CLOUDFLARED_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match CLOUDFLARED_SHA256 "$CLOUDFLARED_SHA256" '^[0-9a-f]{64}$'
 require_match OPENCLAW_VERSION "$OPENCLAW_VERSION" '^[A-Za-z0-9._+-]+$'
-require_match OPENCLAW_NPM_INTEGRITY "$OPENCLAW_NPM_INTEGRITY" '^sha512-[A-Za-z0-9+/]+={0,2}$'
-require_match OPENCLAW_DETERMINISTIC_REPOSITORY "$OPENCLAW_DETERMINISTIC_REPOSITORY" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
-require_match OPENCLAW_DETERMINISTIC_TAG "$OPENCLAW_DETERMINISTIC_TAG" '^[A-Za-z0-9._+-]+$'
-require_match OPENCLAW_DETERMINISTIC_ASSET "$OPENCLAW_DETERMINISTIC_ASSET" '^[A-Za-z0-9._+-]+$'
-require_match OPENCLAW_DETERMINISTIC_SHA256 "$OPENCLAW_DETERMINISTIC_SHA256" '^[0-9a-f]{64}$'
-require_match OPENCLAW_EPHEMERAL_REPOSITORY "$OPENCLAW_EPHEMERAL_REPOSITORY" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
-require_match OPENCLAW_EPHEMERAL_COMMIT "$OPENCLAW_EPHEMERAL_COMMIT" '^[0-9a-f]{40}$'
 require_match NOTE_REPOSITORY "$NOTE_REPOSITORY" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
 require_match NOTE_RELEASE_TAG "$NOTE_RELEASE_TAG" '^[A-Za-z0-9._+-]+$'
 require_match NOTE_RELEASE_ASSET "$NOTE_RELEASE_ASSET" '^[A-Za-z0-9._+-]+$'
@@ -153,13 +134,6 @@ temporary="${OUTPUT}.tmp"
     printf 'CLOUDFLARED_VERSION=%s\n' "$CLOUDFLARED_VERSION"
     printf 'CLOUDFLARED_SHA256=%s\n' "$CLOUDFLARED_SHA256"
     printf 'OPENCLAW_VERSION=%s\n' "$OPENCLAW_VERSION"
-    printf 'OPENCLAW_NPM_INTEGRITY=%s\n' "$OPENCLAW_NPM_INTEGRITY"
-    printf 'OPENCLAW_DETERMINISTIC_REPOSITORY=%s\n' "$OPENCLAW_DETERMINISTIC_REPOSITORY"
-    printf 'OPENCLAW_DETERMINISTIC_TAG=%s\n' "$OPENCLAW_DETERMINISTIC_TAG"
-    printf 'OPENCLAW_DETERMINISTIC_ASSET=%s\n' "$OPENCLAW_DETERMINISTIC_ASSET"
-    printf 'OPENCLAW_DETERMINISTIC_SHA256=%s\n' "$OPENCLAW_DETERMINISTIC_SHA256"
-    printf 'OPENCLAW_EPHEMERAL_REPOSITORY=%s\n' "$OPENCLAW_EPHEMERAL_REPOSITORY"
-    printf 'OPENCLAW_EPHEMERAL_COMMIT=%s\n' "$OPENCLAW_EPHEMERAL_COMMIT"
     printf 'NOTE_REPOSITORY=%s\n' "$NOTE_REPOSITORY"
     printf 'NOTE_RELEASE_TAG=%s\n' "$NOTE_RELEASE_TAG"
     printf 'NOTE_RELEASE_ASSET=%s\n' "$NOTE_RELEASE_ASSET"

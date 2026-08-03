@@ -3,9 +3,6 @@ name: safrano9999-openclaw build_image
 run-name: safrano9999-openclaw ${{ inputs.image_tag || github.ref_name }}
 
 on:
-  push:
-    tags:
-      - "20*.*.*"
   workflow_dispatch:
     inputs:
       image_tag:

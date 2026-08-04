@@ -488,12 +488,13 @@ def hardlink(source: Path, target: Path) -> None:
             pass
 
 
-def symlink(source: Path, target: Path) -> None:
+def symlink(source: Path, target: Path, replace_file: bool = False) -> None:
     relative = os.path.relpath(source, target.parent)
     if target.is_symlink() and os.readlink(target) == relative:
         return
     if target.exists() and not target.is_symlink():
-        raise SetupError(f"Refusing to replace instance file: {target}")
+        if target.is_dir() or not replace_file:
+            raise SetupError(f"Refusing to replace instance file: {target}")
     temporary = target.with_name(f".{target.name}.link-{uuid.uuid4().hex}")
     try:
         temporary.symlink_to(relative)
@@ -510,7 +511,7 @@ def link_instance(repo: Path, cache: Path, config: Path, instance: Path) -> None
     for source in sorted(repo.iterdir()):
         if "example" not in source.name or not source.is_file():
             continue
-        symlink(source, instance / source.name)
+        symlink(source, instance / source.name, replace_file=True)
     for source in (
         config,
         config.parent / "sqlite_persistence.sh",

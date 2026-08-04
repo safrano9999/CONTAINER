@@ -33,6 +33,7 @@ compose.yml
 VIDEOS/
 services/runtime-pass-environment.local.conf
 /safrano9999/
+/safrano9999-examples/
 /shared-scripts/
 /srv/
 /ref.conf

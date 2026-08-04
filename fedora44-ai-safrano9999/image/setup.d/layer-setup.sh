@@ -21,8 +21,8 @@ show_help() {
 Usage: ./setup.sh [OPTIONS] [INSTANCE]
 
 Options:
-  --config-only  Stage sources and render config without an image operation
-  --offline      Use already staged repositories without network access
+  --config-only  Sync examples and render config without an image operation
+  --offline      Use cached example assets without network access
   --pull         Pull $REGISTRY_IMAGE
   --build        Build this repository's Containerfile
   --no-cache     Reclone sources and disable the local image build cache
@@ -51,63 +51,12 @@ for argument in "$@"; do
     esac
 done
 
-INSTANCE="${INSTANCE:-$DEFAULT_INSTANCE}"
-[[ "$INSTANCE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
+[ -z "$INSTANCE" ] || [[ "$INSTANCE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
     echo "Invalid instance name: $INSTANCE" >&2
     exit 2
 }
 
-INSTANCE_DIR="$ROOT/CONTAINER/$INSTANCE"
-ENV_FILE="$INSTANCE.env"
-CONFIG_FILE="${INSTANCE}_config.conf"
-CONTAINER_FILE="${INSTANCE}_container.conf"
-BUILD_FILE="${INSTANCE}_build.conf"
-COMPOSE_FILE="${INSTANCE}-compose.yml"
-QUADLET_FILE="${INSTANCE}.container"
-INSTANCE_FILES=(
-    "$ENV_FILE"
-    "$CONFIG_FILE"
-    "$CONTAINER_FILE"
-    "$BUILD_FILE"
-    "$COMPOSE_FILE"
-    "$QUADLET_FILE"
-)
-
-fix_instance_paths() {
-    local output generated
-    for output in "$ROOT/$COMPOSE_FILE" "$ROOT/$QUADLET_FILE"; do
-        [ -f "$output" ] || continue
-        for generated in "${INSTANCE_FILES[@]}"; do
-            sed -i \
-                "s#${ROOT}/${generated}#${INSTANCE_DIR}/${generated}#g" \
-                "$output"
-        done
-    done
-}
-
-persist_instance() {
-    local generated
-    mkdir -p "$INSTANCE_DIR"
-    fix_instance_paths
-    [ ! -f "$ROOT/$ENV_FILE" ] || chmod 0600 "$ROOT/$ENV_FILE"
-    for generated in "${INSTANCE_FILES[@]}"; do
-        [ ! -f "$ROOT/$generated" ] ||
-            mv -f -- "$ROOT/$generated" "$INSTANCE_DIR/$generated"
-    done
-}
-
-restore_instance() {
-    local generated
-    mkdir -p "$INSTANCE_DIR"
-    for generated in "${INSTANCE_FILES[@]}"; do
-        [ ! -f "$INSTANCE_DIR/$generated" ] ||
-            cp -f -- "$INSTANCE_DIR/$generated" "$ROOT/$generated"
-    done
-}
-
 finish() {
-    persist_instance
-    trap - EXIT
     python3 "$ROOT/quadlet_finish.py" \
         "$INSTANCE_DIR/$COMPOSE_FILE" \
         "$INSTANCE_DIR/$QUADLET_FILE" \
@@ -120,8 +69,8 @@ finish() {
 
 render_image() {
     local image="$1"
-    local compose="$ROOT/$COMPOSE_FILE"
-    local quadlet="$ROOT/$QUADLET_FILE"
+    local compose="$INSTANCE_DIR/$COMPOSE_FILE"
+    local quadlet="$INSTANCE_DIR/$QUADLET_FILE"
     local temporary="${compose}.tmp"
 
     [ -f "$compose" ] && [ -f "$quadlet" ] || {
@@ -150,26 +99,37 @@ ensure_ghcr_login() {
         podman login ghcr.io --username "$username" --password-stdin
 }
 
-sync_arguments=()
-$OFFLINE && sync_arguments+=(--offline)
-$NO_CACHE && sync_arguments+=(--no-cache)
-bash "$ROOT/image/setup.d/sync-sources.sh" \
-    "${sync_arguments[@]}" sync "${REPOS[@]}"
-
-restore_instance
-trap persist_instance EXIT
-
-echo "  Merging the Fedora image example cascade..."
-(
-    cd "$ROOT"
-    FEDORA44_AI_EXAMPLE_DIRS="$EXAMPLE_DIRS" \
-        bash "$ROOT/merge.sh" "${REPOS[@]}"
+instance_arguments=(
+    "$ROOT"
+    --config "$ROOT/config.sh"
+    --default-name "$DEFAULT_INSTANCE"
 )
+[ -z "$INSTANCE" ] || instance_arguments+=(--name "$INSTANCE")
+$OFFLINE && instance_arguments+=(--offline)
+IFS=: read -ra example_directories <<< "$EXAMPLE_DIRS"
+for example_directory in "${example_directories[@]}"; do
+    [ -n "$example_directory" ] && instance_arguments+=(--example-dir "$example_directory")
+done
+for repository in "${REPOS[@]}"; do
+    instance_arguments+=(--repository "$repository")
+done
+INSTANCE_DIR="$(python3 "$ROOT/container-instance-setup.py" "${instance_arguments[@]}")"
+INSTANCE="${INSTANCE_DIR##*/}"
+ENV_FILE="$INSTANCE.env"
+CONFIG_FILE="${INSTANCE}_config.conf"
+CONTAINER_FILE="${INSTANCE}_container.conf"
+BUILD_FILE="${INSTANCE}_build.conf"
+COMPOSE_FILE="${INSTANCE}-compose.yml"
+QUADLET_FILE="${INSTANCE}.container"
 
 echo "  Configuring instance $INSTANCE..."
-CONFIG_CONTAINER_NAME="$INSTANCE" \
-CONFIG_CONTAINER_IMAGE="$REGISTRY_IMAGE" \
-    bash "$ROOT/config.sh"
+(
+    cd "$INSTANCE_DIR"
+    CONFIG_CONTAINER_NAME="$INSTANCE" \
+    CONFIG_CONTAINER_IMAGE="$REGISTRY_IMAGE" \
+        bash ./config.sh
+)
+[ ! -f "$INSTANCE_DIR/$ENV_FILE" ] || chmod 0600 "$INSTANCE_DIR/$ENV_FILE"
 render_image "$REGISTRY_IMAGE"
 
 if $CONFIG_ONLY; then

@@ -3,7 +3,7 @@
 #
 #   1) stage plugin release archives into ./safrano9999
 #   2) merge env.example / requirements.txt / config.conf_example
-#   3) run repo-local config.sh, delete generated compose/quadlet, render them here
+#   3) configure directly below CONTAINER/<name>, then render compose/quadlet
 #   4) choose Docker Hub pull or local build
 set -euo pipefail
 
@@ -38,29 +38,6 @@ Without options, setup runs config, then opens the interactive image menu.
 EOF
 }
 
-fix_instance_paths() {
-  local file item
-
-  for file in "$COMPOSE_FILE" "$QUADLET_FILE"; do
-    [ -f "$file" ] || continue
-    for item in "${INSTANCE_FILES[@]}"; do
-      sed -i "s#${SCRIPT_DIR}/${item}#${INSTANCE_DIR}/${item}#g" "$file"
-    done
-  done
-}
-
-persist_instance_files() {
-  local file
-
-  # EXIT also runs after Ctrl+C and early failures. Repair generated paths
-  # before moving the files so an interrupted setup never leaves a Quadlet
-  # pointing at the temporary repository-root copies.
-  fix_instance_paths
-  for file in "${INSTANCE_FILES[@]}"; do
-    [ ! -f "$SCRIPT_DIR/$file" ] || mv -f "$SCRIPT_DIR/$file" "$INSTANCE_DIR/$file"
-  done
-}
-
 for arg in "$@"; do
   case "$arg" in
     --help) show_help; exit 0 ;;
@@ -71,25 +48,26 @@ for arg in "$@"; do
   esac
 done
 
-INSTANCE_ROOT="$SCRIPT_DIR/CONTAINER"
-SELECT_ARGS=("$SCRIPT_DIR")
-[ -z "${CONFIG_CONTAINER_NAME:-}" ] || SELECT_ARGS+=(--name "$CONFIG_CONTAINER_NAME")
-CONTAINER_NAME="$(python3 "$SETUP_LIB_DIR/container_instance.py" "${SELECT_ARGS[@]}")"
-export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
-INSTANCE_DIR="$INSTANCE_ROOT/$CONTAINER_NAME"
-mkdir -p "$INSTANCE_DIR"
-ENV_FILE="$SCRIPT_DIR/$CONTAINER_NAME.env"
-CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_config.conf"
-CONTAINER_CONFIG_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_container.conf"
-BUILD_FILE="$SCRIPT_DIR/${CONTAINER_NAME}_build.conf"
-COMPOSE_FILE="$SCRIPT_DIR/$CONTAINER_NAME-compose.yml"
-QUADLET_FILE="$SCRIPT_DIR/$CONTAINER_NAME.container"
-INSTANCE_FILES=("$CONTAINER_NAME.env" "${CONTAINER_NAME}_config.conf" "${CONTAINER_NAME}_container.conf" "${CONTAINER_NAME}_build.conf" "$CONTAINER_NAME-compose.yml" "$CONTAINER_NAME.container")
-for file in "${INSTANCE_FILES[@]}"; do [ ! -f "$INSTANCE_DIR/$file" ] || cp -f "$INSTANCE_DIR/$file" "$SCRIPT_DIR/$file"; done
-trap persist_instance_files EXIT
-LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
-
 "$INSTALL_DIR/github_auth.sh" safrano9999
+instance_arguments=(
+  "$SCRIPT_DIR"
+  --config "$SETUP_LIB_DIR/config.sh"
+  --default-name safrano9999-openclaw
+)
+[ -z "${CONFIG_CONTAINER_NAME:-}" ] || instance_arguments+=(--name "$CONFIG_CONTAINER_NAME")
+for plugin in "${CONFIG_PLUGINS[@]}"; do
+  instance_arguments+=(--repository "$plugin")
+done
+INSTANCE_DIR="$(python3 "$SCRIPT_DIR/container-instance-setup.py" "${instance_arguments[@]}")"
+CONTAINER_NAME="${INSTANCE_DIR##*/}"
+export CONFIG_CONTAINER_NAME="$CONTAINER_NAME"
+ENV_FILE="$INSTANCE_DIR/$CONTAINER_NAME.env"
+CONFIG_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_config.conf"
+CONTAINER_CONFIG_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_container.conf"
+BUILD_FILE="$INSTANCE_DIR/${CONTAINER_NAME}_build.conf"
+COMPOSE_FILE="$INSTANCE_DIR/$CONTAINER_NAME-compose.yml"
+QUADLET_FILE="$INSTANCE_DIR/$CONTAINER_NAME.container"
+LOCAL_IMAGE="localhost/${CONTAINER_NAME}:latest"
 
 trim() {
   local value="$1"
@@ -570,9 +548,9 @@ echo "  Source counter tags: $SAFRANO9999_SOURCE_KEY"
 rm -f "$SCRIPT_DIR"/*_init*
 
 if ! $NO_CONFIG; then
-  config_sh="$SETUP_LIB_DIR/config.sh"
-  [ -f "$config_sh" ] || { echo "Missing bundled config.sh at $config_sh" >&2; exit 1; }
-  ( cd "$SCRIPT_DIR" && bash "$config_sh" )
+  [ -f "$INSTANCE_DIR/config.sh" ] || { echo "Missing instance config.sh at $INSTANCE_DIR/config.sh" >&2; exit 1; }
+  ( cd "$INSTANCE_DIR" && bash ./config.sh )
+  [ ! -f "$ENV_FILE" ] || chmod 0600 "$ENV_FILE"
   rm -f "$QUADLET_FILE" "$COMPOSE_FILE" "$SCRIPT_DIR/docker-compose.yml"
 fi
 
@@ -590,7 +568,7 @@ RENDER_BUILD=false
 [ "$RENDER_IMAGE" = "$LOCAL_IMAGE" ] && RENDER_BUILD=true
 render_compose_and_quadlet "$RENDER_IMAGE" "$RENDER_BUILD"
 
-$NO_BUILD && { fix_instance_paths; echo "  Staging done."; exit 0; }
+$NO_BUILD && { echo "  Staging done."; exit 0; }
 
 # Setup contract: normal interactive runs always ask for the image source.
 if [ -z "$IMG_CHOICE" ]; then
@@ -642,5 +620,4 @@ case "$IMG_CHOICE" in
 esac
 
 echo ""
-fix_instance_paths
 python3 "$SETUP_LIB_DIR/quadlet_finish.py" "$INSTANCE_DIR/$(basename "$COMPOSE_FILE")" "$INSTANCE_DIR/$(basename "$QUADLET_FILE")" "$CONTAINER_NAME"

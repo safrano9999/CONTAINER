@@ -4,7 +4,7 @@
 #   1) stage plugin release archives into ./safrano9999
 #   2) merge env.example / requirements.txt / config.conf_example
 #   3) configure directly below CONTAINER/<name>, then render compose/quadlet
-#   4) choose Docker Hub pull or local build
+#   4) choose GHCR pull or local build
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,7 +15,8 @@ OPTIONAL_PERSISTENCE="$SETUP_LIB_DIR/optional_persistence.sh"
 INSTALL_DIR="$SETUP_LIB_DIR/image/install"
 SOURCE_TAG_MANIFEST="$SCRIPT_DIR/.safrano9999-source-tags.tsv"
 CONTAINER_NAME=""
-DOCKER_IO_IMAGE_DEFAULT="docker.io/safrano9999/safrano9999-openclaw:latest"
+REGISTRY_IMAGE_DEFAULT="ghcr.io/safrano9999/safrano9999-openclaw:latest"
+LEGACY_REGISTRY_IMAGE="docker.io/safrano9999/safrano9999-openclaw:latest"
 PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN CITADEL)
 CONFIG_PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN)
 
@@ -116,19 +117,29 @@ config_value() {
   return 1
 }
 
-docker_io_image() {
+registry_image() {
   local configured
   configured="$(config_value SAFRANO9999_OPENCLAW_IMAGE || true)"
-  printf '%s\n' "${configured:-$DOCKER_IO_IMAGE_DEFAULT}"
+  case "$configured" in
+    ""|"$LEGACY_REGISTRY_IMAGE") printf '%s\n' "$REGISTRY_IMAGE_DEFAULT" ;;
+    *) printf '%s\n' "$configured" ;;
+  esac
 }
 
-ensure_docker_io_login() {
+ensure_ghcr_login() {
   local engine="$1"
-  if "$engine" login --get-login docker.io >/dev/null 2>&1; then
+  local username
+  if [ "$engine" = podman ] &&
+    podman login --get-login ghcr.io >/dev/null 2>&1; then
     return 0
   fi
-  echo "  docker.io login required for private image pull."
-  "$engine" login docker.io -u safrano9999
+  command -v gh >/dev/null 2>&1 || {
+    echo "gh is required to authenticate to private GHCR images" >&2
+    return 1
+  }
+  username="$(gh api user --jq .login)"
+  gh auth token |
+    "$engine" login ghcr.io --username "$username" --password-stdin
 }
 
 choose_pull_engine() {
@@ -421,14 +432,19 @@ render_compose_and_quadlet() {
   done < "$source_file"
   done
 
-  while IFS= read -r item || [ -n "$item" ]; do
-    [ -n "$item" ] || continue
-    add_volume_item "$item" volumes named_volumes
-  done < <("$SQLITE_PERSISTENCE" mounts \
-    --zip-root "$SAFRANO_DIR" \
-    --config-dir "$SCRIPT_DIR" \
-    --container "$CONTAINER_NAME" \
-    --target-root "$OPENCLAW_BUILD_CONFIG_DIR/extensions")
+  local example_repository plugin_id
+  for example_repository in "$INSTANCE_DIR/safrano9999"/*; do
+    [ -d "$example_repository" ] || continue
+    plugin_id="$(basename "$example_repository" | tr '[:upper:]' '[:lower:]')"
+    while IFS= read -r item || [ -n "$item" ]; do
+      [ -n "$item" ] || continue
+      add_volume_item "$item" volumes named_volumes
+    done < <("$SQLITE_PERSISTENCE" mounts \
+      --repo "$example_repository" \
+      --config-dir "$INSTANCE_DIR" \
+      --container "$CONTAINER_NAME" \
+      --target "$OPENCLAW_BUILD_CONFIG_DIR/extensions/$plugin_id")
+  done
 
   while IFS= read -r item || [ -n "$item" ]; do
     [ -n "$item" ] || continue
@@ -527,25 +543,31 @@ render_compose_and_quadlet() {
   echo "  Written: $quadlet_file"
 }
 
-echo "  Staging plugin release archives -> safrano9999/"
-printf 'repository\tversion_tag\tversion_commit\tartifact_sha256\n' > "$SOURCE_TAG_MANIFEST"
-rm -f \
-  "$SAFRANO_DIR/calendar-latest.zip" \
-  "$SAFRANO_DIR/calendar-latest.zip.sha256" \
-  "$SAFRANO_DIR/note-latest.zip" \
-  "$SAFRANO_DIR/note-latest.zip.sha256"
-for p in "${PLUGINS[@]}"; do
-  download_plugin_zip "$p"
-  stage_provider_conf "$p"
-done
+stage_build_context() {
+  local plugin
 
-echo "  Merging examples + requirements.txt..."
-( cd "$SCRIPT_DIR" && bash "$SETUP_LIB_DIR/merge.sh" "${CONFIG_PLUGINS[@]}" )
+  echo "  Staging plugin release archives -> safrano9999/"
+  printf 'repository\tversion_tag\tversion_commit\tartifact_sha256\n' > "$SOURCE_TAG_MANIFEST"
+  rm -f \
+    "$SAFRANO_DIR/calendar-latest.zip" \
+    "$SAFRANO_DIR/calendar-latest.zip.sha256" \
+    "$SAFRANO_DIR/note-latest.zip" \
+    "$SAFRANO_DIR/note-latest.zip.sha256"
+  for plugin in "${PLUGINS[@]}"; do
+    download_plugin_zip "$plugin"
+    stage_provider_conf "$plugin"
+  done
 
-append_repo_local_source_tag
-SAFRANO9999_SOURCE_KEY="$(sha256sum "$SOURCE_TAG_MANIFEST" | cut -d' ' -f1)"
-echo "  Source counter tags: $SAFRANO9999_SOURCE_KEY"
-rm -f "$SCRIPT_DIR"/*_init*
+  echo "  Merging examples + requirements.txt..."
+  ( cd "$SCRIPT_DIR" && bash "$SETUP_LIB_DIR/merge.sh" "${CONFIG_PLUGINS[@]}" )
+
+  append_repo_local_source_tag
+  SAFRANO9999_SOURCE_KEY="$(sha256sum "$SOURCE_TAG_MANIFEST" | cut -d' ' -f1)"
+  echo "  Source counter tags: $SAFRANO9999_SOURCE_KEY"
+  rm -f "$SCRIPT_DIR"/*_init*
+}
+
+$NO_BUILD && stage_build_context
 
 if ! $NO_CONFIG; then
   [ -f "$INSTANCE_DIR/config.sh" ] || { echo "Missing instance config.sh at $INSTANCE_DIR/config.sh" >&2; exit 1; }
@@ -554,16 +576,21 @@ if ! $NO_CONFIG; then
   rm -f "$QUADLET_FILE" "$COMPOSE_FILE" "$SCRIPT_DIR/docker-compose.yml"
 fi
 
-DOCKER_IO_IMAGE="$(docker_io_image)"
+REGISTRY_IMAGE="$(registry_image)"
 OPENCLAW_EPHEMERAL_BUILD_IMAGE="$(config_value OPENCLAW_EPHEMERAL_IMAGE || true)"
 [ -n "$OPENCLAW_EPHEMERAL_BUILD_IMAGE" ] || {
   echo "Missing OPENCLAW_EPHEMERAL_IMAGE in $(basename "$BUILD_FILE")" >&2
   exit 1
 }
 OPENCLAW_BUILD_CONFIG_DIR=/root/.openclaw
+if [ -f "$SOURCE_TAG_MANIFEST" ]; then
+  SAFRANO9999_SOURCE_KEY="$(sha256sum "$SOURCE_TAG_MANIFEST" | cut -d' ' -f1)"
+else
+  SAFRANO9999_SOURCE_KEY=not-staged
+fi
 
 EXISTING_IMAGE="$(read_kv_file "$QUADLET_FILE" Image || true)"
-RENDER_IMAGE="${EXISTING_IMAGE:-$DOCKER_IO_IMAGE}"
+RENDER_IMAGE="${EXISTING_IMAGE:-$REGISTRY_IMAGE}"
 RENDER_BUILD=false
 [ "$RENDER_IMAGE" = "$LOCAL_IMAGE" ] && RENDER_BUILD=true
 render_compose_and_quadlet "$RENDER_IMAGE" "$RENDER_BUILD"
@@ -574,29 +601,30 @@ $NO_BUILD && { echo "  Staging done."; exit 0; }
 if [ -z "$IMG_CHOICE" ]; then
   echo ""
   echo "  Image source:"
-  echo "    (1) Pull from docker.io  [$DOCKER_IO_IMAGE]"
+  echo "    (1) Pull from ghcr.io  [$REGISTRY_IMAGE]"
   echo "    (2) Build locally"
   echo ""
-  read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
-  IMG_CHOICE="${IMG_CHOICE:-2}"
+  read -rp "  Choose [1/2] (default: 1): " IMG_CHOICE
+  IMG_CHOICE="${IMG_CHOICE:-1}"
 fi
 
 case "$IMG_CHOICE" in
   1)
     echo ""
     PULL_ENGINE="$(choose_pull_engine)"
-    ensure_docker_io_login "$PULL_ENGINE"
-    echo "  Pulling $DOCKER_IO_IMAGE ..."
+    ensure_ghcr_login "$PULL_ENGINE"
+    echo "  Pulling $REGISTRY_IMAGE ..."
     if [ "$PULL_ENGINE" = podman ]; then
-      podman pull --retry 10 --retry-delay 5s "$DOCKER_IO_IMAGE"
+      podman pull --retry 10 --retry-delay 5s "$REGISTRY_IMAGE"
     else
-      docker pull "$DOCKER_IO_IMAGE"
+      docker pull "$REGISTRY_IMAGE"
     fi
-    render_compose_and_quadlet "$DOCKER_IO_IMAGE" false
-    echo "  Done. Image ready: $DOCKER_IO_IMAGE"
+    render_compose_and_quadlet "$REGISTRY_IMAGE" false
+    echo "  Done. Image ready: $REGISTRY_IMAGE"
     ;;
   2)
     echo ""
+    stage_build_context
     if $NO_CACHE; then
       echo "  Building $LOCAL_IMAGE with --no-cache ..."
       podman build --pull=always --no-cache \

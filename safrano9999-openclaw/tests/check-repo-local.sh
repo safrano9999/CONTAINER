@@ -51,9 +51,13 @@ grep -Fq 'find Containerfile requirements.txt setup-lib image -type f' "$ROOT/se
 grep -Fq $'SAFRANO9999-OPENCLAW-LOCAL\\trepo-local\\trepo-local' "$ROOT/setup.sh"
 ! grep -Fq 'repos/safrano9999/SCRIPTS' "$ROOT/setup.sh"
 merge_line="$(grep -n 'bash "$SETUP_LIB_DIR/merge.sh"' "$ROOT/setup.sh" | cut -d: -f1)"
-source_tag_line="$(grep -n '^append_repo_local_source_tag$' "$ROOT/setup.sh" | cut -d: -f1)"
+source_tag_line="$(grep -n '^  append_repo_local_source_tag$' "$ROOT/setup.sh" | cut -d: -f1)"
 [ "$merge_line" -lt "$source_tag_line" ]
-grep -Fq 'podman pull --retry 10 --retry-delay 5s "$DOCKER_IO_IMAGE"' "$ROOT/setup.sh"
+image_choice_line="$(grep -n 'read -rp "  Choose \[1/2\]' "$ROOT/setup.sh" | cut -d: -f1)"
+build_stage_line="$(grep -n '^    stage_build_context$' "$ROOT/setup.sh" | cut -d: -f1)"
+[ "$image_choice_line" -lt "$build_stage_line" ]
+grep -Fq 'IMG_CHOICE="${IMG_CHOICE:-1}"' "$ROOT/setup.sh"
+grep -Fq 'podman pull --retry 10 --retry-delay 5s "$REGISTRY_IMAGE"' "$ROOT/setup.sh"
 
 grep -Fq '#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/workspace /root/.openclaw/workspace dir' \
   "$ROOT/env.safrano9999-openclaw.example"

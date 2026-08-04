@@ -13,7 +13,7 @@ This document maps the current `Containerfile` to its logical image instructions
 5. Exclude CITADEL's standalone configuration from the merge; this image supplies a focused OpenClaw plugin profile with localhost and Tailscale providers.
 6. Run `setup-lib/config.sh`, producing `.env`, `config.conf`, `container.conf`, and `build.conf`.
 7. Render `compose.yml` and `safrano9999-openclaw.container` from the generated configuration.
-8. Ask whether to pull `docker.io/safrano9999/safrano9999-openclaw:latest` or build `localhost/safrano9999-openclaw:latest`.
+8. Ask whether to pull `ghcr.io/safrano9999/safrano9999-openclaw:latest` or build `localhost/safrano9999-openclaw:latest`.
 
 Image build helpers live below `image/build.d/lib/`; runtime files mirror their
 container destinations below `image/runtime.d/rootfs/`.

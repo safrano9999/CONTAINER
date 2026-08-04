@@ -16,7 +16,6 @@ INSTALL_DIR="$SETUP_LIB_DIR/image/install"
 SOURCE_TAG_MANIFEST="$SCRIPT_DIR/.safrano9999-source-tags.tsv"
 CONTAINER_NAME=""
 REGISTRY_IMAGE_DEFAULT="ghcr.io/safrano9999/safrano9999-openclaw:latest"
-LEGACY_REGISTRY_IMAGE="docker.io/safrano9999/safrano9999-openclaw:latest"
 PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN CITADEL)
 CONFIG_PLUGINS=(DAILYNEWS NEXTCLOUD ZEROINBOX KACHELMANN)
 
@@ -121,7 +120,9 @@ registry_image() {
   local configured
   configured="$(config_value SAFRANO9999_OPENCLAW_IMAGE || true)"
   case "$configured" in
-    ""|"$LEGACY_REGISTRY_IMAGE") printf '%s\n' "$REGISTRY_IMAGE_DEFAULT" ;;
+    ""|*/safrano9999/safrano9999-openclaw:latest)
+      printf '%s\n' "$REGISTRY_IMAGE_DEFAULT"
+      ;;
     *) printf '%s\n' "$configured" ;;
   esac
 }

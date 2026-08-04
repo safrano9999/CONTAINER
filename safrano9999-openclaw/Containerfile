@@ -11,12 +11,13 @@
 # Context: build helpers and the runtime rootfs live below ./image.
 # =============================================================================
 
-ARG OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral:latest
+ARG OPENCLAW_EPHEMERAL_IMAGE=ghcr.io/safrano9999/openclaw-ephemeral:latest
 FROM ${OPENCLAW_EPHEMERAL_IMAGE}
 ARG SAFRANO9999_SOURCE_KEY
 
 LABEL org.opencontainers.image.title="safrano9999-openclaw" \
-      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN with localhost and Tailscale providers."
+      org.opencontainers.image.description="OpenClaw gateway bundled with DAILYNEWS, NEXTCLOUD, ZEROINBOX, NOTE, CITADEL and KACHELMANN with localhost and Tailscale providers." \
+      org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER"
 
 # --- system layer (root) -----------------------------------------------------
 # Root installs the additional packages and runs tailscaled at runtime

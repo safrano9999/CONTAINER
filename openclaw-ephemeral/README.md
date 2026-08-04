@@ -3,7 +3,7 @@
 Runtime wrapper and exact image-source snapshot for:
 
 ```text
-docker.io/safrano9999/openclaw-ephemeral:latest
+ghcr.io/safrano9999/openclaw-ephemeral:latest
 ```
 
 The image payload is copied byte-for-byte from public source commit

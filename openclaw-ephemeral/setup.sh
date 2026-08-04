@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEV_SCRIPTS_DIR="${DEV_SCRIPTS_DIR:-$SCRIPT_DIR/../../SCRIPTS}"
 SHARED_SCRIPTS_DIR="$DEV_SCRIPTS_DIR/safrano9999"
-PUBLIC_IMAGE_DEFAULT="docker.io/safrano9999/openclaw-ephemeral:latest"
+PUBLIC_IMAGE_DEFAULT="ghcr.io/safrano9999/openclaw-ephemeral:latest"
 
 NO_CONFIG=false
 NO_CACHE=false
@@ -31,7 +31,7 @@ Usage: ./setup.sh [OPTIONS] [INSTANCE]
 Configure one openclaw-ephemeral instance and optionally pull or build its image.
 
 Options:
-  --pull              Pull the public Docker Hub image
+  --pull              Pull the public GHCR image
   --build             Build the exact local Containerfile context
   --engine ENGINE     Use podman or docker
   --no-cache          Add --pull and --no-cache to a local build
@@ -211,7 +211,12 @@ yaml_quote() {
 public_image() {
   local configured
   configured="$(config_value OPENCLAW_EPHEMERAL_IMAGE || true)"
-  printf '%s\n' "${configured:-$PUBLIC_IMAGE_DEFAULT}"
+  case "$configured" in
+    ""|*/safrano9999/openclaw-ephemeral:latest)
+      printf '%s\n' "$PUBLIC_IMAGE_DEFAULT"
+      ;;
+    *) printf '%s\n' "$configured" ;;
+  esac
 }
 
 existing_image() {
@@ -353,7 +358,7 @@ fi
 if [ -z "$IMAGE_ACTION" ]; then
   echo ""
   echo "  Image source:"
-  echo "    (1) Pull public image [$PUBLIC_IMAGE]"
+  echo "    (1) Pull public GHCR image [$PUBLIC_IMAGE]"
   echo "    (2) Build exact local context [$LOCAL_IMAGE]"
   read -r -p "  Choose [1/2] (default: 1): " choice
   case "${choice:-1}" in
@@ -366,7 +371,7 @@ fi
 resolve_engine
 case "$IMAGE_ACTION" in
   pull)
-    echo "  Pulling public image with $ENGINE: $PUBLIC_IMAGE"
+    echo "  Pulling public GHCR image with $ENGINE: $PUBLIC_IMAGE"
     "$ENGINE" pull "$PUBLIC_IMAGE"
     render_container_files "$PUBLIC_IMAGE" false
     ;;

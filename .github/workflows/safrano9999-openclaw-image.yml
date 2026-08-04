@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Docker image tag to publish. Empty uses YYYY.M.D."
+        description: "Container image tag to publish. Empty uses YYYY.M.D."
         required: false
         default: ""
       plugin_release_tag:
@@ -14,7 +14,7 @@ on:
         required: false
         default: "counter"
       push_latest:
-        description: "Also publish the Docker images as :latest."
+        description: "Also publish the container image as :latest."
         required: true
         type: boolean
         default: true
@@ -24,8 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     env:
-      IMAGE_NAME: docker.io/safrano9999/safrano9999-openclaw
+      IMAGE_NAME: ghcr.io/safrano9999/safrano9999-openclaw
       DOCKER_BUILD_RECORD_UPLOAD: "false"
     steps:
       - name: Checkout
@@ -92,12 +93,12 @@ jobs:
           keep-state: false
           cleanup: true
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -141,27 +142,28 @@ jobs:
             = '["run"]'
           test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
 
-      - name: Verify private Docker Hub repository
+      - name: Verify private GHCR package
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          payload="$(
-            jq -nc \
-              --arg username "$DOCKERHUB_USERNAME" \
-              --arg password "$DOCKERHUB_TOKEN" \
-              '{username: $username, password: $password}'
-          )"
-          jwt="$(
-            curl -fsSL \
-              -H 'Content-Type: application/json' \
-              -d "$payload" \
-              https://hub.docker.com/v2/users/login/ \
-              | jq -er .token
-          )"
-          curl -fsSL \
-            -H "Authorization: JWT $jwt" \
-            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/safrano9999-openclaw/" \
-            | jq -e '.is_private == true' >/dev/null
+          docker buildx imagetools inspect \
+            "${IMAGE_NAME}:${{ steps.tags.outputs.version }}" >/dev/null
+          package_url="https://api.github.com/user/packages/container/safrano9999-openclaw"
+          verified=false
+          for _ in {1..20}; do
+            if curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$package_url" \
+              | jq -e \
+                '.name == "safrano9999-openclaw" and .visibility == "private"' \
+                >/dev/null; then
+              verified=true
+              break
+            fi
+            sleep 3
+          done
+          [ "$verified" = true ]

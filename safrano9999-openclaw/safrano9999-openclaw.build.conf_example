@@ -1,5 +1,5 @@
-#default-preset: docker.io/safrano9999/openclaw-ephemeral:latest
-OPENCLAW_EPHEMERAL_IMAGE=docker.io/safrano9999/openclaw-ephemeral:latest
+#default-preset: ghcr.io/safrano9999/openclaw-ephemeral:latest
+OPENCLAW_EPHEMERAL_IMAGE=ghcr.io/safrano9999/openclaw-ephemeral:latest
 
 #default-preset: ghcr.io/safrano9999/safrano9999-openclaw:latest
 SAFRANO9999_OPENCLAW_IMAGE=ghcr.io/safrano9999/safrano9999-openclaw:latest

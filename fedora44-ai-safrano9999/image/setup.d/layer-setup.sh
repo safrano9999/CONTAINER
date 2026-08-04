@@ -10,10 +10,9 @@ DEFAULT_INSTANCE="${FEDORA_LAYER_DEFAULT_INSTANCE:?missing default instance}"
 EXAMPLE_DIRS="${FEDORA_LAYER_EXAMPLE_DIRS:-}"
 readarray -t REPOS <<< "${FEDORA_LAYER_REPOS:?missing repository list}"
 
-CONFIG_ONLY=false
+NO_CONFIG=false
+NO_BUILD=false
 NO_CACHE=false
-OFFLINE=false
-IMG_CHOICE=""
 INSTANCE="${CONFIG_CONTAINER_NAME:-}"
 
 show_help() {
@@ -21,11 +20,9 @@ show_help() {
 Usage: ./setup.sh [OPTIONS] [INSTANCE]
 
 Options:
-  --config-only  Sync examples and render config without an image operation
-  --offline      Use cached example assets without network access
-  --pull         Pull $REGISTRY_IMAGE
-  --build        Build this repository's Containerfile
-  --no-cache     Reclone sources and disable the local image build cache
+  --no-config    Skip config.sh
+  --no-build     Stop after staging, merge, config and rendering
+  --no-cache     Disable the local image build cache
   --help         Show this help and exit
 
 Generated files are kept below CONTAINER/INSTANCE.
@@ -35,10 +32,8 @@ EOF
 for argument in "$@"; do
     case "$argument" in
         --help|-h) show_help; exit 0 ;;
-        --config-only) CONFIG_ONLY=true ;;
-        --offline) OFFLINE=true ;;
-        --pull) IMG_CHOICE=1 ;;
-        --build) IMG_CHOICE=2 ;;
+        --no-config) NO_CONFIG=true ;;
+        --no-build) NO_BUILD=true ;;
         --no-cache) NO_CACHE=true ;;
         --*) echo "Unknown option: $argument" >&2; exit 2 ;;
         *)
@@ -105,7 +100,6 @@ instance_arguments=(
     --default-name "$DEFAULT_INSTANCE"
 )
 [ -z "$INSTANCE" ] || instance_arguments+=(--name "$INSTANCE")
-$OFFLINE && instance_arguments+=(--offline)
 IFS=: read -ra example_directories <<< "$EXAMPLE_DIRS"
 for example_directory in "${example_directories[@]}"; do
     [ -n "$example_directory" ] && instance_arguments+=(--example-dir "$example_directory")
@@ -122,29 +116,29 @@ BUILD_FILE="${INSTANCE}_build.conf"
 COMPOSE_FILE="${INSTANCE}-compose.yml"
 QUADLET_FILE="${INSTANCE}.container"
 
-echo "  Configuring instance $INSTANCE..."
-(
-    cd "$INSTANCE_DIR"
-    CONFIG_CONTAINER_NAME="$INSTANCE" \
-    CONFIG_CONTAINER_IMAGE="$REGISTRY_IMAGE" \
-        bash ./config.sh
-)
-[ ! -f "$INSTANCE_DIR/$ENV_FILE" ] || chmod 0600 "$INSTANCE_DIR/$ENV_FILE"
-render_image "$REGISTRY_IMAGE"
+if ! $NO_CONFIG; then
+    echo "  Configuring instance $INSTANCE..."
+    (
+        cd "$INSTANCE_DIR"
+        CONFIG_CONTAINER_NAME="$INSTANCE" \
+        CONFIG_CONTAINER_IMAGE="$REGISTRY_IMAGE" \
+            bash ./config.sh
+    )
+    [ ! -f "$INSTANCE_DIR/$ENV_FILE" ] || chmod 0600 "$INSTANCE_DIR/$ENV_FILE"
+    render_image "$REGISTRY_IMAGE"
+fi
 
-if $CONFIG_ONLY; then
+if $NO_BUILD; then
     finish
-    echo "  Configuration complete; no image operation was requested."
+    echo "  Staging, merge, configuration and rendering complete; no image operation was requested."
     exit 0
 fi
 
-if [ -z "$IMG_CHOICE" ]; then
-    printf '\n  Image source:\n    (1) Pull %s\n    (2) Build %s\n' \
-        "$REGISTRY_IMAGE" "$LOCAL_IMAGE"
-    echo "  Build locally from this repository's context."
-    read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
-    IMG_CHOICE="${IMG_CHOICE:-2}"
-fi
+printf '\n  Image source:\n    (1) Pull %s\n    (2) Build %s\n' \
+    "$REGISTRY_IMAGE" "$LOCAL_IMAGE"
+echo "  Build locally from this repository's context."
+read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
+IMG_CHOICE="${IMG_CHOICE:-2}"
 
 case "$IMG_CHOICE" in
     1)

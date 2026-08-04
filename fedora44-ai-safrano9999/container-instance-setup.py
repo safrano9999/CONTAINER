@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fnmatch
 import json
 import os
 import re
@@ -23,13 +24,11 @@ ASSIGNMENT_RE = re.compile(r"^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)=")
 COMMENTED_VOLUME_RE = re.compile(
     r"^[ \t]*#[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*_VOLUMES)="
 )
-INSTANCE_FILES = (
-    "{name}.env",
-    "{name}_config.conf",
-    "{name}_container.conf",
-    "{name}_build.conf",
-    "{name}-compose.yml",
-    "{name}.container",
+EXAMPLE_ARCHIVE_PATTERNS = (
+    "env*example",
+    "config*example",
+    "container*example",
+    "config*.container",
 )
 
 
@@ -78,7 +77,7 @@ def github_release(repository: str) -> dict[str, object]:
     return payload
 
 
-def asset_metadata(repository: str) -> tuple[int, int, float]:
+def asset_metadata(repository: str) -> tuple[int, int, float] | None:
     asset_name = f"{repository}-examplefiles.zip"
     release = github_release(repository)
     assets = release.get("assets")
@@ -103,13 +102,28 @@ def asset_metadata(repository: str) -> tuple[int, int, float]:
                 f"Invalid asset timestamp for {repository}: {updated_at}"
             ) from error
         return asset_id, size, timestamp
-    raise SetupError(f"Release asset not found: {repository}/{asset_name}")
+    return None
 
 
 def valid_zip(path: Path) -> bool:
     try:
         with zipfile.ZipFile(path) as archive:
             return archive.testzip() is None
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def zip_has_examples(path: Path) -> bool:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(
+                not info.is_dir()
+                and any(
+                    fnmatch.fnmatchcase(PurePosixPath(info.filename).name, pattern)
+                    for pattern in EXAMPLE_ARCHIVE_PATTERNS
+                )
+                for info in archive.infolist()
+            )
     except (OSError, zipfile.BadZipFile):
         return False
 
@@ -202,7 +216,7 @@ def extract_asset(archive_path: Path, target: Path) -> None:
                 backup.unlink()
 
 
-def synchronize_asset(cache: Path, repository: str, offline: bool) -> Path:
+def synchronize_asset(cache: Path, repository: str, offline: bool) -> Path | None:
     archive = cache / f"{repository}-examplefiles.zip"
     extracted = cache / repository
     changed = False
@@ -212,7 +226,11 @@ def synchronize_asset(cache: Path, repository: str, offline: bool) -> Path:
         log(f"  [{repository}] using offline example asset")
     else:
         try:
-            asset_id, size, timestamp = asset_metadata(repository)
+            metadata = asset_metadata(repository)
+            if metadata is None:
+                log(f"  [{repository}] no example asset; skipped")
+                return None
+            asset_id, size, timestamp = metadata
             current = (
                 archive.is_file()
                 and archive.stat().st_size == size
@@ -229,6 +247,10 @@ def synchronize_asset(cache: Path, repository: str, offline: bool) -> Path:
             if not archive.is_file() or not valid_zip(archive):
                 raise
             log(f"  [{repository}] GitHub unavailable; using cached asset ({error})")
+
+    if not zip_has_examples(archive):
+        log(f"  [{repository}] no configuration examples; skipped")
+        return None
 
     if changed or not extracted.is_dir() or extracted.stat().st_mtime < archive.stat().st_mtime:
         extract_asset(archive, extracted)
@@ -361,40 +383,8 @@ def label(value: str | int | None) -> str:
     return value or "manual"
 
 
-def fix_instance_paths(path: Path, repo: Path, target: Path, name: str) -> None:
-    if not path.is_file():
-        return
-    original = path.read_text(encoding="utf-8")
-    updated = original
-    for pattern in INSTANCE_FILES:
-        filename = pattern.format(name=name)
-        updated = updated.replace(str(repo / filename), str(target / filename))
-    if updated != original:
-        path.write_text(updated, encoding="utf-8")
-
-
-def migrate_legacy_files(repo: Path, instances: Path) -> None:
-    for source in repo.glob("*_config.conf"):
-        old_name = source.name.removesuffix("_config.conf")
-        if not NAME_RE.fullmatch(old_name):
-            continue
-        target = instances / old_name
-        target.mkdir(parents=True, exist_ok=True)
-        for pattern in INSTANCE_FILES:
-            old = repo / pattern.format(name=old_name)
-            new = target / old.name
-            if old.exists() and not new.exists():
-                old.replace(new)
-        for pattern in INSTANCE_FILES:
-            fix_instance_paths(target / pattern.format(name=old_name), repo, target, old_name)
-
-
 def choose_instance(instances: Path, requested: str, default_name: str) -> tuple[str, bool]:
     names = sorted(path.name for path in instances.iterdir() if path.is_dir() and not path.is_symlink())
-    modes = {
-        candidate: mode(instances / candidate / f"{candidate}_container.conf")
-        for candidate in names
-    }
     if requested:
         name = requested
         is_new = name not in names
@@ -415,7 +405,7 @@ def choose_instance(instances: Path, requested: str, default_name: str) -> tuple
         new_index = len(names) + 1
         log("\n  Container:")
         for index, candidate in enumerate(names, 1):
-            log(f"    ({index}) {candidate} ({label(modes[candidate])})")
+            log(f"    ({index}) {candidate}")
         log(f"    ({new_index}) new\n")
         choice = ask(f"  Choose [1-{new_index}] (default: 1): ") or "1"
         if choice == str(new_index):
@@ -569,10 +559,11 @@ def main() -> None:
         seen.add(repository.casefold())
         repositories.append(repository)
 
-    extracted = [
-        synchronize_asset(cache, repository, args.offline)
-        for repository in repositories
-    ]
+    extracted = []
+    for repository in repositories:
+        directory = synchronize_asset(cache, repository, args.offline)
+        if directory is not None:
+            extracted.append(directory)
     example_dirs = [repo]
     for directory in args.example_dir:
         resolved = directory if directory.is_absolute() else repo / directory
@@ -580,7 +571,6 @@ def main() -> None:
     example_dirs.extend(extracted)
     merge_examples(repo, example_dirs)
 
-    migrate_legacy_files(repo, instances)
     for instance in sorted(path for path in instances.iterdir() if path.is_dir() and not path.is_symlink()):
         link_instance(repo, cache, config, instance)
 

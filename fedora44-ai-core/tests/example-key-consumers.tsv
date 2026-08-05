@@ -8,7 +8,6 @@ CLAUDE_CODE_OAUTH_TOKEN	source	fedora44-ai-safrano9999/image/systemd/jugo.servic
 CLOUDFLARED_START	source	fedora44-ai-core/image/runtime.d/fedora44-runtime-environment-generator.sh
 CLOUDFLARE_API_TOKEN	source	fedora44-ai-base/image/systemd/citadel.service
 COCKPIT_PUBLISH_PORT	generator	fedora44-ai-core/config.sh
-CODEX_AUTH_PERSISTENCE	directive	fedora44-ai-core/config.fedora44-ai-core.conf_example
 CONTAINER_NAME	generator	fedora44-ai-core/config.sh
 CONTAINER_NR	generator	fedora44-ai-core/config.sh
 DISPLAY	injection	GUI applications receive the host display through the generated environment file

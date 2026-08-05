@@ -26,7 +26,7 @@ read_key() {
 }
 
 example_files() {
-    find "$1" -maxdepth 1 -type f -name '*example*' -print | LC_ALL=C sort
+    find "$1" -maxdepth 1 -xtype f -name '*example*' -print | LC_ALL=C sort
 }
 
 configured_value() {

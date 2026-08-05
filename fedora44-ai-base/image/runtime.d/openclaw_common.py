@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from openai_v1 import OpenAIV1Provider
 
 
-DISCOVERY_TIMEOUT_SECONDS = 5
+DISCOVERY_TIMEOUT_SECONDS = 35
 
 
 def openclaw_cmd(*args: str) -> list[str]:

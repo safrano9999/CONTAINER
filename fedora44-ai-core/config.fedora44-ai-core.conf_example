@@ -14,10 +14,6 @@ TS_EXTRA_ARGS=--ssh
 #default-preset: 0
 CLOUDFLARED_START=0
 
-#named-volume: /named_volumes/CODEX_AUTH /named_volumes/CODEX_AUTH/auth.json /root/.codex/auth.json link
-#default-preset: 1
-CODEX_AUTH_PERSISTENCE=1
-
 #named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/workspace /root/.openclaw/workspace dir
 #named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/agents /root/.openclaw/agents dir
 #default-preset: 1

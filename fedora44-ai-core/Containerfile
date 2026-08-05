@@ -43,24 +43,6 @@ RUN set -euo pipefail; \
     test ! -e /root/.openclaw/extensions/codex; \
     node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"
 
-# Preserve the trusted-container local-media behavior after the deterministic
-# distribution overlay. This only extends OpenClaw's outbound media roots.
-RUN OPENCLAW_ROOT="$(npm root -g)/openclaw" python3 - <<'PY'
-import os
-from pathlib import Path
-
-root = Path(os.environ["OPENCLAW_ROOT"]) / "dist"
-target = 'path.join(resolvedStateDir, "sandboxes")'
-replacement = target + ',\n\t\t"/"'
-for path in root.glob("local-roots-*.js"):
-    text = path.read_text()
-    if replacement not in text:
-        path.write_text(text.replace(target, replacement))
-    break
-else:
-    raise SystemExit("OpenClaw local-roots bundle not found")
-PY
-
 COPY build/vendor/openclaw-ephemeral/openclaw_ephemeral/ /usr/local/lib/openclaw-ephemeral/openclaw_ephemeral/
 COPY build/vendor/openclaw-ephemeral/openclaw-ephemeral.py /usr/local/bin/openclaw-ephemeral.py
 COPY build/vendor/openclaw-ephemeral/runtime/yolo.sh /usr/local/bin/openclaw-ephemeral-yolo

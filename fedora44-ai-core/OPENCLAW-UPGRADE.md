@@ -96,20 +96,14 @@ RUN set -euo pipefail; \
 
 Damit genügt bei späteren Upgrades der Asset-Pin in `build.conf`.
 
-### 4. Den lokalen Media-Root-Patch erneut prüfen
+### 4. Lokale Media-Roots unverändert lassen
 
-Nach dem Deterministic-Overlay verändert das Containerfile derzeit das
-gebündelte `local-roots-*.js`. Bei jeder neuen OpenClaw-Version muss geprüft
-werden, ob
-
-```text
-path.join(resolvedStateDir, "sandboxes")
-```
-
-noch im neuen Bundle existiert. Wenn OpenClaw diese Stelle umgebaut hat, muss
-der Python-Block an die neue Bundle-Struktur angepasst werden. Der Build soll
-fehlschlagen, falls das Suchmuster nicht tatsächlich ersetzt wurde; ein bloß
-vorhandenes `local-roots-*.js` reicht nicht als Prüfung.
+Das Containerfile darf OpenClaws gebündelte `local-roots-*.js` nicht verändern
+und insbesondere `/` nicht als globalen Media-Root ergänzen. Plugins legen
+ausgehende Dateien über OpenClaws Media-Store ab; dessen dynamisch ermittelte
+State-, Workspace- und Temp-Verzeichnisse reichen für die Auslieferung aus.
+`tests/check-build-context.sh` bricht ab, falls ein solcher Bundle-Patch wieder
+eingeführt wird.
 
 ### 5. Passenden Ephemeral-Commit übernehmen
 

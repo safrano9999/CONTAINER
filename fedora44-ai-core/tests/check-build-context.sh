@@ -39,7 +39,10 @@ grep -Fq 'dist/extensions/codex/index.js' "$ROOT/Containerfile"
 grep -Fq 'rm -rf /root/.openclaw/extensions/codex' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-ephemeral/' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/note/note-latest.zip' "$ROOT/Containerfile"
-grep -Fq 'local-roots-*.js' "$ROOT/Containerfile"
+if grep -Fq 'local-roots-*.js' "$ROOT/Containerfile"; then
+    echo "Global OpenClaw local-media root patch remains in Core" >&2
+    exit 1
+fi
 grep -Fq 'openclaw-ephemeral.py configure' \
     "$ROOT/image/systemd/openclaw-config.service"
 grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' \

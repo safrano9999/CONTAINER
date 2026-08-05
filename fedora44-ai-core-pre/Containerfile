@@ -152,9 +152,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 RUN --mount=type=cache,target=/root/.npm \
     openclaw plugins install clawhub:@openclaw/codex \
- && test -f "$(npm root -g)/openclaw/dist/extensions/codex/index.js" \
- && rm -rf /root/.openclaw/extensions/codex \
- && test ! -e /root/.openclaw/extensions/codex
+ && test -f /root/.openclaw/extensions/codex/dist/index.js
 
 RUN test -n "${CLOUDFLARED_VERSION}" \
  && test -n "${CLOUDFLARED_SHA256}" \

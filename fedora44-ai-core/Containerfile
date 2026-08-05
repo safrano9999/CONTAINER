@@ -38,6 +38,9 @@ RUN set -euo pipefail; \
     mv /tmp/openclaw-control-ui "$openclaw_root/dist/control-ui"; \
     rm -f /tmp/openclaw-deterministic.tar.gz; \
     test -s "$openclaw_root/dist/control-ui/index.html"; \
+    test -f "$openclaw_root/dist/extensions/codex/index.js"; \
+    rm -rf /root/.openclaw/extensions/codex; \
+    test ! -e /root/.openclaw/extensions/codex; \
     node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"
 
 # Preserve the trusted-container local-media behavior after the deterministic

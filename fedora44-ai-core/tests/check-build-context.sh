@@ -35,6 +35,8 @@ fi
 grep -Fq 'FROM ${AI_CORE_PRE_IMAGE} AS ai-core' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-deterministic/openclaw-deterministic.tar.gz' \
     "$ROOT/Containerfile"
+grep -Fq 'dist/extensions/codex/index.js' "$ROOT/Containerfile"
+grep -Fq 'rm -rf /root/.openclaw/extensions/codex' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-ephemeral/' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/note/note-latest.zip' "$ROOT/Containerfile"
 grep -Fq 'local-roots-*.js' "$ROOT/Containerfile"

@@ -2,7 +2,8 @@
 
 Diese Datei ist ein Runbook für das nächste OpenClaw-Upgrade. Sie ändert den
 aktuellen Build nicht. `fedora44-ai-core` übernimmt kein fertiges
-Ephemeral-Image, sondern setzt auf Fedora vier zueinander passende Bestandteile
+Ephemeral-Image, sondern ergänzt den generischen Fedora-Unterbau aus
+`fedora44-ai-core-pre` um vier zueinander passende Bestandteile
 zusammen:
 
 1. das exakte OpenClaw-NPM-Paket,
@@ -149,10 +150,12 @@ Die Werte in folgenden Dateien sind teilweise absichtlich hart gepinnt und
 müssen beim Upgrade synchron geändert werden:
 
 - `build.conf`
+- `../fedora44-ai-core-pre/build.conf`, wenn sich die OpenClaw-Basisversion ändert
 - `build/resolve-build-inputs.sh`
 - `prepare-build-context.sh`, falls sich Asset- oder Runtime-Dateien ändern
 - `tests/check-build-context.sh`
 - `.github/workflows/fedora44-ai-core-image.yml`
+- `.github/workflows/fedora44-ai-core-pre-image.yml`, wenn Core-pre neu gebaut wird
 - Source-of-Truth des Workflows unter
   `SCRIPTS/githubactions/CONTAINER/workflows/`
 
@@ -188,7 +191,7 @@ werden idempotent hinzugefügt.
    Version meldet.
 7. Beim ersten Lauf mit bestehendem Named Volume die SQLite-Migration offline
    mit gestopptem Gateway durchführen.
-8. Danach die Fedora-Kaskade `core -> base -> safrano9999` bauen.
+8. Danach die Fedora-Kaskade `core-pre -> core -> base -> safrano9999` bauen.
 
 ## Laufzeit-Abnahme
 

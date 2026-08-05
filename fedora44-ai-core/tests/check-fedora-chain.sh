@@ -3,6 +3,7 @@ set -euo pipefail
 export LC_ALL=C
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+PRE="$ROOT/fedora44-ai-core-pre"
 CORE="$ROOT/fedora44-ai-core"
 BASE="$ROOT/fedora44-ai-base"
 SAFRANO="$ROOT/fedora44-ai-safrano9999"
@@ -13,26 +14,31 @@ fail() {
 }
 
 for file in \
+    "$PRE/Containerfile" \
     "$CORE/Containerfile" \
     "$BASE/Containerfile" \
     "$SAFRANO/Containerfile"; do
     [ -f "$file" ] || fail "missing $file"
 done
 
-grep -Fq 'FROM quay.io/fedora/fedora:44 AS ai-core' "$CORE/Containerfile"
+grep -Fq 'FROM quay.io/fedora/fedora:44 AS ai-core-pre' "$PRE/Containerfile"
+grep -Fq 'FROM ${AI_CORE_PRE_IMAGE} AS ai-core' "$CORE/Containerfile"
 grep -Fq 'FROM ${AI_CORE_IMAGE} AS ai-base' "$BASE/Containerfile"
 grep -Fq 'FROM ${AI_BASE_IMAGE} AS ai-safrano9999' "$SAFRANO/Containerfile"
 if rg -n 'core2|AI_CORE2' \
     "$CORE/Containerfile" \
+    "$PRE/Containerfile" \
     "$BASE/Containerfile" \
     "$SAFRANO/Containerfile" \
     "$CORE/build.conf" \
+    "$PRE/build.conf" \
     "$BASE/build.conf" \
     "$SAFRANO/build.conf"; then
     fail "legacy Core2 reference remains in the final chain"
 fi
 if rg -n '^COPY[[:space:]]+SCRIPTS([[:space:]]|$)' \
-    "$CORE/Containerfile" "$BASE/Containerfile" "$SAFRANO/Containerfile"; then
+    "$PRE/Containerfile" "$CORE/Containerfile" "$BASE/Containerfile" \
+    "$SAFRANO/Containerfile"; then
     fail "a complete SCRIPTS tree is copied into an image"
 fi
 
@@ -43,16 +49,19 @@ fi
 grep -Fq 'COPY build/vendor/openclaw-deterministic/' "$CORE/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-ephemeral/' "$CORE/Containerfile"
 grep -Fq 'COPY build/vendor/note/note-latest.zip' "$CORE/Containerfile"
+grep -Fq 'USER root' "$PRE/Containerfile"
 grep -Fq 'USER root' "$CORE/Containerfile"
 grep -Fq 'USER root' "$BASE/Containerfile"
 grep -Fq 'USER root' "$SAFRANO/Containerfile"
 grep -Fq 'systemctl mask cockpit.socket' "$CORE/Containerfile"
 grep -Fq 'openclaw-ephemeral.py configure' "$CORE/image/systemd/openclaw-config.service"
-grep -Fq 'agent-mcp-ephemeral.py openclaw' "$CORE/image/systemd/openclaw-config.service"
 grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' "$CORE/image/systemd/hermes.service"
-grep -Fq 'agent-mcp-ephemeral.py hermes' "$CORE/image/systemd/hermes.service"
+grep -Fq 'mcp_servers_config' "$CORE/image/runtime.d/hermes-ephemeral.py"
+grep -Fq 'io.safrano9999.parent="fedora44-ai-core-pre"' "$CORE/Containerfile"
+! grep -Fq '/opt/safrano9999' "$PRE/Containerfile" ||
+    fail "Core-pre contains a Safrano project tree"
 
-for setup in "$CORE/setup.sh" "$BASE/setup.sh" "$SAFRANO/setup.sh"; do
+for setup in "$CORE/setup.sh"; do
     for marker in \
         'Image source:' \
         'Build locally' \
@@ -60,6 +69,20 @@ for setup in "$CORE/setup.sh" "$BASE/setup.sh" "$SAFRANO/setup.sh"; do
         'IMG_CHOICE="${IMG_CHOICE:-2}"'; do
         grep -Fq "$marker" "$setup" ||
             fail "missing established image-source marker in $setup: $marker"
+    done
+done
+for layer in "$BASE" "$SAFRANO"; do
+    setup="$layer/setup.sh"
+    shared_setup="$layer/image/setup.d/layer-setup.sh"
+    grep -Fq 'exec bash "$ROOT/image/setup.d/layer-setup.sh" "$@"' "$setup" ||
+        fail "layer setup wrapper does not delegate to the shared setup: $setup"
+    for marker in \
+        'Image source:' \
+        'Build locally' \
+        'read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE' \
+        'IMG_CHOICE="${IMG_CHOICE:-2}"'; do
+        grep -Fq "$marker" "$setup" "$shared_setup" ||
+            fail "missing established image-source marker in $setup or $shared_setup: $marker"
     done
 done
 while IFS= read -r setup; do
@@ -72,6 +95,9 @@ done < <(
 )
 
 for script in \
+    "$PRE/build-local.sh" \
+    "$PRE/prepare-build-context.sh" \
+    "$PRE/build/resolve-build-inputs.sh" \
     "$CORE/setup.sh" \
     "$CORE/build-local.sh" \
     "$CORE/prepare-build-context.sh" \
@@ -232,7 +258,7 @@ grep -Fq \
 grep -Fq \
     '#repeat-optional-complete: MCP_SERVER_NAME MCP_SERVER_BEARER' \
     "$CORE/env.fedora44-ai-core.example"
-python3 "$CORE/tests/test-agent-mcp-ephemeral.py"
+python3 "$CORE/tests/test-hermes-mcp-ephemeral.py"
 
 base_repos="$(
     awk -F '\t' '!/^#/ && NF {sub(/@.*/, "", $1); print $1}' \
@@ -627,6 +653,7 @@ check_setup_idempotence() {
     local checkout="$temporary/setup-$name"
     local instance="chain-test-$name"
     local first second
+    local repository repository_dir
     local -a arguments=(--config-only "$instance")
 
     mkdir -p "$checkout"
@@ -651,13 +678,24 @@ check_setup_idempotence() {
             > "$checkout/safrano9999/fedora44-ai-base/env.example"
         for repository; do
             repository="${repository%@*}"
-            mkdir -p "$checkout/safrano9999/$repository"
+            repository_dir="$checkout/safrano9999/$repository"
+            mkdir -p "$repository_dir"
             if [ "$repository" = NaturalGrounding-Tiktok-Ying-Video-Manager ]; then
-                cat > "$checkout/safrano9999/$repository/config.conf_example" <<'EXAMPLE'
+                cat > "$repository_dir/config.conf_example" <<'EXAMPLE'
 #required: NaturalGrounding video storage path
 #mount-bind: NATURALGROUNDING_VIDEOS_DIR:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS
 NATURALGROUNDING_VIDEOS_DIR=VIDEOS
 EXAMPLE
+            else
+                printf '# test-only example\n' > "$repository_dir/env.$repository.example"
+            fi
+            if [ "$name" = safrano ]; then
+                mkdir -p "$checkout/safrano9999-examples"
+                (
+                    cd "$repository_dir"
+                    zip -q -r \
+                        "$checkout/safrano9999-examples/$repository-examplefiles.zip" .
+                )
             fi
         done
     fi
@@ -717,7 +755,7 @@ for name in core base safrano; do
 done
 
 if ! grep -Fqx \
-    "Volume=$temporary/setup-safrano/VIDEOS:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS:Z" \
+    "Volume=$temporary/setup-safrano/CONTAINER/chain-test-safrano/VIDEOS:/opt/safrano9999/NaturalGrounding-Tiktok-Ying-Video-Manager/VIDEOS:Z" \
     "$temporary/setup-safrano/CONTAINER/chain-test-safrano/chain-test-safrano.container"; then
     grep '^Volume=' \
         "$temporary/setup-safrano/CONTAINER/chain-test-safrano/chain-test-safrano.container" \

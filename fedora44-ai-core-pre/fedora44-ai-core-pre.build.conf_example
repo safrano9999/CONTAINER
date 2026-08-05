@@ -1,0 +1,2 @@
+#default-preset: ghcr.io/safrano9999/fedora44-ai-core-pre:latest
+FEDORA44_AI_CORE_PRE_IMAGE=ghcr.io/safrano9999/fedora44-ai-core-pre:latest

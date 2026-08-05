@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -26,6 +30,144 @@ from openclaw_ephemeral.providers import (
 HERMES_HOME = Path("/root/.hermes")
 CONFIG_PATH = HERMES_HOME / "config.yaml"
 EXAMPLE_PATH = Path("/usr/local/lib/hermes-agent/cli-config.yaml.example")
+MAX_MCP_SERVERS = 50
+MCP_FIELDS = ("NAME", "URL", "BEARER")
+MCP_SUFFIX = re.compile(r"^MCP_SERVER_(?:NAME|URL|BEARER)_(\d+)$")
+SAFE_MCP_SERVER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+@dataclass(frozen=True)
+class HermesMcpServer:
+    """One normalized HTTP MCP server without a resolved credential."""
+
+    index: int
+    name: str
+    url: str
+    bearer_env: str | None
+
+    def config(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "enabled": True,
+            "url": self.url,
+            "supports_parallel_tool_calls": True,
+        }
+        if self.bearer_env is not None:
+            result["headers"] = {
+                "Authorization": f"Bearer ${{{self.bearer_env}}}"
+            }
+        return result
+
+
+def _mcp_field_env_name(
+    environ: Mapping[str, str],
+    field: str,
+    index: int,
+) -> str:
+    base = f"MCP_SERVER_{field}"
+    if index == 1:
+        return base
+    padded = f"{base}_{index:02d}"
+    unpadded = f"{base}_{index}"
+    for candidate in (padded, unpadded):
+        if candidate in environ:
+            return candidate
+    return padded
+
+
+def _configured_mcp_indexes(environ: Mapping[str, str]) -> tuple[int, ...]:
+    indexes = {1}
+    for key in environ:
+        match = MCP_SUFFIX.fullmatch(key)
+        if match is None:
+            continue
+        suffix = match.group(1)
+        index = int(suffix, 10)
+        if not 2 <= index <= MAX_MCP_SERVERS:
+            raise ConfigurationError(
+                f"{key} index must be between 02 and {MAX_MCP_SERVERS:02d}"
+            )
+        if suffix not in {str(index), f"{index:02d}"}:
+            raise ConfigurationError(f"{key} has an unsupported numeric suffix")
+        indexes.add(index)
+    return tuple(sorted(indexes))
+
+
+def _mcp_server_url(raw_url: str, index: int) -> str:
+    url = clean(raw_url)
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ConfigurationError(
+            f"MCP_SERVER_URL for server {index:02d} must be an http(s) URL"
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise ConfigurationError(
+            f"MCP_SERVER_URL for server {index:02d} must not contain credentials"
+        )
+    return url
+
+
+def _mcp_server_name(raw_name: str, url: str, index: int) -> str:
+    name = clean(raw_name)
+    if not name:
+        name = clean(urlsplit(url).hostname)
+        if name.endswith(".dns.podman"):
+            name = name[: -len(".dns.podman")]
+        name = name or f"mcp-{index:02d}"
+    if SAFE_MCP_SERVER_NAME.fullmatch(name) is None:
+        raise ConfigurationError(
+            f"MCP server {index:02d} name must match "
+            f"{SAFE_MCP_SERVER_NAME.pattern}"
+        )
+    return name
+
+
+def discover_mcp_servers(
+    environ: Mapping[str, str],
+) -> tuple[HermesMcpServer, ...]:
+    """Read the optional suffixless, then suffix02-style MCP groups."""
+
+    servers: list[HermesMcpServer] = []
+    seen_names: set[str] = set()
+    for index in _configured_mcp_indexes(environ):
+        fields = {
+            field: _mcp_field_env_name(environ, field, index)
+            for field in MCP_FIELDS
+        }
+        raw_url = clean(environ.get(fields["URL"]))
+        if not raw_url:
+            continue
+        url = _mcp_server_url(raw_url, index)
+        name = _mcp_server_name(environ.get(fields["NAME"], ""), url, index)
+        folded_name = name.casefold()
+        if folded_name in seen_names:
+            raise ConfigurationError(f"duplicate MCP server name: {name}")
+        seen_names.add(folded_name)
+
+        bearer = clean(environ.get(fields["BEARER"]))
+        if bearer.lower().startswith("bearer "):
+            raise ConfigurationError(
+                f"{fields['BEARER']} must contain only the token, without 'Bearer '"
+            )
+        servers.append(
+            HermesMcpServer(
+                index=index,
+                name=name,
+                url=url,
+                bearer_env=fields["BEARER"] if bearer else None,
+            )
+        )
+    return tuple(servers)
+
+
+def mcp_servers_config(
+    environ: Mapping[str, str],
+) -> dict[str, dict[str, Any]]:
+    """Build the global Hermes MCP mapping from injected groups."""
+
+    return {
+        server.name: server.config()
+        for server in discover_mcp_servers(environ)
+    }
 
 
 def _fresh_template() -> dict[str, Any]:
@@ -75,6 +217,7 @@ def _atomic_write(config: dict[str, Any]) -> None:
 
 def main() -> int:
     environ = expand_api_key_aliases(os.environ)
+    mcp_servers = mcp_servers_config(environ)
     providers, warnings = discover_openai_v1_providers(environ)
     if not providers:
         raise ConfigurationError(
@@ -115,6 +258,10 @@ def main() -> int:
             **({"default_model": models[0]} if models else {}),
         }
     config["providers"][selected_provider.provider_id]["default_model"] = selected_model
+    if mcp_servers:
+        config["mcp_servers"] = mcp_servers
+    else:
+        config.pop("mcp_servers", None)
 
     secret_values = {
         clean(value)
@@ -123,6 +270,7 @@ def main() -> int:
         and (
             name.endswith("_API_KEY")
             or name.startswith("OPENAI_V1_KEY")
+            or name.startswith("MCP_SERVER_BEARER")
             or name in {"HERMES_API_SERVER_KEY", "HERMES_TELEGRAMTOKEN"}
         )
     }
@@ -133,6 +281,7 @@ def main() -> int:
     print(f"Hermes config rebuilt atomically: {CONFIG_PATH}")
     print(f"Hermes model: {full_model}")
     print(f"Hermes OpenAI-v1 providers configured: {len(providers)}")
+    print(f"Hermes MCP servers configured: {len(mcp_servers)}")
     for warning in warnings:
         print(f"Warning: {warning}")
     return 0

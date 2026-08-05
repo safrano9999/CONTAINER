@@ -3,11 +3,11 @@ set -euo pipefail
 export LC_ALL=C
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+PRE="$ROOT/../fedora44-ai-core-pre"
 
 bash -n \
     "$ROOT/build-local.sh" \
     "$ROOT/prepare-build-context.sh" \
-    "$ROOT/build/resolve-build-inputs.sh" \
     "$ROOT/setup.sh" \
     "$ROOT/optional_persistence.sh" \
     "$ROOT"/image/runtime.d/*.sh \
@@ -24,14 +24,7 @@ bash -n \
     [ "$NOTE_RELEASE_TAG" = 2026.7.36 ]
     [ "$NOTE_RELEASE_ASSET" = note-latest.zip ]
     [ "$NOTE_RELEASE_SHA256" = 2d3a4bff771e9dd85b6d39c0a1bb63dd68f99f65d73c6d2caae29eb65a6ba26b ]
-    [ "$HERMES_COMMIT" = 3c27eb6234bf91b8ceee9e9071591b31e9b148cb ]
-    [ "$HERMES_VERSION" = 0.20.0 ]
-    [ "$VDITOR_VERSION" = 3.11.2 ]
-    [ "$ELECTRUM_VERSION" = 4.7.2 ]
-    [ "$LND_VERSION" = v0.20.1-beta ]
-    [ "$GETH_VERSION" = 1.17.2 ]
-    [ "$GETH_COMMIT" = be4dc0c4 ]
-    [ "$WEBHOOK_VERSION" = 2.8.3 ]
+    [ "$AI_CORE_PRE_IMAGE" = ghcr.io/safrano9999/fedora44-ai-core-pre:latest ]
 )
 
 if rg -n 'OPENCLAW_EPHEMERAL_IMAGE|openclaw-ephemeral-source|COPY --from=.*openclaw-ephemeral' \
@@ -39,7 +32,7 @@ if rg -n 'OPENCLAW_EPHEMERAL_IMAGE|openclaw-ephemeral-source|COPY --from=.*openc
     echo "Ephemeral container-image donor remains in Core" >&2
     exit 1
 fi
-grep -Fq 'FROM quay.io/fedora/fedora:44 AS ai-core' "$ROOT/Containerfile"
+grep -Fq 'FROM ${AI_CORE_PRE_IMAGE} AS ai-core' "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-deterministic/openclaw-deterministic.tar.gz' \
     "$ROOT/Containerfile"
 grep -Fq 'COPY build/vendor/openclaw-ephemeral/' "$ROOT/Containerfile"
@@ -47,18 +40,16 @@ grep -Fq 'COPY build/vendor/note/note-latest.zip' "$ROOT/Containerfile"
 grep -Fq 'local-roots-*.js' "$ROOT/Containerfile"
 grep -Fq 'openclaw-ephemeral.py configure' \
     "$ROOT/image/systemd/openclaw-config.service"
-grep -Fq 'agent-mcp-ephemeral.py openclaw' \
-    "$ROOT/image/systemd/openclaw-config.service"
 grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' \
     "$ROOT/image/systemd/hermes.service"
-grep -Fq 'agent-mcp-ephemeral.py hermes' \
-    "$ROOT/image/systemd/hermes.service"
+grep -Fq 'mcp_servers_config' \
+    "$ROOT/image/runtime.d/hermes-ephemeral.py"
 grep -Eq '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
 grep -Eq '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
 grep -Eq '^USER root$' "$ROOT/Containerfile"
-grep -Fq 'lsof strace tcpdump nmap nmap-ncat' "$ROOT/Containerfile"
+grep -Fq 'io.safrano9999.parent="fedora44-ai-core-pre"' "$ROOT/Containerfile"
 
-python3 "$ROOT/tests/test-agent-mcp-ephemeral.py"
+python3 "$ROOT/tests/test-hermes-mcp-ephemeral.py"
 
 for forbidden in \
     /opt/safrano9999 \
@@ -81,7 +72,6 @@ for forbidden in \
     if grep -rn -F "$forbidden" \
         "$ROOT/Containerfile" \
         "$ROOT/build.conf" \
-        "$ROOT/requirements.base.txt" \
         "$ROOT/build" \
         "$ROOT/image" \
         "$ROOT/prepare-build-context.sh" \
@@ -91,14 +81,18 @@ for forbidden in \
     fi
 done
 
-workflow="$ROOT/../.github/workflows/fedora44-ai-core-image.yml"
-if [ -f "$workflow" ]; then
-    grep -Fq 'no-cache: true' "$workflow"
-    if grep -En 'cache-(from|to):' "$workflow"; then
+for workflow in \
+    "$ROOT/../.github/workflows/fedora44-ai-core-pre-image.yml" \
+    "$ROOT/../.github/workflows/fedora44-ai-core-image.yml"; do
+    if [ -f "$workflow" ]; then
+        grep -Fq 'no-cache: true' "$workflow"
+    fi
+    if [ -f "$workflow" ] && grep -En 'cache-(from|to):' "$workflow"; then
         echo "Persistent build cache configuration is forbidden" >&2
         exit 1
     fi
-fi
+done
 
+"$PRE/tests/check-build-context.sh"
 "$ROOT/tests/check-fedora-chain.sh"
 echo "fedora44-ai-core static checks passed"

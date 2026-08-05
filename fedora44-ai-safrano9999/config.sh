@@ -594,7 +594,7 @@ add_repo_sot_file_mounts() {
 
 initialize_sqlite_persistence() {
     [ -x "$SQLITE_PERSISTENCE" ] || return 0
-    if find "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
+    if find -H "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
         "$SQLITE_PERSISTENCE" init --repo-root "$DIR/safrano9999" --config-dir "$DIR"
     else
         "$SQLITE_PERSISTENCE" init --repo "$DIR" --config-dir "$DIR"
@@ -605,14 +605,14 @@ add_sqlite_volume_mounts() {
     local item source
     [ -x "$SQLITE_PERSISTENCE" ] || return 0
 
-    if find "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
+    if find -H "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
         while IFS= read -r item || [ -n "$item" ]; do
             [ -n "$item" ] || continue
             source="${item%%:*}"
             add_unique "$item" volumes
             add_unique "$source" named_volumes
         done < <("$SQLITE_PERSISTENCE" mounts --repo-root "$DIR/safrano9999" --config-dir "$DIR" --container "$CONTAINER_NAME")
-    elif find "$DIR/safrano9999" -maxdepth 1 -type f -name '*-latest.zip' -print -quit 2>/dev/null | grep -q .; then
+    elif find -H "$DIR/safrano9999" -maxdepth 1 -type f -name '*-latest.zip' -print -quit 2>/dev/null | grep -q .; then
         while IFS= read -r item || [ -n "$item" ]; do
             [ -n "$item" ] || continue
             source="${item%%:*}"

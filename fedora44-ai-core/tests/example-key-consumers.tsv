@@ -27,9 +27,9 @@ HERMES_MODEL	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
 HERMES_PERSISTENT	directive	fedora44-ai-core/config.fedora44-ai-core.conf_example
 HERMES_START	source	fedora44-ai-core/image/systemd/hermes.service
 HERMES_TELEGRAMTOKEN	source	fedora44-ai-core/image/systemd/hermes.service
-MCP_SERVER_BEARER	source	fedora44-ai-core/image/runtime.d/agent-mcp-ephemeral.py
-MCP_SERVER_NAME	source	fedora44-ai-core/image/runtime.d/agent-mcp-ephemeral.py
-MCP_SERVER_URL	source	fedora44-ai-core/image/runtime.d/agent-mcp-ephemeral.py
+MCP_SERVER_BEARER	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
+MCP_SERVER_NAME	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
+MCP_SERVER_URL	source	fedora44-ai-core/image/runtime.d/hermes-ephemeral.py
 NOTE_DB_BACKEND	injection	The packaged NOTE runtime selects its persistence backend from this variable
 NOTE_DB_NAME	injection	The packaged NOTE runtime receives its database name
 NOTE_DB_PORT	injection	The packaged NOTE runtime receives its database port

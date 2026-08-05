@@ -8,6 +8,10 @@ on:
         description: "Image tag. Empty uses YYYY.M.D."
         required: false
         default: ""
+      core_pre_tag:
+        description: "fedora44-ai-core-pre parent tag"
+        required: false
+        default: "latest"
       push_latest:
         description: "Also publish :latest"
         required: true
@@ -31,6 +35,7 @@ jobs:
       packages: write
       actions: write
     env:
+      PRE_IMAGE: ghcr.io/safrano9999/fedora44-ai-core-pre
       IMAGE: ghcr.io/safrano9999/fedora44-ai-core
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
@@ -41,25 +46,28 @@ jobs:
       - name: Free runner disk space
         run: .github/scripts/free-runner-disk-space.sh
 
-      - name: Resolve image tags
-        id: tags
+      - name: Resolve image references
+        id: refs
         shell: bash
         env:
           REQUESTED_TAG: ${{ inputs.image_tag }}
+          CORE_PRE_TAG: ${{ inputs.core_pre_tag }}
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
           set -euo pipefail
           version="$REQUESTED_TAG"
           [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
+          pre_ref="${PRE_IMAGE}:${CORE_PRE_TAG:-latest}"
           {
             echo "version=$version"
+            echo "pre_ref=$pre_ref"
             echo "tags<<EOF"
             echo "${IMAGE}:${version}"
             [ "$PUSH_LATEST" != true ] || echo "${IMAGE}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Resolve immutable build inputs
+      - name: Prepare ephemeral Core inputs
         id: build
         shell: bash
         env:
@@ -71,11 +79,8 @@ jobs:
           set -a
           . ./build.conf
           set +a
-          for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION \
-            ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT \
-            WEBHOOK_VERSION VDITOR_VERSION OPENCLAW_VERSION \
-            NOTE_REPOSITORY NOTE_RELEASE_TAG NOTE_RELEASE_ASSET \
-            NOTE_RELEASE_SHA256; do
+          for name in OPENCLAW_VERSION NOTE_REPOSITORY NOTE_RELEASE_TAG \
+            NOTE_RELEASE_ASSET NOTE_RELEASE_SHA256; do
             [ -n "${!name:-}" ] || {
               echo "Missing required build input: $name" >&2
               exit 1
@@ -122,17 +127,11 @@ jobs:
           {
             echo "openclaw_version=$OPENCLAW_VERSION"
             echo "build_args<<EOF"
-            echo "CERTS=$CERTS"
-            echo "HERMES_TAG=$HERMES_TAG"
-            echo "HERMES_COMMIT=$HERMES_COMMIT"
-            echo "HERMES_VERSION=$HERMES_VERSION"
-            echo "ELECTRUM_VERSION=$ELECTRUM_VERSION"
-            echo "LND_VERSION=$LND_VERSION"
-            echo "GETH_VERSION=$GETH_VERSION"
-            echo "GETH_COMMIT=$GETH_COMMIT"
-            echo "WEBHOOK_VERSION=$WEBHOOK_VERSION"
-            echo "VDITOR_VERSION=$VDITOR_VERSION"
-            cat .resolved-build.env
+            echo "OPENCLAW_VERSION=$OPENCLAW_VERSION"
+            echo "NOTE_REPOSITORY=$NOTE_REPOSITORY"
+            echo "NOTE_RELEASE_TAG=$NOTE_RELEASE_TAG"
+            echo "NOTE_RELEASE_ASSET=$NOTE_RELEASE_ASSET"
+            echo "NOTE_RELEASE_SHA256=$NOTE_RELEASE_SHA256"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -163,15 +162,17 @@ jobs:
           pull: true
           no-cache: true
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          build-args: ${{ steps.build.outputs.build_args }}
+          tags: ${{ steps.refs.outputs.tags }}
+          build-args: |
+            AI_CORE_PRE_IMAGE=${{ steps.refs.outputs.pre_ref }}
+            ${{ steps.build.outputs.build_args }}
 
       - name: Reclaim container build space
         run: .github/scripts/prune-container-build-space.sh
 
       - name: Test published image
         env:
-          IMAGE_TAG: ${{ steps.tags.outputs.version }}
+          IMAGE_TAG: ${{ steps.refs.outputs.version }}
           EXPECTED_OPENCLAW_VERSION: ${{ steps.build.outputs.openclaw_version }}
         shell: bash
         run: |
@@ -218,11 +219,44 @@ jobs:
           docker run --rm \
             --entrypoint /usr/local/bin/openclaw-ephemeral.py \
             "$image" configure
+          docker run --rm \
+            -e MCP_SERVER_URL=http://kachelmann-mcp:11041/mcp \
+            -e MCP_SERVER_BEARER=workflow-hermes-secret \
+            -e MCP_SERVER_NAME_02=paperless-mcp \
+            -e MCP_SERVER_URL_02=http://paperless-mcp:5000/mcp \
+            --entrypoint python3 \
+            "$image" -c '
+          import importlib.util
+          import json
+          import os
+          import sys
+
+          path = "/usr/local/bin/hermes-ephemeral.py"
+          spec = importlib.util.spec_from_file_location("hermes_ephemeral", path)
+          assert spec is not None and spec.loader is not None
+          module = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = module
+          spec.loader.exec_module(module)
+          servers = module.mcp_servers_config(os.environ)
+          assert set(servers) == {"kachelmann-mcp", "paperless-mcp"}
+          assert servers["kachelmann-mcp"]["headers"]["Authorization"] == (
+              "Bearer ${MCP_SERVER_BEARER}"
+          )
+          assert servers["kachelmann-mcp"]["supports_parallel_tool_calls"] is True
+          assert "tools" not in servers["kachelmann-mcp"]
+          assert "headers" not in servers["paperless-mcp"]
+          assert "workflow-hermes-secret" not in json.dumps(servers)
+          '
           test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
           test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
             = '["/sbin/init"]'
           test "$(docker image inspect --format '{{.Config.StopSignal}}' "$image")" \
             = 'SIGRTMIN+3'
+          test "$(
+            docker image inspect \
+              --format '{{ index .Config.Labels "io.safrano9999.parent" }}' \
+              "$image"
+          )" = fedora44-ai-core-pre
           docker buildx imagetools inspect "$image" >/dev/null
 
       - name: Verify private GHCR package
@@ -252,7 +286,7 @@ jobs:
         if: inputs.cascade
         env:
           GH_TOKEN: ${{ github.token }}
-          IMAGE_TAG: ${{ steps.tags.outputs.version }}
+          IMAGE_TAG: ${{ steps.refs.outputs.version }}
           PUSH_LATEST: ${{ inputs.push_latest }}
         shell: bash
         run: |

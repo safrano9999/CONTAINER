@@ -1,26 +1,29 @@
 # fedora44-ai-core
 
-`ghcr.io/safrano9999/fedora44-ai-core` is the heavy root of the Fedora image
-chain:
+`ghcr.io/safrano9999/fedora44-ai-core` is the small, frequently changed
+ephemeral layer in the Fedora image chain:
 
 ```text
-fedora44-ai-core -> fedora44-ai-base -> fedora44-ai-safrano9999
+fedora44-ai-core-pre -> fedora44-ai-core -> fedora44-ai-base -> fedora44-ai-safrano9999
 ```
 
-Core owns Fedora 44, the toolchains and pinned third-party programs, plus the
-complete generic OpenClaw/Hermes runtime formerly split into Core2. It imports
+The heavy generic Fedora 44 packages, toolchains, OpenClaw/Hermes installations,
+and third-party command-line tools live in `fedora44-ai-core-pre`. Core imports
 the pinned deterministic OpenClaw distribution, eight `openclaw_ephemeral`
-runtime files, and the pinned NOTE release directly from their public sources.
+runtime files, the pinned NOTE release, and the OpenClaw/Hermes runtime units.
 `prepare-build-context.sh` verifies and stages those inputs below ignored
 `build/vendor/`; the Containerfile verifies the release assets again and
-installs everything directly into the Fedora-native npm and Python runtimes.
-No Debian or Ephemeral container image is used as a build source. The image
+installs them directly into the Fedora-native npm and Python runtimes inherited
+from Core-pre. No Debian or Ephemeral container image is used as a build
+source. The image
 retains no generated OpenClaw configuration; configuration is rebuilt from
 injected environment variables on each container start.
 
 Optional repeatable `MCP_SERVER_NAME`, `MCP_SERVER_URL`, and
 `MCP_SERVER_BEARER` groups are projected into both global agent configs at
-startup. The first group is suffixless; subsequent `config.sh` entries use
+startup by their respective ephemeral generators: OpenClaw owns its JSON
+projection and Hermes owns its YAML projection. The first group is suffixless;
+subsequent `config.sh` entries use
 `_02`, `_03`, and so on. A missing name is derived from the URL hostname and a
 missing Bearer configures an unauthenticated endpoint. Bearer values remain in
 the injected environment; generated JSON/YAML stores only `${...}` references.

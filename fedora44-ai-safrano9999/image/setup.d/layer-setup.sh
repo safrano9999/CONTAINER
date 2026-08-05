@@ -13,6 +13,7 @@ readarray -t REPOS <<< "${FEDORA_LAYER_REPOS:?missing repository list}"
 NO_CONFIG=false
 NO_BUILD=false
 NO_CACHE=false
+OFFLINE=false
 INSTANCE="${CONFIG_CONTAINER_NAME:-}"
 
 show_help() {
@@ -20,6 +21,8 @@ show_help() {
 Usage: ./setup.sh [OPTIONS] [INSTANCE]
 
 Options:
+  --config-only  Alias for --no-build
+  --offline      Use cached example assets without network access
   --no-config    Skip config.sh
   --no-build     Stop after staging, merge, config and rendering
   --no-cache     Disable the local image build cache
@@ -32,6 +35,8 @@ EOF
 for argument in "$@"; do
     case "$argument" in
         --help|-h) show_help; exit 0 ;;
+        --config-only) NO_BUILD=true ;;
+        --offline) OFFLINE=true ;;
         --no-config) NO_CONFIG=true ;;
         --no-build) NO_BUILD=true ;;
         --no-cache) NO_CACHE=true ;;
@@ -100,6 +105,7 @@ instance_arguments=(
     --default-name "$DEFAULT_INSTANCE"
 )
 [ -z "$INSTANCE" ] || instance_arguments+=(--name "$INSTANCE")
+$OFFLINE && instance_arguments+=(--offline)
 IFS=: read -ra example_directories <<< "$EXAMPLE_DIRS"
 for example_directory in "${example_directories[@]}"; do
     [ -n "$example_directory" ] && instance_arguments+=(--example-dir "$example_directory")

@@ -6,11 +6,6 @@ OUTPUT="${1:-.resolved-build.env}"
 NODE_REQUESTED="${2:-stable}"
 OPENCLAW_REQUESTED="${3:-2026.7.1}"
 
-: "${NOTE_REPOSITORY:?NOTE_REPOSITORY is required}"
-: "${NOTE_RELEASE_TAG:?NOTE_RELEASE_TAG is required}"
-: "${NOTE_RELEASE_ASSET:?NOTE_RELEASE_ASSET is required}"
-: "${NOTE_RELEASE_SHA256:?NOTE_RELEASE_SHA256 is required}"
-
 for command in curl git jq sha256sum; do
     command -v "$command" >/dev/null 2>&1 || {
         echo "Missing build resolver dependency: $command" >&2
@@ -113,10 +108,6 @@ require_match ELECTRUM_KEYS_COMMIT "$ELECTRUM_KEYS_COMMIT" '^[0-9a-f]{40}$'
 require_match CLOUDFLARED_VERSION "$CLOUDFLARED_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match CLOUDFLARED_SHA256 "$CLOUDFLARED_SHA256" '^[0-9a-f]{64}$'
 require_match OPENCLAW_VERSION "$OPENCLAW_VERSION" '^[A-Za-z0-9._+-]+$'
-require_match NOTE_REPOSITORY "$NOTE_REPOSITORY" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
-require_match NOTE_RELEASE_TAG "$NOTE_RELEASE_TAG" '^[A-Za-z0-9._+-]+$'
-require_match NOTE_RELEASE_ASSET "$NOTE_RELEASE_ASSET" '^[A-Za-z0-9._+-]+$'
-require_match NOTE_RELEASE_SHA256 "$NOTE_RELEASE_SHA256" '^[0-9a-f]{64}$'
 require_match CODEX_VERSION "$CODEX_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match CLAUDE_CODE_VERSION "$CLAUDE_CODE_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match OPENCLAW_BRAVE_PLUGIN_VERSION "$OPENCLAW_BRAVE_PLUGIN_VERSION" '^[A-Za-z0-9._+-]+$'
@@ -134,10 +125,6 @@ temporary="${OUTPUT}.tmp"
     printf 'CLOUDFLARED_VERSION=%s\n' "$CLOUDFLARED_VERSION"
     printf 'CLOUDFLARED_SHA256=%s\n' "$CLOUDFLARED_SHA256"
     printf 'OPENCLAW_VERSION=%s\n' "$OPENCLAW_VERSION"
-    printf 'NOTE_REPOSITORY=%s\n' "$NOTE_REPOSITORY"
-    printf 'NOTE_RELEASE_TAG=%s\n' "$NOTE_RELEASE_TAG"
-    printf 'NOTE_RELEASE_ASSET=%s\n' "$NOTE_RELEASE_ASSET"
-    printf 'NOTE_RELEASE_SHA256=%s\n' "$NOTE_RELEASE_SHA256"
     printf 'CODEX_VERSION=%s\n' "$CODEX_VERSION"
     printf 'CLAUDE_CODE_VERSION=%s\n' "$CLAUDE_CODE_VERSION"
     printf 'OPENCLAW_BRAVE_PLUGIN_VERSION=%s\n' "$OPENCLAW_BRAVE_PLUGIN_VERSION"

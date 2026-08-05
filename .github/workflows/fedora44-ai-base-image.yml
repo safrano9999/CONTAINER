@@ -1,5 +1,6 @@
 # Source of truth: SCRIPTS/githubactions. Generated copies are overwritten.
 name: fedora44-ai-base image
+run-name: ${{ inputs.monitor_id != '' && format('{0} [monitor:{1}:{2}]', github.workflow, inputs.monitor_id, inputs.monitor_final) || github.workflow }}
 
 on:
   workflow_dispatch:
@@ -22,6 +23,16 @@ on:
         required: true
         type: boolean
         default: false
+      monitor_id:
+        description: "Optional event-monitor correlation id"
+        required: false
+        default: ""
+        type: string
+      monitor_final:
+        description: "This run is the final monitored cascade stage"
+        required: true
+        default: true
+        type: boolean
 
 concurrency:
   group: fedora44-ai-base-image
@@ -188,4 +199,6 @@ jobs:
             --ref "$GITHUB_REF_NAME" \
             -f "image_tag=$IMAGE_TAG" \
             -f "base_tag=$IMAGE_TAG" \
-            -f "push_latest=$PUSH_LATEST"
+            -f "push_latest=$PUSH_LATEST" \
+            -f "monitor_id=${{ inputs.monitor_id }}" \
+            -f "monitor_final=true"

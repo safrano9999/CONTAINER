@@ -47,12 +47,18 @@ grep -Fq 'COPY build/vendor/note/note-latest.zip' "$ROOT/Containerfile"
 grep -Fq 'local-roots-*.js' "$ROOT/Containerfile"
 grep -Fq 'openclaw-ephemeral.py configure' \
     "$ROOT/image/systemd/openclaw-config.service"
+grep -Fq 'agent-mcp-ephemeral.py openclaw' \
+    "$ROOT/image/systemd/openclaw-config.service"
 grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' \
+    "$ROOT/image/systemd/hermes.service"
+grep -Fq 'agent-mcp-ephemeral.py hermes' \
     "$ROOT/image/systemd/hermes.service"
 grep -Eq '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
 grep -Eq '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
 grep -Eq '^USER root$' "$ROOT/Containerfile"
 grep -Fq 'lsof strace tcpdump nmap nmap-ncat' "$ROOT/Containerfile"
+
+python3 "$ROOT/tests/test-agent-mcp-ephemeral.py"
 
 for forbidden in \
     /opt/safrano9999 \

@@ -18,6 +18,15 @@ No Debian or Ephemeral container image is used as a build source. The image
 retains no generated OpenClaw configuration; configuration is rebuilt from
 injected environment variables on each container start.
 
+Optional repeatable `MCP_SERVER_NAME`, `MCP_SERVER_URL`, and
+`MCP_SERVER_BEARER` groups are projected into both global agent configs at
+startup. The first group is suffixless; subsequent `config.sh` entries use
+`_02`, `_03`, and so on. A missing name is derived from the URL hostname and a
+missing Bearer configures an unauthenticated endpoint. Bearer values remain in
+the injected environment; generated JSON/YAML stores only `${...}` references.
+All tools are exposed to all agents, parallel tool calls are enabled, and the
+OpenClaw Codex projection defaults MCP tool approvals to `approve`.
+
 Core intentionally contains no checked-out Safrano project repository. Base
 and Safrano add their disjoint repository sets in later layers.
 

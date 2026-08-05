@@ -318,6 +318,7 @@ RUN set -euo pipefail; \
 COPY image/runtime.d/fedora44-ai-init.sh /usr/local/bin/fedora44-ai-init
 COPY image/runtime.d/fedora44-runtime-environment-generator.sh /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator
 COPY image/runtime.d/hermes-ephemeral.py /usr/local/bin/hermes-ephemeral.py
+COPY image/runtime.d/agent-mcp-ephemeral.py /usr/local/bin/agent-mcp-ephemeral.py
 COPY image/runtime.d/named_volume_links.sh image/runtime.d/named_volume_links_openclaw.sh \
      image/runtime.d/named_volume_links_hermes.sh optional_persistence.sh \
      image/runtime.d/tailscale-state-up.sh /usr/local/bin/
@@ -325,6 +326,7 @@ COPY image/systemd/ /etc/systemd/system/
 
 RUN chmod 0755 \
       /usr/local/bin/fedora44-ai-init \
+      /usr/local/bin/agent-mcp-ephemeral.py \
       /usr/local/bin/hermes-ephemeral.py \
       /usr/local/bin/named_volume_links.sh \
       /usr/local/bin/named_volume_links_openclaw.sh \

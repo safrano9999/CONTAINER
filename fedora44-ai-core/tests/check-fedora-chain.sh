@@ -48,7 +48,9 @@ grep -Fq 'USER root' "$BASE/Containerfile"
 grep -Fq 'USER root' "$SAFRANO/Containerfile"
 grep -Fq 'systemctl mask cockpit.socket' "$CORE/Containerfile"
 grep -Fq 'openclaw-ephemeral.py configure' "$CORE/image/systemd/openclaw-config.service"
+grep -Fq 'agent-mcp-ephemeral.py openclaw' "$CORE/image/systemd/openclaw-config.service"
 grep -Fq 'ExecStartPre=/usr/local/bin/hermes-ephemeral.py' "$CORE/image/systemd/hermes.service"
+grep -Fq 'agent-mcp-ephemeral.py hermes' "$CORE/image/systemd/hermes.service"
 
 for setup in "$CORE/setup.sh" "$BASE/setup.sh" "$SAFRANO/setup.sh"; do
     for marker in \
@@ -224,6 +226,13 @@ grep -Fq \
     '#named-volume: /named_volumes/NOTE_SQLITE /named_volumes/NOTE_SQLITE /root/.openclaw/extensions/note/sqlite dir' \
     "$CORE/env.fedora44-ai-core.example"
 grep -Fq 'CLOUDFLARED_START=' "$CORE/config.fedora44-ai-core.conf_example"
+grep -Fq \
+    '#repeat-group: MCP_SERVER suffix02 MCP_SERVER_NAME MCP_SERVER_URL MCP_SERVER_BEARER' \
+    "$CORE/env.fedora44-ai-core.example"
+grep -Fq \
+    '#repeat-optional-complete: MCP_SERVER_NAME MCP_SERVER_BEARER' \
+    "$CORE/env.fedora44-ai-core.example"
+python3 "$CORE/tests/test-agent-mcp-ephemeral.py"
 
 base_repos="$(
     awk -F '\t' '!/^#/ && NF {sub(/@.*/, "", $1); print $1}' \

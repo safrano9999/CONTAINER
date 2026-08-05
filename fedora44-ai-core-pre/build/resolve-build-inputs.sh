@@ -13,6 +13,12 @@ for command in curl git jq sha256sum; do
     }
 done
 
+CURL_RETRY=(
+    --fail --silent --show-error --location
+    --retry 10 --retry-delay 5 --retry-all-errors
+    --connect-timeout 30 --max-time 300
+)
+
 GH_AUTH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 if [ -z "$GH_AUTH_TOKEN" ] && command -v gh >/dev/null 2>&1 \
     && gh auth status --hostname github.com >/dev/null 2>&1; then
@@ -23,7 +29,7 @@ github_api() {
     local endpoint="$1"
     local -a headers=()
     [ -z "$GH_AUTH_TOKEN" ] || headers=(-H "Authorization: Bearer $GH_AUTH_TOKEN")
-    curl -fsSL --retry 3 --connect-timeout 15 \
+    curl "${CURL_RETRY[@]}" \
         -H 'Accept: application/vnd.github+json' \
         -H 'X-GitHub-Api-Version: 2022-11-28' \
         "${headers[@]}" "https://api.github.com${endpoint}"
@@ -32,16 +38,30 @@ github_api() {
 npm_latest() {
     local package="$1" encoded
     encoded="$(jq -nr --arg package "$package" '$package | @uri')"
-    curl -fsSL --retry 3 --connect-timeout 15 \
+    curl "${CURL_RETRY[@]}" \
         "https://registry.npmjs.org/${encoded}/latest" | jq -er '.version'
 }
 
 fedora_repomd_hash() {
     local repo="$1"
-    curl -fsSL --retry 3 --connect-timeout 15 \
+    curl "${CURL_RETRY[@]}" \
         "https://mirrors.fedoraproject.org/metalink?repo=${repo}&arch=x86_64" \
         | sed -n 's#.*<hash type="sha256">\([^<]*\)</hash>.*#\1#p' \
         | head -n 1
+}
+
+git_remote_commit() {
+    local repository="$1" reference="$2" attempt commit=""
+    for attempt in {1..10}; do
+        commit="$(git ls-remote "$repository" "$reference" | awk 'NR == 1 {print $1}')" || true
+        if [[ "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+            printf '%s\n' "$commit"
+            return 0
+        fi
+        [ "$attempt" -eq 10 ] || sleep 5
+    done
+    echo "Cannot resolve $repository $reference after 10 attempts" >&2
+    return 1
 }
 
 require_match() {
@@ -54,7 +74,7 @@ require_match() {
 
 case "$NODE_REQUESTED" in
     stable|latest)
-        NODE_VERSION="$(curl -fsSL --retry 3 --connect-timeout 15 \
+        NODE_VERSION="$(curl "${CURL_RETRY[@]}" \
             https://nodejs.org/dist/index.json | jq -er '.[0].version | ltrimstr("v")')"
         ;;
     *) NODE_VERSION="${NODE_REQUESTED#v}" ;;
@@ -62,7 +82,7 @@ esac
 
 UV_RELEASE="$(github_api /repos/astral-sh/uv/releases/latest)"
 UV_VERSION="$(jq -er '.tag_name | ltrimstr("v")' <<<"$UV_RELEASE")"
-UV_INSTALLER_SHA256="$(curl -fsSL --retry 3 --connect-timeout 15 \
+UV_INSTALLER_SHA256="$(curl "${CURL_RETRY[@]}" \
     "https://astral.sh/uv/${UV_VERSION}/install.sh" | sha256sum | cut -d' ' -f1)"
 
 FEDORA_BASE_REPOMD="$(fedora_repomd_hash fedora-44)"
@@ -73,11 +93,11 @@ FEDORA_REPOMD_KEY="$(printf '%s\n%s\n' "$FEDORA_BASE_REPOMD" "$FEDORA_UPDATES_RE
     | sha256sum | cut -d' ' -f1)"
 
 SOLANA_INSTALLER_URL='https://release.anza.xyz/stable/agave-install-init-x86_64-unknown-linux-gnu'
-SOLANA_INSTALLER_MD5="$(curl -fsSI --retry 3 --connect-timeout 15 "$SOLANA_INSTALLER_URL" \
+SOLANA_INSTALLER_MD5="$(curl "${CURL_RETRY[@]}" --head "$SOLANA_INSTALLER_URL" \
     | awk -F': *' 'tolower($1) == "etag" {gsub(/"/, "", $2); sub(/\r$/, "", $2); print $2; exit}')"
 
-FUGU_COMMIT="$(git ls-remote https://github.com/SakanaAI/fugu.git HEAD | awk 'NR == 1 {print $1}')"
-ELECTRUM_KEYS_COMMIT="$(git ls-remote https://github.com/spesmilo/electrum.git refs/heads/master | awk 'NR == 1 {print $1}')"
+FUGU_COMMIT="$(git_remote_commit https://github.com/SakanaAI/fugu.git HEAD)"
+ELECTRUM_KEYS_COMMIT="$(git_remote_commit https://github.com/spesmilo/electrum.git refs/heads/master)"
 
 CLOUDFLARED_RELEASE="$(github_api /repos/cloudflare/cloudflared/releases/latest)"
 CLOUDFLARED_VERSION="$(jq -er '.tag_name' <<<"$CLOUDFLARED_RELEASE")"
@@ -90,7 +110,7 @@ OPENCLAW_BRAVE_PLUGIN_VERSION="$(npm_latest @openclaw/brave-plugin)"
 OPENCLAW_CODEX_PLUGIN_VERSION="$(npm_latest @openclaw/codex)"
 
 encoded_openclaw="$(jq -nr --arg package openclaw '$package | @uri')"
-registry_openclaw_document="$(curl -fsSL --retry 3 --connect-timeout 15 \
+registry_openclaw_document="$(curl "${CURL_RETRY[@]}" \
     "https://registry.npmjs.org/${encoded_openclaw}/${OPENCLAW_VERSION}")"
 registry_openclaw="$(jq -er '.version' <<<"$registry_openclaw_document")"
 [ "$registry_openclaw" = "$OPENCLAW_VERSION" ] || {

@@ -10,6 +10,9 @@ bash -n \
     "$ROOT/build/resolve-build-inputs.sh" \
     "$0"
 
+grep -Fq -- '--retry-all-errors' "$ROOT/build/resolve-build-inputs.sh"
+grep -Fq 'git_remote_commit()' "$ROOT/build/resolve-build-inputs.sh"
+
 grep -Fq 'FROM quay.io/fedora/fedora:44 AS ai-core-pre' "$ROOT/Containerfile"
 grep -Fq 'openclaw@${OPENCLAW_VERSION}' "$ROOT/Containerfile"
 grep -Fq '/usr/local/lib/hermes-agent' "$ROOT/Containerfile"

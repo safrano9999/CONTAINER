@@ -6,12 +6,23 @@ log() { printf '[tailscale] %s\n' "$*"; }
 state_dir="${TS_STATE_DIR:-/var/lib/tailscale}"
 state_file="${state_dir}/tailscaled.state"
 up_timeout="${TS_UP_TIMEOUT:-30}"
-up_args=(up --accept-routes --accept-dns)
+up_args=(up)
+extra_args=()
+has_accept_routes=false
+has_accept_dns=false
 
 if [ -n "${TS_EXTRA_ARGS:-}" ]; then
     read -r -a extra_args <<< "$TS_EXTRA_ARGS"
-    up_args+=("${extra_args[@]}")
+    for arg in "${extra_args[@]}"; do
+        case "$arg" in
+            --accept-routes|--accept-routes=*) has_accept_routes=true ;;
+            --accept-dns|--accept-dns=*) has_accept_dns=true ;;
+        esac
+    done
 fi
+$has_accept_routes || up_args+=(--accept-routes)
+$has_accept_dns || up_args+=(--accept-dns)
+up_args+=("${extra_args[@]}")
 [ -z "${TS_HOSTNAME:-}" ] || up_args+=(--hostname="$TS_HOSTNAME")
 
 backend_state=""

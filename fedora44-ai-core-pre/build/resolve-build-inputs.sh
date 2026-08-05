@@ -107,7 +107,6 @@ OPENCLAW_VERSION="$OPENCLAW_REQUESTED"
 CODEX_VERSION="$(npm_latest @openai/codex)"
 CLAUDE_CODE_VERSION="$(npm_latest @anthropic-ai/claude-code)"
 OPENCLAW_BRAVE_PLUGIN_VERSION="$(npm_latest @openclaw/brave-plugin)"
-OPENCLAW_CODEX_PLUGIN_VERSION="$(npm_latest @openclaw/codex)"
 
 encoded_openclaw="$(jq -nr --arg package openclaw '$package | @uri')"
 registry_openclaw_document="$(curl "${CURL_RETRY[@]}" \
@@ -131,7 +130,6 @@ require_match OPENCLAW_VERSION "$OPENCLAW_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match CODEX_VERSION "$CODEX_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match CLAUDE_CODE_VERSION "$CLAUDE_CODE_VERSION" '^[A-Za-z0-9._+-]+$'
 require_match OPENCLAW_BRAVE_PLUGIN_VERSION "$OPENCLAW_BRAVE_PLUGIN_VERSION" '^[A-Za-z0-9._+-]+$'
-require_match OPENCLAW_CODEX_PLUGIN_VERSION "$OPENCLAW_CODEX_PLUGIN_VERSION" '^[A-Za-z0-9._+-]+$'
 
 temporary="${OUTPUT}.tmp"
 {
@@ -148,7 +146,6 @@ temporary="${OUTPUT}.tmp"
     printf 'CODEX_VERSION=%s\n' "$CODEX_VERSION"
     printf 'CLAUDE_CODE_VERSION=%s\n' "$CLAUDE_CODE_VERSION"
     printf 'OPENCLAW_BRAVE_PLUGIN_VERSION=%s\n' "$OPENCLAW_BRAVE_PLUGIN_VERSION"
-    printf 'OPENCLAW_CODEX_PLUGIN_VERSION=%s\n' "$OPENCLAW_CODEX_PLUGIN_VERSION"
 } > "$temporary"
 mv -f "$temporary" "$OUTPUT"
 printf 'Resolved immutable build inputs -> %s\n' "$OUTPUT"

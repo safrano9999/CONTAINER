@@ -126,6 +126,27 @@ for script in \
     bash -n "$script"
 done
 
+(
+    tailscale_test_root="$(mktemp -d)"
+    trap 'rm -rf -- "$tailscale_test_root"' EXIT
+    mkdir -p "$tailscale_test_root/bin" "$tailscale_test_root/state"
+    cat > "$tailscale_test_root/bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$TS_CAPTURE"
+EOF
+    chmod 0755 "$tailscale_test_root/bin/tailscale"
+    PATH="$tailscale_test_root/bin:$PATH" \
+        TS_AUTHKEY=unit-test-key \
+        TS_CAPTURE="$tailscale_test_root/args" \
+        TS_EXTRA_ARGS='--ssh --accept-dns=false' \
+        TS_STATE_DIR="$tailscale_test_root/state" \
+        bash "$CORE/image/runtime.d/tailscale-state-up.sh" >/dev/null
+    [ "$(grep -Ec '^--accept-dns(=.*)?$' "$tailscale_test_root/args")" -eq 1 ]
+    grep -Fxq -- '--accept-dns=false' "$tailscale_test_root/args"
+    grep -Fxq -- '--accept-routes' "$tailscale_test_root/args"
+    grep -Fxq -- '--ssh' "$tailscale_test_root/args"
+)
+
 python3 - "$CORE" "$BASE" "$SAFRANO" <<'PY'
 import ast
 import pathlib

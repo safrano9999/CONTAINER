@@ -17,7 +17,6 @@ ARG OPENCLAW_VERSION=2026.7.1
 ARG CODEX_VERSION
 ARG CLAUDE_CODE_VERSION
 ARG OPENCLAW_BRAVE_PLUGIN_VERSION
-ARG OPENCLAW_CODEX_PLUGIN_VERSION
 ARG ELECTRUM_VERSION=4.7.2
 ARG LND_VERSION=v0.20.1-beta
 ARG GETH_VERSION=1.17.2
@@ -133,7 +132,8 @@ RUN --mount=type=cache,target=/root/.npm \
       "@openai/codex@${CODEX_VERSION}" \
       "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
       "openclaw@${OPENCLAW_VERSION}" \
- && test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = "${OPENCLAW_VERSION}"
+ && test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = "${OPENCLAW_VERSION}" \
+ && test -f "$(npm root -g)/openclaw/dist/extensions/codex/index.js"
 
 RUN test -n "${FUGU_COMMIT}" \
  && git init /root/.fugu \
@@ -150,11 +150,6 @@ RUN test -n "${FUGU_COMMIT}" \
 RUN --mount=type=cache,target=/root/.npm \
     test -n "${OPENCLAW_BRAVE_PLUGIN_VERSION}" \
  && openclaw plugins install "@openclaw/brave-plugin@${OPENCLAW_BRAVE_PLUGIN_VERSION}"
-
-RUN --mount=type=cache,target=/root/.npm \
-    test -n "${OPENCLAW_CODEX_PLUGIN_VERSION}" \
- && printf 'ClawHub Codex plugin release: %s\n' "${OPENCLAW_CODEX_PLUGIN_VERSION}" \
- && openclaw plugins install clawhub:@openclaw/codex
 
 RUN test -n "${CLOUDFLARED_VERSION}" \
  && test -n "${CLOUDFLARED_SHA256}" \

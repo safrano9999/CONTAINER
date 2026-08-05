@@ -18,6 +18,8 @@ grep -Fq 'openclaw@${OPENCLAW_VERSION}' "$ROOT/Containerfile"
 grep -Fq '/usr/local/lib/hermes-agent' "$ROOT/Containerfile"
 grep -Fq '@openai/codex@${CODEX_VERSION}' "$ROOT/Containerfile"
 grep -Fq '@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}' "$ROOT/Containerfile"
+grep -Fq 'openclaw/dist/extensions/codex/index.js' "$ROOT/Containerfile"
+! grep -Fq 'clawhub:@openclaw/codex' "$ROOT/Containerfile"
 grep -Eq '^CMD \["/sbin/init"\]$' "$ROOT/Containerfile"
 grep -Eq '^STOPSIGNAL SIGRTMIN\+3$' "$ROOT/Containerfile"
 

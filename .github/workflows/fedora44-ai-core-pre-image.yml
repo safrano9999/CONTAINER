@@ -78,7 +78,7 @@ jobs:
             FEDORA_REPOMD_KEY NODE_VERSION UV_VERSION UV_INSTALLER_SHA256 \
             FUGU_COMMIT CLOUDFLARED_VERSION CLOUDFLARED_SHA256 \
             CODEX_VERSION CLAUDE_CODE_VERSION OPENCLAW_BRAVE_PLUGIN_VERSION \
-            OPENCLAW_CODEX_PLUGIN_VERSION SOLANA_INSTALLER_MD5 \
+            SOLANA_INSTALLER_MD5 \
             ELECTRUM_KEYS_COMMIT; do
             [ -n "${!name:-}" ] || {
               echo "Missing required Core-pre input: $name" >&2

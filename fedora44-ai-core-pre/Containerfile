@@ -132,8 +132,7 @@ RUN --mount=type=cache,target=/root/.npm \
       "@openai/codex@${CODEX_VERSION}" \
       "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
       "openclaw@${OPENCLAW_VERSION}" \
- && test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = "${OPENCLAW_VERSION}" \
- && test -f "$(npm root -g)/openclaw/dist/extensions/codex/index.js"
+ && test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" = "${OPENCLAW_VERSION}"
 
 RUN test -n "${FUGU_COMMIT}" \
  && git init /root/.fugu \
@@ -150,6 +149,12 @@ RUN test -n "${FUGU_COMMIT}" \
 RUN --mount=type=cache,target=/root/.npm \
     test -n "${OPENCLAW_BRAVE_PLUGIN_VERSION}" \
  && openclaw plugins install "@openclaw/brave-plugin@${OPENCLAW_BRAVE_PLUGIN_VERSION}"
+
+RUN --mount=type=cache,target=/root/.npm \
+    openclaw plugins install clawhub:@openclaw/codex \
+ && test -f "$(npm root -g)/openclaw/dist/extensions/codex/index.js" \
+ && rm -rf /root/.openclaw/extensions/codex \
+ && test ! -e /root/.openclaw/extensions/codex
 
 RUN test -n "${CLOUDFLARED_VERSION}" \
  && test -n "${CLOUDFLARED_SHA256}" \

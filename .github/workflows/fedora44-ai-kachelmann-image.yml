@@ -147,8 +147,8 @@ jobs:
             test -x /usr/local/bin/hermes-ephemeral.py
             test -d /opt/safrano9999/KACHELMANN
             test -f /opt/safrano9999/KACHELMANN/openclaw.plugin.json
-            jq -e '.id == "kachelmann"' \
-              /opt/safrano9999/KACHELMANN/openclaw.plugin.json >/dev/null
+            test "$(jq -r .id \
+              /opt/safrano9999/KACHELMANN/openclaw.plugin.json)" = kachelmann
             test -f /opt/safrano9999/KACHELMANN/hermes/plugin.yaml
             test -x /usr/local/bin/kachelmann-hermes-enable
             test -f /etc/systemd/system/hermes.service.d/30-kachelmann.conf

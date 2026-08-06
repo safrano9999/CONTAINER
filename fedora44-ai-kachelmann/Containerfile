@@ -1,0 +1,55 @@
+ARG AI_BASE_IMAGE=ghcr.io/safrano9999/fedora44-ai-base:latest
+FROM ${AI_BASE_IMAGE} AS ai-kachelmann
+
+ARG KACHELMANN_SOURCE_KEY
+
+LABEL org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
+      org.opencontainers.image.title="fedora44-ai-kachelmann" \
+      org.opencontainers.image.description="Fedora 44 AI Base with the KACHELMANN contribution." \
+      io.safrano9999.parent="fedora44-ai-base" \
+      io.safrano9999.kachelmann-source-tags.sha256="${KACHELMANN_SOURCE_KEY}"
+
+USER root
+
+COPY requirements.kachelmann.txt /requirements.kachelmann.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.kachelmann.txt \
+ && pip check
+
+ENV KACHELMANN_STAGE_DIR=/opt/safrano9999/.stage \
+    KACHELMANN_DIR=/opt/safrano9999/KACHELMANN \
+    KACHELMANN_PYTHON=/usr/bin/python3
+
+COPY .kachelmann-source-tags.tsv /README/kachelmann-source-tags.tsv
+COPY safrano9999/KACHELMANN ${KACHELMANN_STAGE_DIR}/KACHELMANN
+
+COPY image/build.d/apply-contributions.sh /usr/local/libexec/fedora44-ai/apply-kachelmann-contribution
+COPY image/contributions.tsv /usr/local/share/fedora44-ai/kachelmann-contributions.tsv
+RUN chmod 0755 /usr/local/libexec/fedora44-ai/apply-kachelmann-contribution \
+ && /usr/local/libexec/fedora44-ai/apply-kachelmann-contribution \
+      --stage "${KACHELMANN_STAGE_DIR}" \
+      --root /opt/safrano9999 \
+      --image-root / \
+      --manifest /usr/local/share/fedora44-ai/kachelmann-contributions.tsv \
+ && rm -rf "${KACHELMANN_STAGE_DIR}"
+
+RUN uv pip install \
+      --python /usr/local/lib/hermes-agent/venv/bin/python \
+      --no-cache \
+      "SQLAlchemy>=2.0" \
+ && /usr/local/lib/hermes-agent/venv/bin/python -c 'import sqlalchemy'
+
+RUN /usr/local/bin/openclaw-ephemeral.py configure \
+ && /usr/local/bin/openclaw-layer-build --repos KACHELMANN \
+ && find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
+
+COPY image/systemd/ /etc/systemd/system/
+RUN systemctl enable \
+      openclaw-kachelmann.service \
+      kachelmann-webui.service \
+      kachelmann-mcp.service
+
+USER root
+WORKDIR /root
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

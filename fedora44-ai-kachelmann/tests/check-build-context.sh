@@ -18,7 +18,7 @@ grep -Fq 'io.safrano9999.parent="fedora44-ai-base"' "$ROOT/Containerfile"
 grep -Fq 'openclaw-layer-build --repos KACHELMANN' "$ROOT/Containerfile"
 grep -Fq 'FEDORA_LAYER_REPOS=KACHELMANN' "$ROOT/setup.sh"
 grep -Fqx $'KACHELMANN\tstandalone\tyes\tyes' "$ROOT/image/contributions.tsv"
-grep -Fq 'kachelmann-latest.zip' "$ROOT/prepare-build-context.sh"
+grep -Fq 'kachelmann-mcp-only-latest.zip' "$ROOT/prepare-build-context.sh"
 grep -Fq 'asset_name = f"{repository}-examplefiles.zip"' \
     "$ROOT/container-instance-setup.py"
 grep -Fq 'hardlink(source, instance / source.name)' "$ROOT/container-instance-setup.py"

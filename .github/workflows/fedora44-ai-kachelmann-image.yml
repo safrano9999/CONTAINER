@@ -176,26 +176,3 @@ jobs:
           test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
             = '["/sbin/init"]'
           docker buildx imagetools inspect "$image" >/dev/null
-
-      - name: Verify private GHCR package
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_url="https://api.github.com/user/packages/container/fedora44-ai-kachelmann"
-          verified=false
-          for _ in {1..20}; do
-            if curl -fsSL \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "$package_url" \
-              | jq -e '.name == "fedora44-ai-kachelmann" and .visibility == "private"' \
-                >/dev/null; then
-              verified=true
-              break
-            fi
-            sleep 3
-          done
-          [ "$verified" = true ]

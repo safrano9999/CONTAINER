@@ -4,6 +4,7 @@ export LC_ALL=C
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTAINER_ROOT="$ROOT/.."
+SAFRANO_ROOT="$CONTAINER_ROOT/fedora44-ai-safrano9999"
 
 for script in \
     "$ROOT"/*.sh \
@@ -22,6 +23,38 @@ grep -Fq 'asset_name = f"{repository}-examplefiles.zip"' \
     "$ROOT/container-instance-setup.py"
 grep -Fq 'hardlink(source, instance / source.name)' "$ROOT/container-instance-setup.py"
 grep -Fq 'symlink(cache, instance / "safrano9999")' "$ROOT/container-instance-setup.py"
+grep -Fq 'KACHELMANN_PERSISTENT=true' \
+    "$ROOT/config.fedora44-ai-kachelmann.conf_example"
+
+for inherited in \
+    merge.sh \
+    config.sh \
+    container-instance-setup.py \
+    image/setup.d/layer-setup.sh; do
+    cmp -s "$SAFRANO_ROOT/$inherited" "$ROOT/$inherited" || {
+        echo "KACHELMANN cascade merge drifted from Safrano: $inherited" >&2
+        exit 1
+    }
+done
+diff -qr "$SAFRANO_ROOT/examples.d" "$ROOT/examples.d" >/dev/null || {
+    echo "KACHELMANN Core/Base example cascade drifted from Safrano" >&2
+    exit 1
+}
+
+while IFS= read -r source; do
+    relative="${source#fedora44-ai-safrano9999/}"
+    target="$ROOT/$relative"
+    [ -f "$target" ] || continue
+    case "$relative" in
+        .gitignore|Containerfile|README.md|build-local.sh|setup.sh|prepare-build-context.sh|image/build.d/resolve-build-inputs.sh|image/contributions.tsv)
+            continue
+            ;;
+    esac
+    cmp -s "$CONTAINER_ROOT/$source" "$target" || {
+        echo "KACHELMANN shared file drifted from Safrano: $relative" >&2
+        exit 1
+    }
+done < <(git -C "$CONTAINER_ROOT" ls-files fedora44-ai-safrano9999)
 
 for forbidden in \
     JUGO VikAI PV_D-A-CH KIWIX_BRIDGE \

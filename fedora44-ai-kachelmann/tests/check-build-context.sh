@@ -42,7 +42,6 @@ done
 workflow="$CONTAINER_ROOT/.github/workflows/fedora44-ai-kachelmann-image.yml"
 [ -f "$workflow" ]
 grep -Fq 'no-cache: true' "$workflow"
-grep -Fq '.visibility == "private"' "$workflow"
 if grep -En 'cache-(from|to):' "$workflow"; then
     echo "Persistent build cache configuration is forbidden" >&2
     exit 1

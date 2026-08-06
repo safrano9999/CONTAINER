@@ -19,10 +19,18 @@ on:
         type: boolean
         default: true
       cascade:
-        description: "Build Safrano after Base succeeds"
+        description: "Build the selected final image after Base succeeds"
         required: true
         type: boolean
         default: false
+      cascade_target:
+        description: "Final Fedora image after Base succeeds"
+        required: true
+        type: choice
+        options:
+          - safrano9999
+          - kachelmann
+        default: safrano9999
       monitor_id:
         description: "Optional event-monitor correlation id"
         required: false
@@ -185,16 +193,29 @@ jobs:
             = '["/sbin/init"]'
           docker buildx imagetools inspect "$image" >/dev/null
 
-      - name: Trigger Safrano cascade
+      - name: Trigger final Fedora image cascade
         if: inputs.cascade
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE_TAG: ${{ steps.refs.outputs.version }}
           PUSH_LATEST: ${{ inputs.push_latest }}
+          CASCADE_TARGET: ${{ inputs.cascade_target }}
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run fedora44-ai-safrano9999-image.yml \
+          case "$CASCADE_TARGET" in
+            safrano9999)
+              workflow=fedora44-ai-safrano9999-image.yml
+              ;;
+            kachelmann)
+              workflow=fedora44-ai-kachelmann-image.yml
+              ;;
+            *)
+              echo "Unsupported Fedora cascade target: $CASCADE_TARGET" >&2
+              exit 1
+              ;;
+          esac
+          gh workflow run "$workflow" \
             --repo "$GITHUB_REPOSITORY" \
             --ref "$GITHUB_REF_NAME" \
             -f "image_tag=$IMAGE_TAG" \

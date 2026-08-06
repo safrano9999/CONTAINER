@@ -8,6 +8,6 @@ export FEDORA_LAYER_LOCAL_IMAGE=localhost/fedora44-ai-kachelmann:latest
 export FEDORA_LAYER_OUTPUT_IMAGE_KEY=FEDORA44_AI_KACHELMANN_IMAGE
 export FEDORA_LAYER_DEFAULT_INSTANCE=fedora44-ai-kachelmann
 export FEDORA_LAYER_EXAMPLE_DIRS="$ROOT/examples.d/core:$ROOT/examples.d/base"
-export FEDORA_LAYER_REPOS=$'WELCOME\nCODEANALYST\nCITADEL\nDIESDAS-\nNEXTCLOUD\nsafrano9999-paper\nKACHELMANN'
+export FEDORA_LAYER_REPOS=KACHELMANN
 
 exec bash "$ROOT/image/setup.d/layer-setup.sh" "$@"

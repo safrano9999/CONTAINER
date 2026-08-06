@@ -16,8 +16,7 @@ done
 grep -Fq 'FROM ${AI_BASE_IMAGE} AS ai-kachelmann' "$ROOT/Containerfile"
 grep -Fq 'io.safrano9999.parent="fedora44-ai-base"' "$ROOT/Containerfile"
 grep -Fq 'openclaw-layer-build --repos KACHELMANN' "$ROOT/Containerfile"
-grep -Fq "FEDORA_LAYER_REPOS=\$'WELCOME\\nCODEANALYST\\nCITADEL\\nDIESDAS-\\nNEXTCLOUD\\nsafrano9999-paper\\nKACHELMANN'" \
-    "$ROOT/setup.sh"
+grep -Fq 'FEDORA_LAYER_REPOS=KACHELMANN' "$ROOT/setup.sh"
 grep -Fqx $'KACHELMANN\tstandalone\tyes\tyes' "$ROOT/image/contributions.tsv"
 grep -Fq 'kachelmann-latest.zip' "$ROOT/prepare-build-context.sh"
 grep -Fq 'asset_name = f"{repository}-examplefiles.zip"' \
@@ -37,10 +36,23 @@ for inherited in \
         exit 1
     }
 done
-diff -qr "$SAFRANO_ROOT/examples.d" "$ROOT/examples.d" >/dev/null || {
-    echo "KACHELMANN Core/Base example cascade drifted from Safrano" >&2
-    exit 1
-}
+while IFS= read -r source; do
+    relative="${source#"$SAFRANO_ROOT/"}"
+    cmp -s "$source" "$ROOT/$relative" || {
+        echo "KACHELMANN inherited example drifted from Safrano: $relative" >&2
+        exit 1
+    }
+done < <(find "$SAFRANO_ROOT/examples.d" -type f -name '*example' | sort)
+
+for inherited_example in \
+    config.codeanalyst.conf_example \
+    config.citadel.conf_example \
+    container.codeanalyst.example \
+    container.citadel.example \
+    env.citadel.example \
+    env.nextcloud.example; do
+    test -s "$ROOT/examples.d/base/$inherited_example"
+done
 
 while IFS= read -r source; do
     relative="${source#fedora44-ai-safrano9999/}"
@@ -65,6 +77,7 @@ for forbidden in \
     DAILYNEWS ZEROINBOX SPANKER; do
     if grep -Fq "$forbidden" \
         "$ROOT/Containerfile" \
+        "$ROOT/setup.sh" \
         "$ROOT/prepare-build-context.sh" \
         "$ROOT/image/contributions.tsv"; then
         echo "Non-KACHELMANN project found in reduced layer: $forbidden" >&2

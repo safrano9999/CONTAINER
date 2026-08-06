@@ -1618,6 +1618,7 @@ configure_from_example() {
             if provider_selector_key "$key"; then
                 prompt_suffix="$(provider_prompt "$example" "$key")"
             elif [ -n "$field_choices" ]; then
+                [ ! -t 0 ] || printf '    %s:\n' "$key"
                 read -r -a field_choice_values <<< "$field_choices"
                 field_choice_count="${#field_choice_values[@]}"
                 field_choice_total="$field_choice_count"

@@ -37,8 +37,8 @@ bash "$ROOT/image/setup.d/sync-sources.sh" \
 
 if ! $OFFLINE; then
     bash "$ROOT/image/build.d/stage-release-plugin.sh" \
-        safrano9999/KACHELMANN-MCP-ONLY \
-        kachelmann-mcp-only-latest.zip \
+        safrano9999/KACHELMANN \
+        kachelmann-latest.zip \
         "$ROOT/safrano9999/KACHELMANN"
 fi
 

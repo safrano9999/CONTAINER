@@ -181,3 +181,4 @@ KACHELMANN_MOTIVATION=0
 #default-preset: 1
 # Initial STATUS.pdf setting. It remains controllable in the WebUI Config tab.
 KACHELMANN_STATUS_PDF=1
+

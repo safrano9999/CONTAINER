@@ -1,17 +1,20 @@
 # fedora44-ai-safrano9999
 
 `ghcr.io/safrano9999/fedora44-ai-safrano9999` is built directly from
-`fedora44-ai-base`. Its Containerfile adds only the eleven repositories listed
-in `image/contributions.tsv`, their requirements and services, and the final
-OpenClaw contribution hook.
+`fedora44-ai-base`. `EXTENSIONS` and `STANDALONE` in `build.conf` are the only
+repository lists used for source synchronization, requirements, source
+manifests, and owner runtime overlays.
 
-Repositories use the same optional, fail-closed `fedora44-ai-container/`
-contract documented by the Base layer for build, rootfs, systemd, and runtime
-contributions.
+Preparation safely merges each selected repository's rootfs-shaped
+`image/runtime/` directory directly from the exact synchronized checkout and
+generates a file manifest plus systemd enable list. Optional owner entrypoints
+at `image/buildtime/host/run` and `image/buildtime/container/run` use the same
+generic contract for every repository; inherited container hooks are rerun
+against this layer's cumulative examples. OpenClaw manifests are discovered by
+the shared Ephemeral integrator.
 
-The VikAI bootstrap is a separate oneshot service ordered after the fresh
-Core OpenClaw configuration and before the Safrano contribution hook. Partial
-VikAI token configuration fails explicitly; no tokens make it a no-op.
+The VikAI bootstrap helper and service remain owned by VikAI; this layer
+contains no local service or runtime copy.
 
 The cumulative `fedora44-ai-safrano9999.*_example` triple is generated from
 the Safrano additional triple, the current Base triple, and the repositories

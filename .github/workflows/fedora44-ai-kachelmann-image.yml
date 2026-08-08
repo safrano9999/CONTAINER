@@ -85,7 +85,7 @@ jobs:
       - name: Prepare KACHELMANN build context
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
-        run: fedora44-ai-kachelmann/prepare-build-context.sh --no-cache
+        run: fedora44-ai-kachelmann/build/prepare-build-context.sh --no-cache
 
       - name: Resolve KACHELMANN build configuration
         id: kachelmann_build
@@ -164,8 +164,7 @@ jobs:
             done
             systemctl is-enabled \
               fedora44-ai.service openclaw-config.service openclaw.service \
-              hermes.service openclaw-safrano9999-base.service \
-              openclaw-kachelmann.service kachelmann-webui.service \
+              hermes.service kachelmann-webui.service \
               kachelmann-mcp.service
           '
           test "$(

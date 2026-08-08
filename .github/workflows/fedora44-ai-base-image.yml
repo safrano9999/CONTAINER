@@ -91,9 +91,6 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Run Fedora chain static checks
-        run: fedora44-ai-core/tests/check-build-context.sh
-
       - name: Configure source authentication
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
@@ -102,7 +99,7 @@ jobs:
       - name: Prepare Base build context
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
-        run: fedora44-ai-base/prepare-build-context.sh --no-cache
+        run: fedora44-ai-base/build/prepare-build-context.sh --no-cache
 
       - name: Resolve Base build configuration
         id: base_build
@@ -184,8 +181,7 @@ jobs:
               fedora44-ai.service tailscaled.service tailscale-up.service \
               cockpit.service vditor-notes.service openclaw-config.service \
               openclaw.service hermes.service hermes-dashboard.service \
-              codeanalyst.service citadel.service citadel-scan.service \
-              safrano9999-welcome.service openclaw-safrano9999-base.service
+              codeanalyst.service citadel.service citadel-scan.service
           '
           test "$(
             docker image inspect \

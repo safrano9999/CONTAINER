@@ -7,6 +7,10 @@ fedora44-ai/services/__pycache__/
 .tag
 /openclaw-deterministic-patch/
 /.resolved-build.env
+/.fedora44-ai-repositories.list
+/.fedora44-runtime/
+/.fedora44-image-runtime/
+/.fedora44-image-buildtime/
 /.safrano9999-source-tags.tsv
 /.fedora44-ai-base-source-tags.tsv
 env.example
@@ -34,5 +38,4 @@ services/runtime-pass-environment.local.conf
 /safrano9999/
 /shared-scripts/
 /srv/
-/ref.conf
 /CONTAINER/

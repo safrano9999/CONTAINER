@@ -1,7 +1,6 @@
 ARG AI_CORE_IMAGE
 FROM ${AI_CORE_IMAGE} AS ai-base
 
-ARG NEXTCLOUD_PLUGIN_SHA256
 ARG FEDORA44_AI_BASE_SOURCE_KEY
 
 LABEL org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
@@ -17,38 +16,25 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /requirements.base.txt \
  && pip check
 
-ENV SAFRANO9999_STAGE_DIR=/opt/safrano9999/.stage
 COPY .fedora44-ai-base-source-tags.tsv /README/fedora44-ai-base-source-tags.tsv
-COPY safrano9999/WELCOME ${SAFRANO9999_STAGE_DIR}/WELCOME
-COPY safrano9999/CODEANALYST ${SAFRANO9999_STAGE_DIR}/CODEANALYST
-COPY safrano9999/CITADEL ${SAFRANO9999_STAGE_DIR}/CITADEL
-COPY safrano9999/DIESDAS- ${SAFRANO9999_STAGE_DIR}/DIESDAS-
-COPY safrano9999/NEXTCLOUD ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD
-COPY safrano9999/safrano9999-paper /opt/safrano9999/safrano9999-paper
-COPY ref.base.conf ${SAFRANO9999_STAGE_DIR}/WELCOME/ref.conf
+COPY .fedora44-ai-repositories.list /usr/local/share/fedora44-ai/base-repositories.list
+COPY .fedora44-runtime/manifest.tsv /README/fedora44-ai-base-runtime-assets.tsv
+COPY .fedora44-image-runtime/manifest.tsv /usr/local/share/fedora44-ai/base-runtime-files.tsv
+COPY .fedora44-image-runtime/systemd-enable.list /usr/local/share/fedora44-ai/base-systemd-enable.list
+COPY .fedora44-image-runtime/rootfs/ /
 
-RUN mkdir -p /tmp/nextcloud-runtime \
- && test -n "${NEXTCLOUD_PLUGIN_SHA256}" \
- && curl -fsSL https://github.com/safrano9999/NEXTCLOUD/releases/download/latest/nextcloud-fedora64-plugin-latest.zip \
-      -o /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip \
- && echo "${NEXTCLOUD_PLUGIN_SHA256}  /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip" \
-      | sha256sum -c - \
- && unzip -q /tmp/nextcloud-runtime/nextcloud-fedora64-plugin-latest.zip 'runtime/*' \
-      -d ${SAFRANO9999_STAGE_DIR}/NEXTCLOUD \
+COPY safrano9999/ /opt/safrano9999/
+
+COPY .fedora44-runtime/nextcloud-fedora64-plugin-latest.zip \
+     .fedora44-runtime/nextcloud-fedora64-plugin-latest.zip.sha256 \
+     /tmp/nextcloud-runtime/
+RUN cd /tmp/nextcloud-runtime \
+ && sha256sum --check --strict nextcloud-fedora64-plugin-latest.zip.sha256 \
+ && rm -rf /opt/safrano9999/NEXTCLOUD/runtime \
+ && unzip -q nextcloud-fedora64-plugin-latest.zip 'runtime/*' \
+      -d /opt/safrano9999/NEXTCLOUD \
+ && test -x /opt/safrano9999/NEXTCLOUD/runtime/opt/nextcloudcmd/bin/nextcloudcmd \
  && rm -rf /tmp/nextcloud-runtime
-
-COPY image/runtime.d/openclaw_common.py /usr/local/bin/openclaw_common.py
-COPY image/runtime.d/safrano9999_plugins.py /usr/local/bin/safrano9999_plugins.py
-COPY image/runtime.d/openclaw-layer-runtime.py /usr/local/bin/openclaw-layer-runtime
-COPY image/build.d/openclaw-layer-build.py /usr/local/bin/openclaw-layer-build
-COPY image/runtime.d/python_header.py /usr/local/bin/python_header.py
-COPY image/runtime.d/openai_v1.py /usr/local/bin/openai_v1.py
-COPY image/runtime.d/readme_welcome.py /usr/local/bin/safrano9999-welcome
-COPY image/runtime.d/openclaw-crontabs.sh /usr/local/bin/openclaw-crontabs
-COPY image/runtime.d/openclaw-allow-all.mjs /usr/local/bin/openclaw-allow-all
-COPY image/build.d/apply-contributions.sh /usr/local/libexec/fedora44-ai/apply-contributions
-COPY image/contributions.tsv /usr/local/share/fedora44-ai/base-contributions.tsv
-COPY image/openclaw-crontab /usr/local/share/fedora44-ai/base-openclaw-crontab
 
 RUN test -f /opt/safrano9999/safrano9999-paper/paper.pdf \
  && ln -sfnT \
@@ -57,22 +43,6 @@ RUN test -f /opt/safrano9999/safrano9999-paper/paper.pdf \
  && ln -sfnT \
       /opt/safrano9999/safrano9999-paper/paper.pdf \
       /README/paper.pdf
-
-RUN chmod 0755 \
-      /usr/local/bin/openclaw-layer-runtime \
-      /usr/local/bin/openclaw-layer-build \
-      /usr/local/bin/safrano9999_plugins.py \
-      /usr/local/bin/safrano9999-welcome \
-      /usr/local/bin/openclaw-crontabs \
-      /usr/local/bin/openclaw-allow-all \
-      /usr/local/libexec/fedora44-ai/apply-contributions \
- && /usr/local/libexec/fedora44-ai/apply-contributions \
-      --stage "${SAFRANO9999_STAGE_DIR}" \
-      --root /opt/safrano9999 \
-      --image-root / \
-      --manifest /usr/local/share/fedora44-ai/base-contributions.tsv \
-      --crontab-file /usr/local/share/fedora44-ai/base-openclaw-crontab \
- && rm -rf "${SAFRANO9999_STAGE_DIR}"
 
 RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
  && if [ -d /opt/safrano9999/CITADEL/extensions/disabled/subnet ]; then \
@@ -85,26 +55,23 @@ RUN mkdir -p /opt/safrano9999/CITADEL/extensions/enabled \
     fi \
  && chmod 0755 /opt/safrano9999/CITADEL/scan.sh
 
+COPY .fedora44-image-buildtime/ /tmp/fedora44-image-buildtime/
+COPY build/run-container-buildtime.sh /tmp/fedora44-image-buildtime/run-container-buildtime
+RUN --network=none \
+    /tmp/fedora44-image-buildtime/run-container-buildtime \
+      /tmp/fedora44-image-buildtime \
+      fedora44-ai-base \
+      /opt/safrano9999 \
+ && rm -rf /tmp/fedora44-image-buildtime \
+ && rm -rf /opt/safrano9999/*/image/runtime
+
 RUN /usr/local/bin/openclaw-ephemeral.py configure \
- && /usr/local/bin/openclaw-layer-build \
-      --repos WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
  && find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
 
-COPY image/systemd/ /etc/systemd/system/
-RUN install -m 0644 \
-      /opt/safrano9999/NEXTCLOUD/systemd/nextcloud-sync@.service \
-      /etc/systemd/system/nextcloud-sync@.service \
- && install -m 0755 \
-      /opt/safrano9999/NEXTCLOUD/systemd/nextcloud-timer-generator \
-      /usr/lib/systemd/system-generators/nextcloud-timer-generator \
- && sed -i 's#file:///app/dist/#file:///usr/local/lib/node_modules/openclaw/dist/#' \
-      /usr/local/bin/openclaw-allow-all \
- && systemctl enable \
-      codeanalyst.service \
-      citadel.service \
-      citadel-scan.service \
-      safrano9999-welcome.service \
-      openclaw-safrano9999-base.service
+RUN while IFS= read -r unit || [ -n "$unit" ]; do \
+      [ -n "$unit" ] || continue; \
+      systemctl enable "$unit"; \
+    done < /usr/local/share/fedora44-ai/base-systemd-enable.list
 
 USER root
 WORKDIR /root

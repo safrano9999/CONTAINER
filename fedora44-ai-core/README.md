@@ -9,9 +9,9 @@ fedora44-ai-core-pre -> fedora44-ai-core -> fedora44-ai-base -> fedora44-ai-safr
 
 The heavy generic Fedora 44 packages, toolchains, OpenClaw/Hermes installations,
 and third-party command-line tools live in `fedora44-ai-core-pre`. Core imports
-the pinned deterministic OpenClaw distribution, eight `openclaw_ephemeral`
+the pinned deterministic OpenClaw distribution, ten `openclaw_ephemeral`
 runtime files, the pinned NOTE release, and the OpenClaw/Hermes runtime units.
-`prepare-build-context.sh` verifies and stages those inputs below ignored
+`build/prepare-build-context.sh` verifies and stages those inputs below ignored
 `build/vendor/`; the Containerfile verifies the release assets again and
 installs them directly into the Fedora-native npm and Python runtimes inherited
 from Core-pre. No Debian or Ephemeral container image is used as a build
@@ -36,16 +36,10 @@ and Safrano add their disjoint repository sets in later layers.
 Prepare or build locally with:
 
 ```bash
-./prepare-build-context.sh
-./build-local.sh
+./build/prepare-build-context.sh
+./build/build-local.sh
 ```
 
 `./setup.sh` renders per-instance Compose and Quadlet files below
 `CONTAINER/<name>/`. Use `--config-only`, `--pull`, or `--build` for
 noninteractive operation; an interactive run defaults to the local build.
-
-The Core build-context check is:
-
-```bash
-./tests/check-build-context.sh
-```

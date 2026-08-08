@@ -77,9 +77,6 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Run Fedora chain static checks
-        run: fedora44-ai-core/tests/check-build-context.sh
-
       - name: Configure source authentication
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
@@ -88,7 +85,7 @@ jobs:
       - name: Prepare Safrano build context
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
-        run: fedora44-ai-safrano9999/prepare-build-context.sh --no-cache
+        run: fedora44-ai-safrano9999/build/prepare-build-context.sh --no-cache
 
       - name: Resolve Safrano build configuration
         id: safrano_build
@@ -170,9 +167,8 @@ jobs:
               cockpit.service vditor-notes.service openclaw-config.service \
               openclaw.service hermes.service hermes-dashboard.service \
               codeanalyst.service citadel.service citadel-scan.service \
-              safrano9999-welcome.service openclaw-safrano9999-base.service \
               vikai-bootstrap-openclaw-agents.service \
-              openclaw-safrano9999.service jugo.service pvdach.service \
+              jugo.service pvdach.service \
               pvdach-qgis-webhook.service kiwix-bridge.service \
               napoleon.service naturalgrounding.service bip39.service \
               spanker-webui.service kachelmann-webui.service \

@@ -70,17 +70,10 @@ RUN set -euo pipefail; \
     node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"; \
     find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
 
-COPY build/services/vditor-notes/ /usr/local/lib/vditor-notes/
-
-# Runtime order is owned here: named-volume projection, Tailscale, Cockpit,
-# Vditor, fresh OpenClaw configuration/gateway, then Hermes.
-COPY image/runtime.d/fedora44-ai-init.sh /usr/local/bin/fedora44-ai-init
-COPY image/runtime.d/fedora44-runtime-environment-generator.sh /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator
-COPY image/runtime.d/hermes-ephemeral.py /usr/local/bin/hermes-ephemeral.py
-COPY image/runtime.d/named_volume_links.sh image/runtime.d/named_volume_links_openclaw.sh \
-     image/runtime.d/named_volume_links_hermes.sh config/optional_persistence.sh \
-     image/runtime.d/tailscale-state-up.sh /usr/local/bin/
-COPY image/systemd/ /etc/systemd/system/
+# Runtime order added here: named-volume projection, Vditor, fresh OpenClaw
+# configuration/gateway, then Hermes. Generic host services come from Core-pre.
+COPY image/runtime/ /
+COPY config/optional_persistence.sh /usr/local/bin/optional_persistence.sh
 
 RUN chmod 0755 \
       /usr/local/bin/fedora44-ai-init \
@@ -89,21 +82,16 @@ RUN chmod 0755 \
       /usr/local/bin/named_volume_links_openclaw.sh \
       /usr/local/bin/named_volume_links_hermes.sh \
       /usr/local/bin/optional_persistence.sh \
-      /usr/local/bin/tailscale-state-up.sh \
       /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator \
  && mkdir -p /usr/local/share/fedora44-ai/init.d \
  && systemctl enable \
       fedora44-ai.service \
-      tailscaled.service \
-      tailscale-up.service \
-      cockpit.service \
       vditor-notes.service \
       openclaw-config.service \
       openclaw.service \
+      openclaw-ephemeral-schedule.service \
       hermes.service \
-      hermes-dashboard.service \
- && systemctl mask cockpit.socket \
- && sed -i '1i auth       sufficient   pam_permit.so' /etc/pam.d/cockpit
+      hermes-dashboard.service
 
 USER root
 WORKDIR /root

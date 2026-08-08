@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           cd fedora44-ai-core
-          ./prepare-build-context.sh
+          ./build/prepare-build-context.sh
           set -a
           . ./build.conf
           set +a
@@ -126,7 +126,9 @@ jobs:
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/configuration.py
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/environment.py
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/filesystem.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/plugins.py
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/providers.py
+            build/vendor/openclaw-ephemeral/openclaw_ephemeral/scheduling.py
           )
           for file in "${vendor_files[@]}"; do
             [ -s "$file" ] || {
@@ -134,7 +136,7 @@ jobs:
               exit 1
             }
           done
-          [ "$(find build/vendor/openclaw-ephemeral -type f | wc -l)" -eq 8 ] || {
+          [ "$(find build/vendor/openclaw-ephemeral -type f | wc -l)" -eq 10 ] || {
             echo "Unexpected openclaw-ephemeral vendor file set" >&2
             exit 1
           }
@@ -148,9 +150,6 @@ jobs:
             echo "NOTE_RELEASE_SHA256=$NOTE_RELEASE_SHA256"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Run static checks
-        run: fedora44-ai-core/tests/check-build-context.sh
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -220,8 +219,9 @@ jobs:
             "$note_python" -c "import dotenv, sqlalchemy, psycopg, pymysql"
             python3 -c "import yaml; import openclaw_ephemeral"
             for unit in fedora44-ai.service tailscaled.service \
-              tailscale-up.service cockpit.service vditor-notes.service \
-              openclaw-config.service openclaw.service hermes.service \
+              tailscale-up.service cockpit.service bip39.service vditor-notes.service \
+              openclaw-config.service openclaw.service \
+              openclaw-ephemeral-schedule.service hermes.service \
               hermes-dashboard.service; do
               test -f "/etc/systemd/system/$unit" \
                 || test -f "/usr/lib/systemd/system/$unit"

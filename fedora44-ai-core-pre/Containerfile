@@ -106,6 +106,19 @@ RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
  && rm -f /usr/lib/systemd/system/basic.target.wants/* \
  && rm -f /usr/lib/systemd/system/anaconda.target.wants/*
 
+# Generic systemd runtime owned by Core-pre. Higher layers only add the
+# services tied to their own runtime configuration.
+COPY image/runtime/ /
+
+RUN chmod 0755 /usr/local/bin/tailscale-state-up.sh \
+ && systemctl enable \
+      tailscaled.service \
+      tailscale-up.service \
+      cockpit.service \
+      bip39.service \
+ && systemctl mask cockpit.socket \
+ && sed -i '1i auth       sufficient   pam_permit.so' /etc/pam.d/cockpit
+
 RUN mkdir -p /tmp/runtime-root \
  && chmod 700 /tmp/runtime-root
 

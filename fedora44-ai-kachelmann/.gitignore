@@ -9,6 +9,10 @@ fedora44-ai/services/__pycache__/
 .tag
 /openclaw-deterministic-patch/
 /.resolved-build.env
+/.fedora44-ai-repositories.list
+/.fedora44-runtime/
+/.fedora44-image-runtime/
+/.fedora44-image-buildtime/
 /.kachelmann-source-tags.tsv*
 /.fedora44-ai-base-source-tags.tsv*
 env.example

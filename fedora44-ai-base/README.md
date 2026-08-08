@@ -1,30 +1,26 @@
 # fedora44-ai-base
 
 `ghcr.io/safrano9999/fedora44-ai-base` is built directly from
-`fedora44-ai-core`. Its Containerfile adds only the five repositories listed in
-`image/contributions.tsv`, their requirements, Base services, and the Base
-OpenClaw contribution hook.
+`fedora44-ai-core`. `EXTENSIONS` and `STANDALONE` in `build.conf` are the only
+repository lists used by build preparation. `EXTENSIONS` contains OpenClaw
+manifest repositories; `STANDALONE` contains complete application repositories.
 
-`prepare-build-context.sh` stages those repositories plus
-`safrano9999-paper` into the ignored `safrano9999/` directory and records
-immutable source commits. The Containerfile retains the paper source and links
-its versioned `paper.pdf` into the ephemeral `/README` directory. The
-contribution runner is deterministic and idempotent; it does not clone or
-download during the image build.
+`build/prepare-build-context.sh` syncs exactly those repositories into the ignored
+`safrano9999/` directory, records immutable source commits, merges their Python
+requirements, and directly merges each owner's rootfs-shaped `image/runtime/`
+tree. Unsafe paths, symlinks, unsupported types, permission conflicts, and
+cross-repository file collisions fail preparation. The resulting file manifest
+and systemd enable list are included in the image. An owner may contribute the
+same generic `image/buildtime/host/run` or `image/buildtime/container/run`
+entrypoint as any other repository; those hooks receive only the common
+buildtime environment. NEXTCLOUD's separate Fedora runtime plugin remains an
+authenticated, checksummed release asset.
 
-Each listed repository may own an optional `fedora44-ai-container/` directory.
-The contribution runner applies it in this fixed order:
-
-1. `rootfs/` is copied onto the image root.
-2. Units in `systemd/` are installed and their `[Install] WantedBy=` links are
-   created.
-3. Executable `.sh` or `.py` files from `runtime.d/` are installed into the
-   Core init directory with a repository-name prefix.
-4. Executable `.sh` or `.py` files from `build.d/` run lexically with
-   `FEDORA44_AI_REPOSITORY_DIR` and `FEDORA44_AI_IMAGE_ROOT`.
-
-Symlinks, special files, unsafe names, unsupported executable types, and
-non-executable hooks fail the image build.
+The Containerfile retains `safrano9999-paper`, links its `paper.pdf` into
+`/README`, and runs every installed repository's generic container-buildtime
+entrypoint. Applied `image/runtime/` trees are removed afterward;
+`image/buildtime/` remains available to downstream image layers so the same
+owner hooks can consume each layer's cumulative examples.
 
 The cumulative `fedora44-ai-base.*_example` triple is generated from the
 Base additional triple, the current Core triple, and the repositories listed

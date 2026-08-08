@@ -94,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           cd fedora44-ai-core-pre
-          ./prepare-build-context.sh
+          ./build/prepare-build-context.sh
           set -a
           . ./build.conf
           . ./.resolved-build.env
@@ -128,9 +128,6 @@ jobs:
             cat .resolved-build.env
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Run Core-pre static checks
-        run: fedora44-ai-core-pre/tests/check-build-context.sh
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

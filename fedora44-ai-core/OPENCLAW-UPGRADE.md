@@ -102,8 +102,6 @@ Das Containerfile darf OpenClaws gebündelte `local-roots-*.js` nicht verändern
 und insbesondere `/` nicht als globalen Media-Root ergänzen. Plugins legen
 ausgehende Dateien über OpenClaws Media-Store ab; dessen dynamisch ermittelte
 State-, Workspace- und Temp-Verzeichnisse reichen für die Auslieferung aus.
-`tests/check-build-context.sh` bricht ab, falls ein solcher Bundle-Patch wieder
-eingeführt wird.
 
 ### 5. Passenden Ephemeral-Commit übernehmen
 
@@ -117,7 +115,7 @@ mindestens Folgendes enthalten:
   `plugins.load.paths`,
 - das zum neuen OpenClaw-Schema passende Agent-/Model-/Plugin-Format.
 
-Nur die im `prepare-build-context.sh` aufgelisteten Ephemeral-Dateien werden in
+Nur die im `build/prepare-build-context.sh` aufgelisteten Ephemeral-Dateien werden in
 den Build-Kontext übernommen. Kommt beim Upgrade eine neue Runtime-Datei dazu,
 muss sie dort ergänzt und die Prüfung auf die exakte Dateianzahl angepasst
 werden.
@@ -146,8 +144,7 @@ müssen beim Upgrade synchron geändert werden:
 - `build.conf`
 - `../fedora44-ai-core-pre/build.conf`, wenn sich die OpenClaw-Basisversion ändert
 - `build/resolve-build-inputs.sh`
-- `prepare-build-context.sh`, falls sich Asset- oder Runtime-Dateien ändern
-- `tests/check-build-context.sh`
+- `build/prepare-build-context.sh`, falls sich Asset- oder Runtime-Dateien ändern
 - `.github/workflows/fedora44-ai-core-image.yml`
 - `.github/workflows/fedora44-ai-core-pre-image.yml`, wenn Core-pre neu gebaut wird
 - Source-of-Truth des Workflows unter

@@ -2,4 +2,4 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "$ROOT/image/setup.d/layer-setup.sh" "$@"
+exec bash "$ROOT/config/layer-setup.sh" "$@"

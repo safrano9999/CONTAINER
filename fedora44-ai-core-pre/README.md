@@ -11,14 +11,16 @@ It contains only the generic Fedora/toolchain payload: system packages,
 Node/Python tooling, the unconfigured OpenClaw and Hermes installations,
 Codex/Claude CLIs, media/network utilities, and the generic blockchain tools.
 It contains no `/opt/safrano9999` project tree, NOTE release, ephemeral runtime
-configuration, or enabled Safrano services.
+configuration, or project-specific Safrano services. Its `image/runtime/`
+overlay owns the generic Tailscale, Cockpit, Cloudflare connector, and BIP39
+systemd integration inherited by every higher layer.
 
 `fedora44-ai-core` adds the comparatively small and frequently changed layer:
 the deterministic OpenClaw overlay, `openclaw-ephemeral`, NOTE, Hermes/OpenClaw
-configuration generators, and their systemd runtime units.
+configuration generators, and their project-aware systemd runtime units.
 
 Local build:
 
 ```bash
-./build-local.sh
+./build/build-local.sh
 ```

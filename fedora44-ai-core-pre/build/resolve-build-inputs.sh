@@ -2,9 +2,14 @@
 set -euo pipefail
 export LC_ALL=C
 
-OUTPUT="${1:-.resolved-build.env}"
-NODE_REQUESTED="${2:-stable}"
-OPENCLAW_REQUESTED="${3:-2026.7.1}"
+if [ "$#" -ne 3 ]; then
+    echo "Usage: resolve-build-inputs.sh OUTPUT NODE_VERSION OPENCLAW_VERSION" >&2
+    exit 2
+fi
+
+OUTPUT="$1"
+NODE_REQUESTED="$2"
+OPENCLAW_REQUESTED="$3"
 
 for command in curl git jq sha256sum; do
     command -v "$command" >/dev/null 2>&1 || {

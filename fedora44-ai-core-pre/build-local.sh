@@ -31,7 +31,7 @@ set +a
 
 for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION ELECTRUM_VERSION \
     LND_VERSION GETH_VERSION GETH_COMMIT WEBHOOK_VERSION VDITOR_VERSION \
-    OPENCLAW_VERSION; do
+    OPENCLAW_VERSION FEDORA44_AI_CORE_PRE_IMAGE; do
     [ -n "${!name:-}" ] || {
         echo "Missing $name in build.conf" >&2
         exit 1
@@ -53,7 +53,6 @@ BUILD_ARGS=(
     --build-arg "GETH_COMMIT=$GETH_COMMIT"
     --build-arg "WEBHOOK_VERSION=$WEBHOOK_VERSION"
     --build-arg "VDITOR_VERSION=$VDITOR_VERSION"
-    --build-arg "OPENCLAW_VERSION=$OPENCLAW_VERSION"
 )
 while IFS='=' read -r key value; do
     [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || {
@@ -64,7 +63,7 @@ while IFS='=' read -r key value; do
 done < "$ROOT/.resolved-build.env"
 $NO_CACHE && BUILD_ARGS+=(--no-cache)
 
-IMAGE="${FEDORA44_AI_CORE_PRE_IMAGE:-localhost/fedora44-ai-core-pre:latest}"
+IMAGE="$FEDORA44_AI_CORE_PRE_IMAGE"
 echo "  Building $IMAGE from $ROOT ..."
 podman build --pull=always "${BUILD_ARGS[@]}" \
     --platform linux/amd64 \

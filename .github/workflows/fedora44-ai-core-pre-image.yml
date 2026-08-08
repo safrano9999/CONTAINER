@@ -50,7 +50,6 @@ jobs:
       packages: write
       actions: write
     env:
-      IMAGE: ghcr.io/safrano9999/fedora44-ai-core-pre
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:
@@ -68,13 +67,22 @@ jobs:
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
           set -euo pipefail
+          set -a
+          . fedora44-ai-core-pre/build.conf
+          set +a
+          [ -n "${FEDORA44_AI_CORE_PRE_IMAGE:-}" ] || {
+            echo "Missing FEDORA44_AI_CORE_PRE_IMAGE in build.conf" >&2
+            exit 1
+          }
           version="$REQUESTED_TAG"
           [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
+          image="${FEDORA44_AI_CORE_PRE_IMAGE%:*}"
           {
             echo "version=$version"
+            echo "image=$image"
             echo "tags<<EOF"
-            echo "${IMAGE}:${version}"
-            [ "$PUSH_LATEST" != true ] || echo "${IMAGE}:latest"
+            echo "${image}:${version}"
+            [ "$PUSH_LATEST" != true ] || echo "${image}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -161,7 +169,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="${IMAGE}:${IMAGE_TAG}"
+          image="${{ steps.tags.outputs.image }}:${IMAGE_TAG}"
           docker pull "$image"
           docker run --rm \
             -e EXPECTED_OPENCLAW_VERSION \

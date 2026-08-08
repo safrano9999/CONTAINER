@@ -59,7 +59,7 @@ for argument in "$@"; do
 done
 
 finish() {
-    python3 "$ROOT/quadlet_finish.py" \
+    python3 "$ROOT/config/quadlet_finish.py" \
         "$INSTANCE_DIR/$COMPOSE_FILE" \
         "$INSTANCE_DIR/$QUADLET_FILE" \
         "$INSTANCE"
@@ -103,11 +103,11 @@ ensure_ghcr_login() {
 
 instance_arguments=(
     "$ROOT"
-    --config "$ROOT/config.sh"
+    --config "$ROOT/config/config.sh"
     --default-name "$DEFAULT_INSTANCE"
 )
 [ -z "$INSTANCE" ] || instance_arguments+=(--name "$INSTANCE")
-INSTANCE_DIR="$(python3 "$ROOT/container-instance-setup.py" "${instance_arguments[@]}")"
+INSTANCE_DIR="$(python3 "$ROOT/config/container-instance-setup.py" "${instance_arguments[@]}")"
 INSTANCE="${INSTANCE_DIR##*/}"
 ENV_FILE="$INSTANCE.env"
 CONFIG_FILE="${INSTANCE}_config.conf"

@@ -9,7 +9,7 @@ bash -n \
     "$ROOT/build-local.sh" \
     "$ROOT/prepare-build-context.sh" \
     "$ROOT/setup.sh" \
-    "$ROOT/optional_persistence.sh" \
+    "$ROOT/config/optional_persistence.sh" \
     "$ROOT"/image/runtime.d/*.sh \
     "$0"
 

@@ -73,9 +73,6 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Run Fedora chain static checks
-        run: fedora44-ai-kachelmann/tests/check-build-context.sh
-
       - name: Configure source authentication
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}

@@ -44,7 +44,7 @@ Prepare or build locally with:
 `CONTAINER/<name>/`. Use `--config-only`, `--pull`, or `--build` for
 noninteractive operation; an interactive run defaults to the local build.
 
-The complete static and noninteractive chain check is:
+The Core build-context check is:
 
 ```bash
 ./tests/check-build-context.sh

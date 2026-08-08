@@ -42,12 +42,27 @@ if ! $OFFLINE; then
         "$ROOT/safrano9999/KACHELMANN"
 fi
 
-(
-    cd "$ROOT"
-    FEDORA44_AI_EXAMPLE_DIRS="$ROOT/examples.d/core:$ROOT/examples.d/base" \
-        bash "$ROOT/merge.sh" "${REPOS[@]}"
-)
-mv -f -- "$ROOT/requirements.txt" "$ROOT/requirements.kachelmann.txt"
+requirement_files=()
+for specification in "${REPOS[@]}"; do
+    repository="${specification%@*}"
+    source="$ROOT/safrano9999/$repository/requirements.txt"
+    [ ! -f "$source" ] || requirement_files+=("$source")
+done
+if [ "${#requirement_files[@]}" -eq 0 ]; then
+    : > "$ROOT/requirements.kachelmann.txt"
+else
+    awk '
+    {
+        stripped = $0
+        sub(/^[[:space:]]+/, "", stripped)
+        if (stripped == "" || substr(stripped, 1, 1) == "#") { print; next }
+        match(stripped, /^[A-Za-z0-9._-]+/)
+        if (RSTART == 0) { print; next }
+        key = tolower(substr(stripped, RSTART, RLENGTH))
+        if (!(key in seen)) { seen[key] = 1; print }
+    }
+    ' "${requirement_files[@]}" > "$ROOT/requirements.kachelmann.txt"
+fi
 bash "$ROOT/image/build.d/resolve-build-inputs.sh" \
     "$ROOT/.resolved-build.env" \
     "$ROOT/.kachelmann-source-tags.tsv"

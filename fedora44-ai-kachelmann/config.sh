@@ -4,7 +4,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SQLITE_PERSISTENCE="$SCRIPT_DIR/sqlite_persistence.sh"
 OPTIONAL_PERSISTENCE="$SCRIPT_DIR/optional_persistence.sh"
-if [ -f "$SCRIPT_DIR/env.example" ] || [ -f "$SCRIPT_DIR/config.conf_example" ] || [ -f "$SCRIPT_DIR/container.example" ]; then
+
+directory_has_config_examples() {
+    local directory="$1"
+    local env_example stem
+
+    if [ -f "$directory/env.example" ] || \
+       [ -f "$directory/config.conf_example" ] || \
+       [ -f "$directory/container.example" ]; then
+        return 0
+    fi
+    for env_example in "$directory"/fedora44-ai-*.env_example; do
+        [ -f "$env_example" ] || continue
+        [[ "$env_example" == *-additional.env_example ]] && continue
+        stem="${env_example%.env_example}"
+        if [ -f "$stem.config.conf_example" ] && [ -f "$stem.container_example" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+if directory_has_config_examples "$SCRIPT_DIR"; then
     DIR="$SCRIPT_DIR"
 else
     DIR="$(pwd)"
@@ -20,6 +41,55 @@ CONTAINER_NAME_MODE=false
 CONFIG_SHOW=""
 NO_CONTAINER=false
 RENDER_CONTAINER_ONLY=false
+
+ENV_EXAMPLE=""
+CONFIG_EXAMPLE=""
+CONTAINER_EXAMPLE=""
+FEDORA_CUMULATIVE_EXAMPLES=false
+
+select_config_examples() {
+    local directory="$1"
+    local env_example stem
+    local -a fedora_stems=()
+
+    for env_example in "$directory"/fedora44-ai-*.env_example; do
+        [ -f "$env_example" ] || continue
+        [[ "$env_example" == *-additional.env_example ]] && continue
+        stem="${env_example%.env_example}"
+        [ -f "$stem.config.conf_example" ] || continue
+        [ -f "$stem.container_example" ] || continue
+        fedora_stems+=("$stem")
+    done
+
+    if [ "${#fedora_stems[@]}" -gt 1 ]; then
+        echo "Multiple cumulative Fedora example triples found in $directory" >&2
+        printf '  %s\n' "${fedora_stems[@]##*/}" >&2
+        return 1
+    fi
+    if [ "${#fedora_stems[@]}" -eq 1 ]; then
+        FEDORA_CUMULATIVE_EXAMPLES=true
+        ENV_EXAMPLE="${fedora_stems[0]}.env_example"
+        CONFIG_EXAMPLE="${fedora_stems[0]}.config.conf_example"
+        CONTAINER_EXAMPLE="${fedora_stems[0]}.container_example"
+        return 0
+    fi
+
+    [ -f "$directory/env.example" ] && ENV_EXAMPLE="$directory/env.example"
+    [ -f "$directory/config.conf_example" ] && CONFIG_EXAMPLE="$directory/config.conf_example"
+    [ -f "$directory/container.example" ] && CONTAINER_EXAMPLE="$directory/container.example"
+    [ -n "$ENV_EXAMPLE$CONFIG_EXAMPLE$CONTAINER_EXAMPLE" ]
+}
+
+select_config_examples "$DIR" || {
+    echo "No cumulative Fedora example triple or generic example files found in $DIR" >&2
+    exit 1
+}
+
+config_example_files() {
+    [ -z "$ENV_EXAMPLE" ] || printf '%s\n' "$ENV_EXAMPLE"
+    [ -z "$CONFIG_EXAMPLE" ] || printf '%s\n' "$CONFIG_EXAMPLE"
+    [ -z "$CONTAINER_EXAMPLE" ] || printf '%s\n' "$CONTAINER_EXAMPLE"
+}
 
 declare -A REPEAT_GROUP_MODES=()
 declare -A REPEAT_GROUP_INDEXES=()
@@ -119,7 +189,7 @@ discover_podman_host_internal_ip() {
 configure_container_name() {
     local example default_name="" value="${CONFIG_CONTAINER_NAME:-}"
 
-    for example in "$DIR"/*example; do
+    while IFS= read -r example || [ -n "$example" ]; do
         [ -f "$example" ] || continue
         grep -qx '#CONTAINER-NAME' "$example" || continue
         default_name="$(awk '
@@ -127,7 +197,7 @@ configure_container_name() {
             active && $0 ~ /^CONTAINER_NAME=/ { sub(/^[^=]*=/, ""); print; exit }
         ' "$example")"
         break
-    done
+    done < <(config_example_files)
     [ -n "$default_name" ] || return 0
     CONTAINER_NAME_MODE=true
 
@@ -160,8 +230,7 @@ read_kv_file() {
         stripped="$(trim "$line")"
         [[ -z "$stripped" || "$stripped" == \#* ]] && continue
 
-        entry="${line%%#*}"
-        entry="$(trim "$entry")"
+        entry="$(trim "$line")"
         [[ "$entry" == *=* ]] || continue
 
         key="$(trim "${entry%%=*}")"
@@ -185,9 +254,12 @@ config_value() {
         read_kv_file "$file" "$key" && return 0
     done
     if [ "$NO_CONTAINER" != "true" ]; then
-        read_kv_file "$DIR/container.example" "$key" && return 0
+        if [ -n "$CONTAINER_EXAMPLE" ]; then
+            read_kv_file "$CONTAINER_EXAMPLE" "$key" && return 0
+        fi
     fi
-    for file in "$DIR/config.conf_example" "$DIR/env.example"; do
+    for file in "$CONFIG_EXAMPLE" "$ENV_EXAMPLE"; do
+        [ -n "$file" ] || continue
         read_kv_file "$file" "$key" && return 0
     done
     return 1
@@ -593,6 +665,7 @@ add_repo_sot_file_mounts() {
 }
 
 initialize_sqlite_persistence() {
+    $FEDORA_CUMULATIVE_EXAMPLES && return 0
     [ -x "$SQLITE_PERSISTENCE" ] || return 0
     if find -H "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
         "$SQLITE_PERSISTENCE" init --repo-root "$DIR/safrano9999" --config-dir "$DIR"
@@ -603,6 +676,7 @@ initialize_sqlite_persistence() {
 
 add_sqlite_volume_mounts() {
     local item source
+    $FEDORA_CUMULATIVE_EXAMPLES && return 0
     [ -x "$SQLITE_PERSISTENCE" ] || return 0
 
     if find -H "$DIR/safrano9999" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null | grep -q .; then
@@ -668,7 +742,6 @@ rewrite_config_with_comments() {
         } else if (substr(entry, 1, 1) == "#") {
             return 0
         }
-        sub(/#.*/, "", entry)
         entry = trim(entry)
         if (entry !~ /^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/) return 0
         parsed["key"] = entry
@@ -1797,23 +1870,23 @@ project_image() {
 config_source_files() {
     if [ -f "$CONFIG_FILE" ]; then
         printf '%s\n' "$CONFIG_FILE"
-    elif [ -f "$DIR/config.conf_example" ]; then
-        printf '%s\n' "$DIR/config.conf_example"
+    elif [ -n "$CONFIG_EXAMPLE" ] && [ -f "$CONFIG_EXAMPLE" ]; then
+        printf '%s\n' "$CONFIG_EXAMPLE"
     fi
     if [ "$NO_CONTAINER" != "true" ]; then
         if [ -f "$CONTAINER_FILE" ]; then
             printf '%s\n' "$CONTAINER_FILE"
-        elif [ -f "$DIR/container.example" ]; then
-            printf '%s\n' "$DIR/container.example"
+        elif [ -n "$CONTAINER_EXAMPLE" ] && [ -f "$CONTAINER_EXAMPLE" ]; then
+            printf '%s\n' "$CONTAINER_EXAMPLE"
         fi
     fi
 }
 
 mount_if_source_files() {
-    [ -f "$DIR/env.example" ] && printf '%s\n' "$DIR/env.example"
-    [ -f "$DIR/config.conf_example" ] && printf '%s\n' "$DIR/config.conf_example"
-    if [ "$NO_CONTAINER" != "true" ] && [ -f "$DIR/container.example" ]; then
-        printf '%s\n' "$DIR/container.example"
+    [ -z "$ENV_EXAMPLE" ] || printf '%s\n' "$ENV_EXAMPLE"
+    [ -z "$CONFIG_EXAMPLE" ] || printf '%s\n' "$CONFIG_EXAMPLE"
+    if [ "$NO_CONTAINER" != "true" ] && [ -n "$CONTAINER_EXAMPLE" ]; then
+        printf '%s\n' "$CONTAINER_EXAMPLE"
     fi
 }
 
@@ -2121,11 +2194,6 @@ generate_container_files() {
     echo "  Written: $quadlet_file"
 }
 
-if [ ! -f "$DIR/env.example" ] && [ ! -f "$DIR/config.conf_example" ] && [ ! -f "$DIR/container.example" ]; then
-    echo "No env.example, config.conf_example or container.example"
-    exit 1
-fi
-
 echo ""
 echo "  Configuring $PROJECT_NAME"
 
@@ -2145,11 +2213,11 @@ if $CONTAINER_NAME_MODE; then
 fi
 
 for example in "$DIR"/*build.conf_example; do configure_from_example "$example" "$BUILD_FILE" "$(basename "$BUILD_FILE")"; done
-for example in "$DIR"/env*example; do configure_from_example "$example" "$ENV_FILE" "$(basename "$ENV_FILE")"; done
-for example in "$DIR"/config*example; do configure_from_example "$example" "$CONFIG_FILE" "$(basename "$CONFIG_FILE")"; done
+[ -z "$ENV_EXAMPLE" ] || configure_from_example "$ENV_EXAMPLE" "$ENV_FILE" "$(basename "$ENV_FILE")"
+[ -z "$CONFIG_EXAMPLE" ] || configure_from_example "$CONFIG_EXAMPLE" "$CONFIG_FILE" "$(basename "$CONFIG_FILE")"
 if [ "$NO_CONTAINER" != "true" ]; then
     touch "$CONTAINER_FILE"
-    for example in "$DIR"/container*example "$DIR"/config*.container; do configure_from_example "$example" "$CONTAINER_FILE" "$(basename "$CONTAINER_FILE")"; done
+    [ -z "$CONTAINER_EXAMPLE" ] || configure_from_example "$CONTAINER_EXAMPLE" "$CONTAINER_FILE" "$(basename "$CONTAINER_FILE")"
     initialize_sqlite_persistence
     generate_container_files
 else

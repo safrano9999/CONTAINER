@@ -26,11 +26,8 @@ The contribution runner applies it in this fixed order:
 Symlinks, special files, unsafe names, unsupported executable types, and
 non-executable hooks fail the image build.
 
-The example cascade is `examples.d/core` followed by the small Base-owned
-examples in this directory. `setup.sh` stages only Base sources and keeps
-generated instances below `CONTAINER/<name>/`. Use `--offline --config-only`
-to render from already staged sources, or select `--pull`/`--build`
-noninteractively.
-
-Run the whole Fedora chain check from
-`../fedora44-ai-core/tests/check-build-context.sh`.
+The cumulative `fedora44-ai-base.*_example` triple is generated from the
+Base additional triple, the current Core triple, and the repositories listed
+in `fedora44-ai-base-additional.repos`. `setup.sh` uses those local files
+directly and keeps generated instances below `CONTAINER/<name>/`; it performs
+no example download or merge. Use `--config-only`, `--pull`, or `--build`.

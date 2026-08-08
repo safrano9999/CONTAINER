@@ -1,0 +1,6 @@
+BIP39_PORT=11030
+
+#choices: false true
+#default-preset: true
+#named-volume: /named_volumes/KACHELMANN /named_volumes/KACHELMANN/content @KACHELMANN_DIR@/OBSIDIAN/KACHELMANN dir
+KACHELMANN_PERSISTENT=true

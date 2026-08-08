@@ -1,6 +1,0 @@
-#publish-host: FASTAPI_HOST
-#required: FastAPI bind host
-FASTAPI_HOST=127.0.0.1
-
-#required: CODEANALYST internal web UI port
-CODEANALYST_PORT=11010

@@ -2,18 +2,22 @@
 set -euo pipefail
 export LC_ALL=C
 
-ROOT="${FEDORA_LAYER_ROOT:?missing FEDORA_LAYER_ROOT}"
-REGISTRY_IMAGE="${FEDORA_LAYER_REGISTRY_IMAGE:?missing registry image}"
-LOCAL_IMAGE="${FEDORA_LAYER_LOCAL_IMAGE:?missing local image}"
-OUTPUT_IMAGE_KEY="${FEDORA_LAYER_OUTPUT_IMAGE_KEY:?missing output image key}"
-DEFAULT_INSTANCE="${FEDORA_LAYER_DEFAULT_INSTANCE:?missing default instance}"
-EXAMPLE_DIRS="${FEDORA_LAYER_EXAMPLE_DIRS:-}"
-readarray -t REPOS <<< "${FEDORA_LAYER_REPOS:?missing repository list}"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+LAYER="${ROOT##*/}"
+[[ "$LAYER" =~ ^fedora44-ai-[a-z0-9][a-z0-9-]*$ ]] || {
+    echo "Invalid Fedora layer directory: $LAYER" >&2
+    exit 2
+}
+
+REGISTRY_IMAGE="ghcr.io/safrano9999/$LAYER:latest"
+LOCAL_IMAGE="localhost/$LAYER:latest"
+OUTPUT_IMAGE_KEY="$(printf '%s' "$LAYER" | tr '[:lower:]-' '[:upper:]_')_IMAGE"
+DEFAULT_INSTANCE="$LAYER"
 
 NO_CONFIG=false
 NO_BUILD=false
 NO_CACHE=false
-OFFLINE=false
+IMG_CHOICE=""
 INSTANCE="${CONFIG_CONTAINER_NAME:-}"
 
 show_help() {
@@ -21,24 +25,27 @@ show_help() {
 Usage: ./setup.sh [OPTIONS] [INSTANCE]
 
 Options:
-  --config-only  Alias for --no-build
-  --offline      Use cached example assets without network access
-  --no-config    Skip config.sh
-  --no-build     Stop after staging, merge, config and rendering
+  --config-only  Configure and render without an image operation
+  --no-config    Keep the existing instance configuration unchanged
+  --no-build     Configure and render without an image operation
+  --pull         Pull $REGISTRY_IMAGE
+  --build        Build this repository's Containerfile
   --no-cache     Disable the local image build cache
   --help         Show this help and exit
 
-Generated files are kept below CONTAINER/INSTANCE.
+Generated files are kept below CONTAINER/INSTANCE. The cumulative example
+triple already present in this layer is used directly; setup performs no
+example download or merge.
 EOF
 }
 
 for argument in "$@"; do
     case "$argument" in
         --help|-h) show_help; exit 0 ;;
-        --config-only) NO_BUILD=true ;;
-        --offline) OFFLINE=true ;;
+        --config-only|--no-build) NO_BUILD=true ;;
         --no-config) NO_CONFIG=true ;;
-        --no-build) NO_BUILD=true ;;
+        --pull) IMG_CHOICE=1 ;;
+        --build) IMG_CHOICE=2 ;;
         --no-cache) NO_CACHE=true ;;
         --*) echo "Unknown option: $argument" >&2; exit 2 ;;
         *)
@@ -50,11 +57,6 @@ for argument in "$@"; do
             ;;
     esac
 done
-
-[ -z "$INSTANCE" ] || [[ "$INSTANCE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
-    echo "Invalid instance name: $INSTANCE" >&2
-    exit 2
-}
 
 finish() {
     python3 "$ROOT/quadlet_finish.py" \
@@ -105,14 +107,6 @@ instance_arguments=(
     --default-name "$DEFAULT_INSTANCE"
 )
 [ -z "$INSTANCE" ] || instance_arguments+=(--name "$INSTANCE")
-$OFFLINE && instance_arguments+=(--offline)
-IFS=: read -ra example_directories <<< "$EXAMPLE_DIRS"
-for example_directory in "${example_directories[@]}"; do
-    [ -n "$example_directory" ] && instance_arguments+=(--example-dir "$example_directory")
-done
-for repository in "${REPOS[@]}"; do
-    instance_arguments+=(--repository "$repository")
-done
 INSTANCE_DIR="$(python3 "$ROOT/container-instance-setup.py" "${instance_arguments[@]}")"
 INSTANCE="${INSTANCE_DIR##*/}"
 ENV_FILE="$INSTANCE.env"
@@ -136,15 +130,17 @@ fi
 
 if $NO_BUILD; then
     finish
-    echo "  Staging, merge, configuration and rendering complete; no image operation was requested."
+    echo "  Configuration complete; no image operation was requested."
     exit 0
 fi
 
-printf '\n  Image source:\n    (1) Pull %s\n    (2) Build %s\n' \
-    "$REGISTRY_IMAGE" "$LOCAL_IMAGE"
-echo "  Build locally from this repository's context."
-read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
-IMG_CHOICE="${IMG_CHOICE:-2}"
+if [ -z "$IMG_CHOICE" ]; then
+    printf '\n  Image source:\n    (1) Pull %s\n    (2) Build %s\n' \
+        "$REGISTRY_IMAGE" "$LOCAL_IMAGE"
+    echo "  Build locally from this repository's context."
+    read -rp "  Choose [1/2] (default: 2): " IMG_CHOICE
+    IMG_CHOICE="${IMG_CHOICE:-2}"
+fi
 
 case "$IMG_CHOICE" in
     1)

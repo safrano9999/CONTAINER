@@ -182,7 +182,8 @@ case "$command" in
     entries)
         emit_entries "$config_dir"
         links=""
-        while IFS=$'\t' read -r _ mount source target kind; do
+        while IFS=$'\t' read -r key mount source target kind; do
+            [[ "$key" == *_DB_BACKEND ]] && continue
             valid_path "$mount" && valid_path "$source" && valid_target "$target" || {
                 echo "Invalid #named-volume specification" >&2
                 exit 1
@@ -198,8 +199,13 @@ case "$command" in
             prefix="${key%_PERSISTENT_PATH}"
             printf '%s-%s-persistent:%s:Z\n' "$(safe_name "$container_name")" "$(safe_name "$prefix")" "$path"
         done < <(emit_entries "$config_dir")
-        while IFS=$'\t' read -r _ mount _ _ _; do
-            printf '%s-%s:%s:Z\n' "$(safe_name "$container_name")" "$(safe_name "${mount##*/}")" "$mount"
+        while IFS=$'\t' read -r key mount _ target _; do
+            destination="$mount"
+            if [[ "$key" == *_DB_BACKEND ]]; then
+                valid_path "$target" || { echo "Invalid SQLite volume target for $key: $target" >&2; exit 1; }
+                destination="$target"
+            fi
+            printf '%s-%s:%s:Z\n' "$(safe_name "$container_name")" "$(safe_name "${mount##*/}")" "$destination"
         done < <(enabled_named_volume_specs "$config_dir" | awk -F '\t' '!seen[$2]++')
         while IFS= read -r path; do
             valid_path "$path" || { echo "Invalid sync path: $path" >&2; exit 1; }

@@ -1,0 +1,180 @@
+BIP39_PORT=11030
+
+#choices: false true
+#default-preset: true
+#named-volume: /named_volumes/KACHELMANN /named_volumes/KACHELMANN/content @KACHELMANN_DIR@/OBSIDIAN/KACHELMANN dir
+KACHELMANN_PERSISTENT=true
+
+SAFRANO9999_FULLRUN_ON_START=1
+
+#default-preset: CET 07:00,CET 13:00,CET 19:00
+OPENCLAW_CRONTAB=CET 07:00,CET 13:00,CET 19:00
+
+#default-preset: 1
+CITADEL_CLOUDFLARE=1
+
+#CONTAINER-NAME
+#default-preset: fedora44-ai-core
+#required:
+CONTAINER_NAME=fedora44-ai-core
+
+#default-preset: ${CONTAINER_NAME}
+#required:
+TS_HOSTNAME=${CONTAINER_NAME}
+
+#default-preset: --ssh
+TS_EXTRA_ARGS=--ssh
+
+#choices: 0 1
+#default-preset: 0
+CLOUDFLARED_START=0
+
+#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/workspace /root/.openclaw/workspace dir
+#named-volume: /named_volumes/OPENCLAW /named_volumes/OPENCLAW/agents /root/.openclaw/agents dir
+#default-preset: 1
+OPENCLAW_PERSISTENT=1
+
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/state.db /root/.hermes/state.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/response_store.db /root/.hermes/response_store.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/kanban.db /root/.hermes/kanban.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/auth.json /root/.hermes/auth.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/SOUL.md /root/.hermes/SOUL.md link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/channel_directory.json /root/.hermes/channel_directory.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/gateway_state.json /root/.hermes/gateway_state.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/memories /root/.hermes/memories dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/sessions /root/.hermes/sessions dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/cron /root/.hermes/cron dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/profiles /root/.hermes/profiles dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/pairing /root/.hermes/pairing dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/platforms /root/.hermes/platforms dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/hooks /root/.hermes/hooks dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/scripts /root/.hermes/scripts dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/skills/custom /root/.hermes/skills/custom dir
+#default-preset: 1
+HERMES_PERSISTENT=1
+
+OPENCLAW_GATEWAY_PORT=18789
+
+#default-preset: dummy/note
+OPENCLAW_MODEL=dummy/note
+
+#default-preset: 1
+OPENCLAW_NOTE_FULL_MODE=1
+
+#when: NOTE_DB_BACKEND=file
+#required:
+NOTE_PATH=./OBSIDIAN/NOTES/INBOX
+
+#default-preset: 1
+NOTE_FEEDBACK=1
+
+#choices: none webhook cli
+#default-preset: none
+NOTE_TRIGGER_TYPE=none
+
+#when-not: NOTE_TRIGGER_TYPE=none
+#default-if: NOTE_TRIGGER_TYPE=webhook https://n8n.example.com/webhook/note
+#default-if: NOTE_TRIGGER_TYPE=cli openclaw agent --agent notes --message "Message: $NOTE_MESSAGE Date: $NOTE_DATE Time: $NOTE_TIME Path: $NOTE_PATH Channel: $NOTE_CHANNEL Account: $NOTE_ACCOUNT_ID Sender: $NOTE_SENDER_ID Message-ID: $NOTE_MESSAGE_ID Prompt: $NOTE_PROMPT"
+NOTE_TRIGGER=
+
+#default-preset: prompt_default.md
+NOTE_PROMPT=prompt_default.md
+
+HERMES_DASHBOARD_PORT=9119
+
+HERMES_API_SERVER_PORT=8642
+
+#default-preset: /data
+#required:
+VDITOR_NOTES_PATH=/data
+
+#default-preset: 11100
+#required:
+VDITOR_NOTES_PORT=11100
+
+#publish-host: FASTAPI_HOST
+#required: published host bind address
+FASTAPI_HOST=127.0.0.1
+
+#default-preset: http://127.0.0.1:18789,http://localhost:18789,http://127.0.0.1:20789
+OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS=http://127.0.0.1:18789,http://localhost:18789,http://127.0.0.1:20789
+
+#choices: 0 1
+#default-preset: 1
+OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS_AUTO=1
+
+#required: CODEANALYST internal web UI port
+CODEANALYST_PORT=11010
+
+#required: CITADEL internal web UI port
+CITADEL_WEBUI_PORT=11000
+
+#named-volume: /named_volumes/CITADEL /named_volumes/CITADEL/ports.filter.json /opt/safrano9999/CITADEL/ports.filter.json file
+#named-volume: /named_volumes/CITADEL /named_volumes/CITADEL/extensions/providers_state.json /opt/safrano9999/CITADEL/extensions/providers_state.json file
+#named-volume: /named_volumes/CITADEL /named_volumes/CITADEL/extensions/enabled/cloudflare/routes.json /opt/safrano9999/CITADEL/extensions/enabled/cloudflare/routes.json file
+#choices: 0 1
+#default-preset: 1
+CITADEL_PERSISTENT=1
+
+#when: CITADEL_PERSISTENT=1
+#default-preset: /named_volumes/CITADEL
+CITADEL_DATA_DIR=/named_volumes/CITADEL
+
+#default-preset: insert later
+CITADEL_SUBNET_IP=
+
+#default-preset: 0
+#choices: 0 1
+CITADEL_CONTAINER=0
+
+#when: CITADEL_CONTAINER=1
+#default-preset: 0
+#choices: 0 1
+CITADEL_CONTAINER_MAP=0
+
+#when: CITADEL_CONTAINER_MAP=1
+#default-preset: 65100
+CITADEL_DEDUPE_PORT=65100
+
+#default-preset: insert later
+CITADEL_TAILSCALE=true
+
+#required: Enable Tailscale discovery (0/1)
+#default-preset: 0
+CITADEL_TS_DISCOVERY=0
+
+#default-preset: insert later
+CITADEL_CLOUDFLARE_DOMAIN=
+
+#default-preset: insert later
+CITADEL_CLOUDFLARE_ACCOUNT_ID=
+
+#default-preset: insert later
+CITADEL_CLOUDFLARE_ZONE_ID=
+
+#default-preset: insert later
+CITADEL_CLOUDFLARE_TUNNEL_ID=
+
+#required: KACHELMANN internal WebUI port
+KACHELMANN_PORT=11040
+
+#choices: false true
+#default-preset: false
+# Controls only the persistent Streamable HTTP MCP listener. Stdio remains on demand.
+KACHELMANN_MCP_ENABLED=false
+
+#default-preset: 11041
+# Internal Streamable HTTP MCP port.
+KACHELMANN_MCP_PORT=11041
+
+#default-preset: ./OBSIDIAN/KACHELMANN
+KACHELMANN_CONTENT_PATH=./OBSIDIAN/KACHELMANN
+
+#default-preset: 0
+# 0 hides and blocks motivation; 1 enables on/off/motivate controls.
+KACHELMANN_MOTIVATION=0
+
+#default-preset: 1
+# Initial STATUS.pdf setting. It remains controllable in the WebUI Config tab.
+KACHELMANN_STATUS_PDF=1
+

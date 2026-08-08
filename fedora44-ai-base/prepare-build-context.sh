@@ -42,12 +42,27 @@ bash "$ROOT/image/setup.d/sync-sources.sh" \
     "${sync_arguments[@]}" manifest \
     "$ROOT/.fedora44-ai-base-source-tags.tsv" "${REPOS[@]}"
 
-(
-    cd "$ROOT"
-    FEDORA44_AI_EXAMPLE_DIRS="$ROOT/examples.d/core" \
-        bash "$ROOT/merge.sh" "${REPOS[@]}"
-)
-mv -f -- "$ROOT/requirements.txt" "$ROOT/requirements.base.txt"
+requirement_files=()
+for specification in "${REPOS[@]}"; do
+    repository="${specification%@*}"
+    source="$ROOT/safrano9999/$repository/requirements.txt"
+    [ ! -f "$source" ] || requirement_files+=("$source")
+done
+if [ "${#requirement_files[@]}" -eq 0 ]; then
+    : > "$ROOT/requirements.base.txt"
+else
+    awk '
+    {
+        stripped = $0
+        sub(/^[[:space:]]+/, "", stripped)
+        if (stripped == "" || substr(stripped, 1, 1) == "#") { print; next }
+        match(stripped, /^[A-Za-z0-9._-]+/)
+        if (RSTART == 0) { print; next }
+        key = tolower(substr(stripped, RSTART, RLENGTH))
+        if (!(key in seen)) { seen[key] = 1; print }
+    }
+    ' "${requirement_files[@]}" > "$ROOT/requirements.base.txt"
+fi
 python3 "$ROOT/image/build.d/welcome-ref.py" "$ROOT" "$ROOT/ref.base.conf"
 bash "$ROOT/image/build.d/resolve-build-inputs.sh" \
     "$ROOT/.resolved-build.env" \

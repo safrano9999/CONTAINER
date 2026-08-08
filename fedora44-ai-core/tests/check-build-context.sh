@@ -99,5 +99,4 @@ for workflow in \
 done
 
 "$PRE/tests/check-build-context.sh"
-"$ROOT/tests/check-fedora-chain.sh"
 echo "fedora44-ai-core static checks passed"

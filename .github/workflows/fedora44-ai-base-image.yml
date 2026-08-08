@@ -10,9 +10,9 @@ on:
         required: false
         default: ""
       core_tag:
-        description: "fedora44-ai-core parent tag"
+        description: "fedora44-ai-core parent tag. Empty uses build.conf"
         required: false
-        default: "latest"
+        default: ""
       push_latest:
         description: "Also publish :latest"
         required: true
@@ -54,8 +54,6 @@ jobs:
       packages: write
       actions: write
     env:
-      CORE_IMAGE: ghcr.io/safrano9999/fedora44-ai-core
-      BASE_IMAGE: ghcr.io/safrano9999/fedora44-ai-base
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:
@@ -74,16 +72,22 @@ jobs:
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
           set -euo pipefail
+          set -a
+          . fedora44-ai-base/build.conf
+          set +a
           version="$REQUESTED_TAG"
           [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
-          core_ref="${CORE_IMAGE}:${CORE_TAG:-latest}"
+          core_ref="$AI_CORE_IMAGE"
+          [ -z "$CORE_TAG" ] || core_ref="${AI_CORE_IMAGE%:*}:$CORE_TAG"
+          image="${FEDORA44_AI_BASE_IMAGE%:*}"
 
           {
             echo "version=$version"
             echo "core_ref=$core_ref"
+            echo "image=$image"
             echo "tags<<EOF"
-            echo "${BASE_IMAGE}:${version}"
-            [ "$PUSH_LATEST" != true ] || echo "${BASE_IMAGE}:latest"
+            echo "${image}:${version}"
+            [ "$PUSH_LATEST" != true ] || echo "${image}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -152,7 +156,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="${BASE_IMAGE}:${{ steps.refs.outputs.version }}"
+          image="${{ steps.refs.outputs.image }}:${{ steps.refs.outputs.version }}"
           docker pull "$image"
           docker run --rm --entrypoint bash "$image" -lc '
             set -euo pipefail

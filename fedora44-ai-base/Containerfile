@@ -1,4 +1,4 @@
-ARG AI_CORE_IMAGE=ghcr.io/safrano9999/fedora44-ai-core:latest
+ARG AI_CORE_IMAGE
 FROM ${AI_CORE_IMAGE} AS ai-base
 
 ARG NEXTCLOUD_PLUGIN_SHA256

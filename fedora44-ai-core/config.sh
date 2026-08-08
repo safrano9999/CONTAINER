@@ -2212,7 +2212,9 @@ if $CONTAINER_NAME_MODE; then
     write_config_value "$CONFIG_FILE" CONTAINER_NAME "$CONTAINER_NAME"
 fi
 
-for example in "$DIR"/*build.conf_example; do configure_from_example "$example" "$BUILD_FILE" "$(basename "$BUILD_FILE")"; done
+if ! $FEDORA_CUMULATIVE_EXAMPLES; then
+    for example in "$DIR"/*build.conf_example; do configure_from_example "$example" "$BUILD_FILE" "$(basename "$BUILD_FILE")"; done
+fi
 [ -z "$ENV_EXAMPLE" ] || configure_from_example "$ENV_EXAMPLE" "$ENV_FILE" "$(basename "$ENV_FILE")"
 [ -z "$CONFIG_EXAMPLE" ] || configure_from_example "$CONFIG_EXAMPLE" "$CONFIG_FILE" "$(basename "$CONFIG_FILE")"
 if [ "$NO_CONTAINER" != "true" ]; then

@@ -41,7 +41,7 @@ set -a
 . "$ROOT/build.conf"
 set +a
 
-for name in AI_CORE_PRE_IMAGE OPENCLAW_VERSION NOTE_REPOSITORY \
+for name in AI_CORE_PRE_IMAGE FEDORA44_AI_CORE_IMAGE OPENCLAW_VERSION NOTE_REPOSITORY \
     NOTE_RELEASE_TAG NOTE_RELEASE_ASSET NOTE_RELEASE_SHA256; do
     [ -n "${!name:-}" ] || {
         echo "Missing $name in build.conf" >&2
@@ -63,7 +63,7 @@ BUILD_ARGS=(
 )
 $NO_CACHE && BUILD_ARGS+=(--no-cache)
 
-IMAGE="${FEDORA44_AI_CORE_IMAGE:-localhost/fedora44-ai-core:latest}"
+IMAGE="$FEDORA44_AI_CORE_IMAGE"
 echo "  Building $IMAGE from $ROOT ..."
 podman build --pull="$PULL_POLICY" "${BUILD_ARGS[@]}" \
     --platform linux/amd64 \

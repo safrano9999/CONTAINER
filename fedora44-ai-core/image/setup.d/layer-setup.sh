@@ -112,7 +112,6 @@ INSTANCE="${INSTANCE_DIR##*/}"
 ENV_FILE="$INSTANCE.env"
 CONFIG_FILE="${INSTANCE}_config.conf"
 CONTAINER_FILE="${INSTANCE}_container.conf"
-BUILD_FILE="${INSTANCE}_build.conf"
 COMPOSE_FILE="${INSTANCE}-compose.yml"
 QUADLET_FILE="${INSTANCE}.container"
 

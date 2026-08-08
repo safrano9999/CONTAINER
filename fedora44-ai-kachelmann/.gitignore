@@ -23,7 +23,6 @@ merge.conf
 merge_conf.sh
 config.conf
 config.conf_example
-build.conf
 container.conf
 container.example
 .agents/

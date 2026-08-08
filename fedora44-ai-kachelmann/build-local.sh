@@ -41,11 +41,16 @@ set -a
 . "$ROOT/build.conf"
 set +a
 
+for name in AI_BASE_IMAGE FEDORA44_AI_KACHELMANN_IMAGE; do
+    [ -n "${!name:-}" ] || {
+        echo "Missing $name in build.conf" >&2
+        exit 1
+    }
+done
 [ -s "$ROOT/.resolved-build.env" ] || {
     echo "Missing .resolved-build.env" >&2
     exit 1
 }
-AI_BASE_IMAGE="${AI_BASE_IMAGE:-ghcr.io/safrano9999/fedora44-ai-base:latest}"
 PULL_POLICY=always
 [[ "$AI_BASE_IMAGE" != localhost/* ]] || PULL_POLICY=missing
 [[ "$AI_BASE_IMAGE" != ghcr.io/* ]] || ensure_ghcr_login
@@ -60,7 +65,7 @@ while IFS='=' read -r key value; do
 done < "$ROOT/.resolved-build.env"
 $NO_CACHE && BUILD_ARGS+=(--no-cache)
 
-IMAGE="${FEDORA44_AI_KACHELMANN_IMAGE:-localhost/fedora44-ai-kachelmann:latest}"
+IMAGE="$FEDORA44_AI_KACHELMANN_IMAGE"
 echo "  Building $IMAGE from $ROOT ..."
 podman build --pull="$PULL_POLICY" "${BUILD_ARGS[@]}" \
     --target ai-kachelmann \

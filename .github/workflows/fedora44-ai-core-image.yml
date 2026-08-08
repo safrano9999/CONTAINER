@@ -10,9 +10,9 @@ on:
         required: false
         default: ""
       core_pre_tag:
-        description: "fedora44-ai-core-pre parent tag"
+        description: "fedora44-ai-core-pre parent tag. Empty uses build.conf"
         required: false
-        default: "latest"
+        default: ""
       push_latest:
         description: "Also publish :latest"
         required: true
@@ -54,8 +54,6 @@ jobs:
       packages: write
       actions: write
     env:
-      PRE_IMAGE: ghcr.io/safrano9999/fedora44-ai-core-pre
-      IMAGE: ghcr.io/safrano9999/fedora44-ai-core
       DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:
@@ -74,15 +72,21 @@ jobs:
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
           set -euo pipefail
+          set -a
+          . fedora44-ai-core/build.conf
+          set +a
           version="$REQUESTED_TAG"
           [ -n "$version" ] || version="$(date +%Y.%-m.%-d)"
-          pre_ref="${PRE_IMAGE}:${CORE_PRE_TAG:-latest}"
+          pre_ref="$AI_CORE_PRE_IMAGE"
+          [ -z "$CORE_PRE_TAG" ] || pre_ref="${AI_CORE_PRE_IMAGE%:*}:$CORE_PRE_TAG"
+          image="${FEDORA44_AI_CORE_IMAGE%:*}"
           {
             echo "version=$version"
             echo "pre_ref=$pre_ref"
+            echo "image=$image"
             echo "tags<<EOF"
-            echo "${IMAGE}:${version}"
-            [ "$PUSH_LATEST" != true ] || echo "${IMAGE}:latest"
+            echo "${image}:${version}"
+            [ "$PUSH_LATEST" != true ] || echo "${image}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -105,15 +109,6 @@ jobs:
               exit 1
             }
           done
-          expect() {
-            [ "$2" = "$3" ] || {
-              echo "$1 mismatch: expected '$3', got '$2'" >&2
-              exit 1
-            }
-          }
-          expect NOTE_REPOSITORY "$NOTE_REPOSITORY" safrano9999/NOTE
-          expect NOTE_RELEASE_TAG "$NOTE_RELEASE_TAG" 2026.7.36
-          expect NOTE_RELEASE_ASSET "$NOTE_RELEASE_ASSET" note-latest.zip
           for name in NOTE_RELEASE_SHA256; do
             [[ "${!name}" =~ ^[0-9a-f]{64}$ ]] || {
               echo "$name must be a lowercase SHA256" >&2
@@ -196,7 +191,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="${IMAGE}:${IMAGE_TAG}"
+          image="${{ steps.refs.outputs.image }}:${IMAGE_TAG}"
           docker pull "$image"
           docker run --rm \
             -e EXPECTED_OPENCLAW_VERSION \

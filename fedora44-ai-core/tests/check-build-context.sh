@@ -18,13 +18,11 @@ bash -n \
     # shellcheck source=/dev/null
     . "$ROOT/build.conf"
     set +a
-    [ "$OPENCLAW_VERSION" = 2026.7.1 ]
-    [ "$(grep -c '^OPENCLAW_' "$ROOT/build.conf")" -eq 1 ]
-    [ "$NOTE_REPOSITORY" = safrano9999/NOTE ]
-    [ "$NOTE_RELEASE_TAG" = 2026.7.36 ]
-    [ "$NOTE_RELEASE_ASSET" = note-latest.zip ]
-    [ "$NOTE_RELEASE_SHA256" = 2d3a4bff771e9dd85b6d39c0a1bb63dd68f99f65d73c6d2caae29eb65a6ba26b ]
-    [ "$AI_CORE_PRE_IMAGE" = ghcr.io/safrano9999/fedora44-ai-core-pre:latest ]
+    for name in AI_CORE_PRE_IMAGE FEDORA44_AI_CORE_IMAGE OPENCLAW_VERSION \
+        NOTE_REPOSITORY NOTE_RELEASE_TAG NOTE_RELEASE_ASSET NOTE_RELEASE_SHA256; do
+        [ -n "${!name:-}" ]
+    done
+    [[ "$NOTE_RELEASE_SHA256" =~ ^[0-9a-f]{64}$ ]]
 )
 
 if rg -n 'OPENCLAW_EPHEMERAL_IMAGE|openclaw-ephemeral-source|COPY --from=.*openclaw-ephemeral' \

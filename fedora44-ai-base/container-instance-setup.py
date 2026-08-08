@@ -198,37 +198,34 @@ def symlink(source: Path, target: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def required_layer_files(repo: Path) -> tuple[list[Path], list[Path]]:
+def required_layer_files(repo: Path) -> list[Path]:
     layer = repo.name
     examples = [
         repo / f"{layer}.env_example",
         repo / f"{layer}.config.conf_example",
         repo / f"{layer}.container_example",
     ]
-    build_examples = sorted(repo.glob(f"{layer}*.build.conf_example"))
     missing = [path for path in examples if not path.is_file() or path.is_symlink()]
     if missing:
         raise SetupError("Missing cumulative example file(s): " + ", ".join(map(str, missing)))
-    if len(build_examples) != 1:
-        raise SetupError(
-            f"Expected exactly one {layer} build example, found {len(build_examples)}"
-        )
-    return examples, build_examples
+    return examples
 
 
 def link_instance(repo: Path, config: Path, instance: Path) -> None:
-    examples, build_examples = required_layer_files(repo)
+    examples = required_layer_files(repo)
     instance.mkdir(parents=True, exist_ok=True)
-        elif legacy.exists():
-            raise SetupError(f"Legacy path is not a file or symlink: {legacy}")
-    linked_examples = examples + build_examples
-    desired_names = {source.name for source in linked_examples}
+    stale_build = instance / f"{instance.name}_build.conf"
+    if stale_build.is_symlink() or stale_build.is_file():
+        stale_build.unlink()
+    elif stale_build.exists():
+        raise SetupError(f"Build config path is not a file or symlink: {stale_build}")
+    desired_names = {source.name for source in examples}
     for target in instance.iterdir():
         if not target.is_symlink():
             continue
         if "example" in target.name and target.name not in desired_names:
             target.unlink()
-    for source in linked_examples:
+    for source in examples:
         symlink(source, instance / source.name)
     for source in (
         config,

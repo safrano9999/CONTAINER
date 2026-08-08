@@ -2,7 +2,8 @@
 set -euo pipefail
 export LC_ALL=C
 
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$CONFIG_DIR/.." && pwd)"
 KERNEL="$(cd -- "$ROOT/.." && pwd)/.github/scripts/fedora44-ai-example-chain.py"
 MERGE_WILDCARDS=(
     'env|env.example|*env*example'
@@ -16,7 +17,7 @@ MERGE_WILDCARDS=(
 
 show_help() {
     cat <<EOF
-Usage: ./merge.sh OUTPUT_BASE
+Usage: ./config/merge.sh OUTPUT_BASE
 
 Offline fallback for a cumulative Fedora example triple. OUTPUT_BASE names all
 three outputs, for example fedora44-ai-base. All matching example files found

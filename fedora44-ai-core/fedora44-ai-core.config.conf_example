@@ -82,3 +82,23 @@ OPENCLAW_CRONTAB_REPOS=
 
 # Repository directory names whose plugin hooks run once after gateway startup.
 OPENCLAW_REPOS_START_INIT=
+
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/state.db @HOME@/.hermes/state.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/response_store.db @HOME@/.hermes/response_store.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/kanban.db @HOME@/.hermes/kanban.db link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/auth.json @HOME@/.hermes/auth.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/SOUL.md @HOME@/.hermes/SOUL.md link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/channel_directory.json @HOME@/.hermes/channel_directory.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/gateway_state.json @HOME@/.hermes/gateway_state.json link
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/memories @HOME@/.hermes/memories dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/sessions @HOME@/.hermes/sessions dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/cron @HOME@/.hermes/cron dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/profiles @HOME@/.hermes/profiles dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/pairing @HOME@/.hermes/pairing dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/platforms @HOME@/.hermes/platforms dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/hooks @HOME@/.hermes/hooks dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/scripts @HOME@/.hermes/scripts dir
+#named-volume: /named_volumes/HERMES /named_volumes/HERMES/skills/custom @HOME@/.hermes/skills/custom dir
+#default-preset: 1
+HERMES_PERSISTENT=1
+

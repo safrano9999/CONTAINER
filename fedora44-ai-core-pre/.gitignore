@@ -6,6 +6,8 @@
 /container.example
 /env.example
 /requirements.txt
+**/__pycache__/
+**/*.py[cod]
 *.env
 *_config.conf
 *_container.conf

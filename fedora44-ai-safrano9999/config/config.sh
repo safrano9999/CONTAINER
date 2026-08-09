@@ -617,15 +617,30 @@ normalize_volume_item() {
 add_repo_bind_mount() {
     local rel="$1"
     local target_override="${2:-}"
-    local source target
+    local source target relative
 
     rel="$(trim "$rel")"
     [ -n "$rel" ] || return 0
+    [[ "$rel" != *:* && "$rel" != *$'\n'* && "$rel" != *$'\r'* ]] || {
+        echo "Invalid bind source: $rel" >&2
+        return 1
+    }
+    if [[ "$rel" == %config-conf/* ]]; then
+        rel="${rel#%config-conf/}"
+    elif [[ "$rel" == %config-conf* ]]; then
+        echo "Invalid %config-conf path: $rel" >&2
+        return 1
+    fi
     [[ "$rel" == /* || "$rel" == ../* ]] && return 0
     rel="${rel#./}"
     [ -n "$rel" ] || return 0
 
     source="$(cd "$DIR" && realpath -m -- "$rel")"
+    relative="$(realpath -m --relative-to="$DIR" "$source")"
+    [[ "$relative" != .. && "$relative" != ../* ]] || {
+        echo "Bind source escapes the configuration directory: $rel" >&2
+        return 1
+    }
     mkdir -p "$source"
     if [ -n "$target_override" ]; then
         [[ "$target_override" == /* && "$target_override" != / && "$target_override" != *:* ]] || {

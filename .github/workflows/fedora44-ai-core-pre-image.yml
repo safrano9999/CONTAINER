@@ -56,6 +56,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure private repository access
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          [ -n "$GH_TOKEN" ]
+          gh auth status
+          gh auth setup-git
+
       - name: Free runner disk space
         run: .github/scripts/free-runner-disk-space.sh
 
@@ -90,11 +100,28 @@ jobs:
         id: build
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
         run: |
           set -euo pipefail
           cd fedora44-ai-core-pre
           ./build/prepare-build-context.sh
+          test -f build/vendor/persistainer/image/runtime/etc/systemd/system/persistainer.service
+          test -x build/vendor/persistainer/image/runtime/usr/local/bin/persistainer
+          PYTHONDONTWRITEBYTECODE=1 \
+            python3 -m unittest discover -s tests -p 'test_*.py'
+          grep -Fqx 'Type=oneshot' \
+            build/vendor/persistainer/image/runtime/etc/systemd/system/persistainer.service
+          grep -Fqx 'Requires=persistainer.service' \
+            image/runtime/etc/systemd/system/tailscaled.service
+          grep -Fqx 'After=network.target persistainer.service' \
+            image/runtime/etc/systemd/system/tailscaled.service
+          grep -Fqx 'Requires=persistainer.service tailscaled.service' \
+            image/runtime/etc/systemd/system/tailscale-up.service
+          grep -Fqx 'After=persistainer.service tailscaled.service' \
+            image/runtime/etc/systemd/system/tailscale-up.service
+          for unit in bip39.service cockpit.service cloudflared.service; do
+            ! grep -Fq persistainer.service "image/runtime/etc/systemd/system/$unit"
+          done
           set -a
           . ./build.conf
           . ./.resolved-build.env
@@ -176,8 +203,27 @@ jobs:
             grep -q "Fedora release 44" /etc/fedora-release
             for command in node npm python3 pip uv codex claude openclaw \
               hermes webhook cloudflared git gh jq tailscale cockpit-bridge \
-              nmap lnd lncli geth solana electrum; do
+              nmap lnd lncli geth solana electrum persistainer; do
               command -v "$command" >/dev/null
+            done
+            test -x /usr/local/libexec/fedora44-wait-ready
+            /usr/local/libexec/fedora44-wait-ready --help >/dev/null
+            env -i PATH=/usr/local/bin:/usr/bin:/bin persistainer
+            for unit in persistainer.service tailscaled.service \
+              tailscale-up.service cloudflared.service cockpit.service \
+              bip39.service; do
+              test "$(systemctl is-enabled "$unit")" = enabled
+            done
+            systemd-analyze verify \
+              /etc/systemd/system/persistainer.service \
+              /etc/systemd/system/tailscaled.service \
+              /etc/systemd/system/tailscale-up.service
+            grep -Fqx "Requires=persistainer.service" \
+              /etc/systemd/system/tailscaled.service
+            grep -Fqx "Requires=persistainer.service tailscaled.service" \
+              /etc/systemd/system/tailscale-up.service
+            for unit in bip39.service cockpit.service cloudflared.service; do
+              ! grep -Fq persistainer.service "/etc/systemd/system/$unit"
             done
             test "$(jq -r .version "$(npm root -g)/openclaw/package.json")" \
               = "$EXPECTED_OPENCLAW_VERSION"

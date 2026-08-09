@@ -1,6 +1,7 @@
 [Unit]
 Description=Tailscale daemon
-After=network.target
+Requires=persistainer.service
+After=network.target persistainer.service
 
 [Service]
 Type=simple

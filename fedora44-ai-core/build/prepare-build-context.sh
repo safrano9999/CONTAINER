@@ -14,8 +14,9 @@ OPENCLAW_DETERMINISTIC_REPOSITORY=safrano9999/openclaw-deterministic
 OPENCLAW_DETERMINISTIC_TAG="${OPENCLAW_VERSION}-deterministic.1"
 OPENCLAW_DETERMINISTIC_ASSET="openclaw-${OPENCLAW_VERSION}-deterministic.tar.gz"
 OPENCLAW_EPHEMERAL_REPOSITORY=safrano9999/openclaw-ephemeral
+HERMES_EPHEMERAL_REPOSITORY=safrano9999/hermes-ephemeral
 
-for command in curl git sha256sum; do
+for command in curl git python3 sha256sum; do
     command -v "$command" >/dev/null 2>&1 || {
         echo "Missing build preparation dependency: $command" >&2
         exit 1
@@ -23,6 +24,7 @@ for command in curl git sha256sum; do
 done
 
 vendor_stage="$(mktemp -d "$BUILD/.vendor.XXXXXX")"
+rm -rf -- "$BUILD/vendor"
 cleanup_vendor_stage() {
     rm -rf -- "$vendor_stage"
 }
@@ -37,6 +39,76 @@ stage_release_asset() {
     if [ -n "$expected_sha256" ]; then
         printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum -c -
     fi
+}
+
+checkout_main() {
+    local repository="$1" destination="$2"
+
+    git init -q "$destination"
+    git -C "$destination" remote add origin \
+        "https://github.com/${repository}.git"
+    GIT_TERMINAL_PROMPT=0 git -C "$destination" fetch -q --no-tags \
+        --depth=1 origin main
+    git -C "$destination" checkout -q --detach FETCH_HEAD
+    [ "$(git -C "$destination" rev-parse HEAD)" = \
+      "$(git -C "$destination" rev-parse FETCH_HEAD)" ] || {
+        echo "Checkout did not resolve main exactly: $repository" >&2
+        return 1
+    }
+    printf '  Staged %s@main (%s)\n' \
+        "$repository" "$(git -C "$destination" rev-parse HEAD)"
+}
+
+stage_runtime_overlay() {
+    local source="$1" destination="$2" repository="$3"
+    python3 - "$source" "$destination" "$repository" <<'PY'
+from __future__ import annotations
+
+import os
+import shutil
+import stat
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+repository = sys.argv[3]
+
+if source.is_symlink() or not source.is_dir():
+    raise SystemExit(f"{repository} has no safe image/runtime directory")
+
+count = 0
+total = 0
+for entry in sorted(
+    source.rglob("*"),
+    key=lambda path: (len(path.relative_to(source).parts), path.as_posix()),
+):
+    relative = entry.relative_to(source)
+    if entry.is_symlink():
+        raise SystemExit(f"unsafe runtime symlink in {repository}: {relative}")
+    info = entry.stat(follow_symlinks=False)
+    if info.st_mode & 0o7000:
+        raise SystemExit(f"unsafe runtime mode in {repository}: {relative}")
+    target = destination / relative
+    if stat.S_ISDIR(info.st_mode):
+        target.mkdir(parents=True, exist_ok=True)
+        os.chmod(target, info.st_mode & 0o777)
+        continue
+    if not stat.S_ISREG(info.st_mode):
+        raise SystemExit(f"unsafe runtime entry in {repository}: {relative}")
+    count += 1
+    total += info.st_size
+    if count > 256 or total > 32 * 1024 * 1024:
+        raise SystemExit(f"runtime overlay limits exceeded in {repository}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with entry.open("rb") as input_file, target.open("xb") as output_file:
+        shutil.copyfileobj(input_file, output_file)
+    os.chmod(target, info.st_mode & 0o777)
+
+if count == 0:
+    raise SystemExit(f"empty image/runtime directory in {repository}")
+print(f"  [{repository}] staged {count} runtime file(s)")
+PY
 }
 
 stage_release_asset \
@@ -54,11 +126,7 @@ stage_release_asset \
     "$vendor_stage/note/$NOTE_RELEASE_ASSET"
 
 ephemeral_checkout="$vendor_stage/.openclaw-ephemeral-checkout"
-git init -q "$ephemeral_checkout"
-git -C "$ephemeral_checkout" remote add origin \
-    "https://github.com/${OPENCLAW_EPHEMERAL_REPOSITORY}.git"
-git -C "$ephemeral_checkout" fetch -q --depth=1 origin main
-git -C "$ephemeral_checkout" checkout -q --detach FETCH_HEAD
+checkout_main "$OPENCLAW_EPHEMERAL_REPOSITORY" "$ephemeral_checkout"
 
 ephemeral_files=(
     openclaw-ephemeral.py
@@ -83,12 +151,25 @@ done
 install -D -m 0644 \
     "$ephemeral_checkout/container/runtime/yolo.sh" \
     "$vendor_stage/openclaw-ephemeral/runtime/yolo.sh"
+stage_runtime_overlay \
+    "$ephemeral_checkout/image/runtime" \
+    "$vendor_stage/openclaw-ephemeral/image/runtime" \
+    "$OPENCLAW_EPHEMERAL_REPOSITORY"
 rm -rf -- "$ephemeral_checkout"
 
-[ "$(find "$vendor_stage/openclaw-ephemeral" -type f | wc -l)" -eq 10 ] || {
-    echo "Ephemeral vendor payload must contain exactly ten runtime files" >&2
+[ "$(find "$vendor_stage/openclaw-ephemeral" -type f \
+    ! -path '*/image/runtime/*' | wc -l)" -eq 10 ] || {
+    echo "OpenClaw Ephemeral payload must contain exactly ten code files" >&2
     exit 1
 }
+
+hermes_checkout="$vendor_stage/.hermes-ephemeral-checkout"
+checkout_main "$HERMES_EPHEMERAL_REPOSITORY" "$hermes_checkout"
+stage_runtime_overlay \
+    "$hermes_checkout/image/runtime" \
+    "$vendor_stage/hermes-ephemeral/image/runtime" \
+    "$HERMES_EPHEMERAL_REPOSITORY"
+rm -rf -- "$hermes_checkout"
 
 rm -rf -- "$BUILD/vendor"
 mv -- "$vendor_stage" "$BUILD/vendor"

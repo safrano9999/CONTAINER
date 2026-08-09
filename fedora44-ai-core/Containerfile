@@ -22,7 +22,7 @@ ENV HOME=/root \
     OPENCLAW_CONFIG=/root/.openclaw/openclaw.json \
     OPENCLAW_GATEWAY_PORT=18789 \
     OPENCLAW_DISABLE_BONJOUR=1 \
-    PYTHONPATH=/usr/local/lib/openclaw-ephemeral \
+    PYTHONPATH=/usr/local/lib/openclaw-ephemeral:/usr/local/lib/hermes-ephemeral \
     PYTHONUNBUFFERED=1
 
 RUN install -d -o root -g root -m 0700 "${OPENCLAW_CONFIG_DIR}"
@@ -46,6 +46,7 @@ RUN set -euo pipefail; \
 COPY build/vendor/openclaw-ephemeral/openclaw_ephemeral/ /usr/local/lib/openclaw-ephemeral/openclaw_ephemeral/
 COPY build/vendor/openclaw-ephemeral/openclaw-ephemeral.py /usr/local/bin/openclaw-ephemeral.py
 COPY build/vendor/openclaw-ephemeral/runtime/yolo.sh /usr/local/bin/openclaw-ephemeral-yolo
+COPY build/vendor/openclaw-ephemeral/image/runtime/ /
 
 RUN chmod 0755 /usr/local/bin/openclaw-ephemeral.py \
       /usr/local/bin/openclaw-ephemeral-yolo \
@@ -70,26 +71,22 @@ RUN set -euo pipefail; \
     node "$openclaw_root/openclaw.mjs" --version | grep -F "${OPENCLAW_VERSION}"; \
     find /root/.openclaw -maxdepth 1 -name 'openclaw.json*' -delete
 
-# Runtime order added here: named-volume projection, Vditor, fresh OpenClaw
-# configuration/gateway, then Hermes. Generic host services come from Core-pre.
+# Runtime order added here: optional init hooks, Vditor, fresh OpenClaw and
+# Hermes configuration/gateways. Persistence comes from the Core-pre parent.
 COPY image/runtime/ /
-COPY config/optional_persistence.sh /usr/local/bin/optional_persistence.sh
+COPY build/vendor/hermes-ephemeral/image/runtime/ /
 
 RUN chmod 0755 \
-      /usr/local/bin/fedora44-ai-init \
-      /usr/local/bin/hermes-ephemeral.py \
-      /usr/local/bin/named_volume_links.sh \
-      /usr/local/bin/named_volume_links_openclaw.sh \
-      /usr/local/bin/named_volume_links_hermes.sh \
-      /usr/local/bin/optional_persistence.sh \
+      /usr/local/bin/fedora44-ai-init-hooks \
+      /usr/local/bin/hermes-ephemeral \
       /usr/lib/systemd/system-generators/fedora44-runtime-environment-generator \
- && mkdir -p /usr/local/share/fedora44-ai/init.d \
  && systemctl enable \
-      fedora44-ai.service \
+      fedora44-ai-init-hooks.service \
       vditor-notes.service \
       openclaw-config.service \
       openclaw.service \
       openclaw-ephemeral-schedule.service \
+      hermes-ephemeral.service \
       hermes.service \
       hermes-dashboard.service
 

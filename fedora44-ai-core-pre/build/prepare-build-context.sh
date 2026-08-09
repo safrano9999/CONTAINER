@@ -17,6 +17,67 @@ for command in curl git jq openssl sha256sum; do
     }
 done
 
+stage_persistainer() {
+    local repository="${PERSISTAINER_REPOSITORY:-}"
+    local ref="${PERSISTAINER_REF:-}"
+    local target="$BUILD/vendor/persistainer"
+    local stage checkout runtime unexpected commit
+
+    [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
+        echo "Invalid PERSISTAINER_REPOSITORY: $repository" >&2
+        exit 1
+    }
+    [ -n "$ref" ] && git check-ref-format --branch "$ref" >/dev/null 2>&1 || {
+        echo "Invalid PERSISTAINER_REF: $ref" >&2
+        exit 1
+    }
+
+    # A failed private-repository fetch must never leave a stale usable payload.
+    rm -rf -- "$target"
+    mkdir -p "$BUILD/vendor"
+    stage="$(mktemp -d "$BUILD/.persistainer.XXXXXX")"
+    checkout="$stage/checkout"
+    cleanup_persistainer_stage() {
+        rm -rf -- "$stage"
+    }
+    trap cleanup_persistainer_stage EXIT
+
+    git init -q "$checkout"
+    git -C "$checkout" remote add origin "https://github.com/${repository}.git"
+    GIT_TERMINAL_PROMPT=0 git -C "$checkout" fetch -q --no-tags --depth=1 \
+        origin "refs/heads/${ref}"
+    git -C "$checkout" checkout -q --detach FETCH_HEAD
+    commit="$(git -C "$checkout" rev-parse --verify HEAD)"
+    runtime="$checkout/image/runtime"
+
+    [ -d "$runtime" ] && [ ! -L "$runtime" ] || {
+        echo "persistainer has no real image/runtime directory at $commit" >&2
+        exit 1
+    }
+    for required in \
+        etc/systemd/system/persistainer.service \
+        usr/local/bin/persistainer; do
+        [ -f "$runtime/$required" ] && [ ! -L "$runtime/$required" ] || {
+            echo "Missing persistainer runtime file at $commit: $required" >&2
+            exit 1
+        }
+    done
+    unexpected="$(find "$runtime" -mindepth 1 ! -type d ! -type f -print -quit)"
+    [ -z "$unexpected" ] || {
+        echo "Unsupported persistainer runtime entry at $commit: $unexpected" >&2
+        exit 1
+    }
+    bash -n "$runtime/usr/local/bin/persistainer"
+
+    mkdir -p "$stage/payload/image"
+    cp -a -- "$runtime" "$stage/payload/image/runtime"
+    mv -- "$stage/payload" "$target"
+    printf '  Staged %s@%s (%s)\n' "$repository" "$ref" "$commit"
+
+    trap - EXIT
+    cleanup_persistainer_stage
+}
+
 stage_certificates() {
     local source="$1" target cert fingerprint count=0
     [[ "$source" == /* ]] || {
@@ -47,6 +108,7 @@ stage_certificates() {
 }
 
 stage_certificates "$CERTS"
+stage_persistainer
 "$BUILD/resolve-build-inputs.sh" \
     "$CONTEXT/.resolved-build.env" \
     "$NODE_VERSION" \

@@ -94,9 +94,10 @@ jobs:
         id: build
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
         run: |
           set -euo pipefail
+          gh auth setup-git
           cd fedora44-ai-core
           ./build/prepare-build-context.sh
           set -a
@@ -129,6 +130,16 @@ jobs:
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/plugins.py
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/providers.py
             build/vendor/openclaw-ephemeral/openclaw_ephemeral/scheduling.py
+            build/vendor/openclaw-ephemeral/image/runtime/etc/systemd/system/openclaw-config.service
+            build/vendor/openclaw-ephemeral/image/runtime/etc/systemd/system/openclaw-ephemeral-schedule.service
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/bin/hermes-ephemeral
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/lib/hermes-ephemeral/hermes_ephemeral/__init__.py
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/lib/hermes-ephemeral/hermes_ephemeral/cli.py
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/lib/hermes-ephemeral/hermes_ephemeral/configuration.py
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/lib/hermes-ephemeral/hermes_ephemeral/environment.py
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/lib/hermes-ephemeral/hermes_ephemeral/mcp.py
+            build/vendor/hermes-ephemeral/image/runtime/usr/local/lib/hermes-ephemeral/hermes_ephemeral/providers.py
+            build/vendor/hermes-ephemeral/image/runtime/etc/systemd/system/hermes-ephemeral.service
           )
           for file in "${vendor_files[@]}"; do
             [ -s "$file" ] || {
@@ -136,8 +147,12 @@ jobs:
               exit 1
             }
           done
-          [ "$(find build/vendor/openclaw-ephemeral -type f | wc -l)" -eq 10 ] || {
+          [ "$(find build/vendor/openclaw-ephemeral -type f | wc -l)" -eq 12 ] || {
             echo "Unexpected openclaw-ephemeral vendor file set" >&2
+            exit 1
+          }
+          [ "$(find build/vendor/hermes-ephemeral -type f | wc -l)" -eq 8 ] || {
+            echo "Unexpected hermes-ephemeral vendor file set" >&2
             exit 1
           }
           {
@@ -212,22 +227,36 @@ jobs:
             test -x /usr/local/bin/electrum
             test -x /usr/local/bin/openclaw-ephemeral.py
             test -x /usr/local/bin/openclaw-ephemeral-yolo
-            test -x /usr/local/bin/hermes-ephemeral.py
+            test -x /usr/local/bin/hermes-ephemeral
+            test -x /usr/local/bin/persistainer
+            test -x /usr/local/bin/fedora44-ai-init-hooks
+            test -x /usr/local/libexec/fedora44-wait-ready
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
             note_python="$("/root/.openclaw/extensions/note/scripts/setup-python.sh")"
             test -x "$note_python"
             "$note_python" -c "import dotenv, sqlalchemy, psycopg, pymysql"
-            python3 -c "import yaml; import openclaw_ephemeral"
-            for unit in fedora44-ai.service tailscaled.service \
+            PYTHONPATH=/usr/local/lib/openclaw-ephemeral:/usr/local/lib/hermes-ephemeral \
+              python3 -c "import yaml; import openclaw_ephemeral; import hermes_ephemeral"
+            for unit in persistainer.service fedora44-ai-init-hooks.service \
+              tailscaled.service \
               tailscale-up.service cockpit.service bip39.service vditor-notes.service \
               openclaw-config.service openclaw.service \
-              openclaw-ephemeral-schedule.service hermes.service \
+              openclaw-ephemeral-schedule.service hermes-ephemeral.service \
+              hermes.service \
               hermes-dashboard.service; do
               test -f "/etc/systemd/system/$unit" \
                 || test -f "/usr/lib/systemd/system/$unit"
               systemctl is-enabled "$unit"
             done
             test "$(systemctl is-enabled cockpit.socket)" = masked
+            for legacy in /usr/local/bin/fedora44-ai-init \
+              /usr/local/bin/hermes-ephemeral.py \
+              /usr/local/bin/named_volume_links.sh \
+              /usr/local/bin/named_volume_links_openclaw.sh \
+              /usr/local/bin/named_volume_links_hermes.sh \
+              /etc/systemd/system/fedora44-ai.service; do
+              test ! -e "$legacy"
+            done
             test ! -e /opt/safrano9999
           '
           docker run --rm \
@@ -240,18 +269,14 @@ jobs:
             -e MCP_SERVER_URL_02=http://paperless-mcp:5000/mcp \
             --entrypoint python3 \
             "$image" -c '
-          import importlib.util
           import json
           import os
           import sys
 
-          path = "/usr/local/bin/hermes-ephemeral.py"
-          spec = importlib.util.spec_from_file_location("hermes_ephemeral", path)
-          assert spec is not None and spec.loader is not None
-          module = importlib.util.module_from_spec(spec)
-          sys.modules[spec.name] = module
-          spec.loader.exec_module(module)
-          servers = module.mcp_servers_config(os.environ)
+          sys.path.insert(0, "/usr/local/lib/hermes-ephemeral")
+          from hermes_ephemeral.mcp import mcp_servers_config
+
+          servers = mcp_servers_config(os.environ)
           assert set(servers) == {"kachelmann-mcp", "paperless-mcp"}
           assert servers["kachelmann-mcp"]["headers"]["Authorization"] == (
               "Bearer ${MCP_SERVER_BEARER}"

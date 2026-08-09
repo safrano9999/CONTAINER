@@ -26,11 +26,3 @@ mapfile -t names < <(compgen -e | LC_ALL=C sort -u)
         printf '%s\n' "$line"
     fi
 } > "$dropin"
-
-case "${CLOUDFLARED_START:-0}" in
-    1|true|yes|on)
-        mkdir -p "$output_dir/multi-user.target.wants"
-        ln -sfn /etc/systemd/system/cloudflared.service \
-            "$output_dir/multi-user.target.wants/cloudflared.service"
-        ;;
-esac

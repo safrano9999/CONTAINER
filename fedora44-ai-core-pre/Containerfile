@@ -109,11 +109,16 @@ RUN cd /usr/lib/systemd/system/sysinit.target.wants/ 2>/dev/null \
 # Generic systemd runtime owned by Core-pre. Higher layers only add the
 # services tied to their own runtime configuration.
 COPY image/runtime/ /
+COPY build/vendor/persistainer/image/runtime/ /
 
 RUN chmod 0755 /usr/local/bin/tailscale-state-up.sh \
+      /usr/local/bin/persistainer \
+      /usr/local/libexec/fedora44-wait-ready \
  && systemctl enable \
+      persistainer.service \
       tailscaled.service \
       tailscale-up.service \
+      cloudflared.service \
       cockpit.service \
       bip39.service \
  && systemctl mask cockpit.socket \

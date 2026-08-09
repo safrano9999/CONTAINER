@@ -160,7 +160,8 @@ jobs:
             grep -q "Fedora release 44" /etc/fedora-release
             test -x /usr/local/bin/openclaw-ephemeral.py
             test -x /usr/local/bin/openclaw-ephemeral-yolo
-            test -x /usr/local/bin/hermes-ephemeral.py
+            test -x /usr/local/bin/hermes-ephemeral
+            test -x /usr/local/bin/persistainer
             test -f /root/.openclaw/extensions/note/openclaw.plugin.json
             for project in WELCOME CODEANALYST CITADEL DIESDAS- NEXTCLOUD \
               safrano9999-paper; do
@@ -178,10 +179,13 @@ jobs:
               /opt/safrano9999/safrano9999-paper/paper.pdf
             test -s /README/paper.pdf
             systemctl is-enabled \
-              fedora44-ai.service tailscaled.service tailscale-up.service \
+              persistainer.service fedora44-ai-init-hooks.service \
+              tailscaled.service tailscale-up.service cloudflared.service \
               cockpit.service vditor-notes.service openclaw-config.service \
-              openclaw.service hermes.service hermes-dashboard.service \
+              openclaw.service openclaw-ephemeral-schedule.service \
+              hermes-ephemeral.service hermes.service hermes-dashboard.service \
               codeanalyst.service citadel.service citadel-scan.service
+            test ! -e /etc/systemd/system/fedora44-ai.service
           '
           test "$(
             docker image inspect \

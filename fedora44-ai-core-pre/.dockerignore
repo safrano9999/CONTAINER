@@ -23,5 +23,5 @@ config.*.conf_example
 container.*.example
 env.*.example
 
-# Public, pinned runtime inputs prepared specifically for the image build.
+# Authenticated runtime inputs prepared specifically for the image build.
 !build/vendor/**

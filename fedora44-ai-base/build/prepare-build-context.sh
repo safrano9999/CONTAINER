@@ -310,6 +310,8 @@ sync_repository() {
     fi
     git -C "$path" symbolic-ref refs/remotes/origin/HEAD \
         "refs/remotes/origin/$remote_default"
+    git -C "$path" config remote.origin.fetch \
+        "+refs/heads/*:refs/remotes/origin/*"
     git -C "$path" -c core.hooksPath=/dev/null checkout --quiet -f -B \
         "$target_branch" "refs/remotes/origin/$target_branch"
     git -C "$path" branch --quiet --set-upstream-to="origin/$target_branch" \

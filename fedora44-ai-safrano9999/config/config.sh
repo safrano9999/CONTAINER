@@ -1955,7 +1955,7 @@ mount_bind_from_value() {
 
 generate_container_files() {
     local source_file host image compose_file quadlet_file line stripped entry key value
-    local prefix internal_key internal_port publish_port publish_host map
+    local prefix internal_key internal_port publish_port publish_host map enabled_key enabled_value
     local first_port="" command_host="0.0.0.0"
     local directive condition condition_key condition_value target_list target_key target_path rel
     local host_key
@@ -2045,8 +2045,12 @@ generate_container_files() {
 
             if [[ "$key" == *_PUBLISH_PORT ]]; then
                 [ "$tunnel_only" = "true" ] && continue
-                case "${value,,}" in ""|blank|null) continue ;; esac
                 prefix="${key%_PUBLISH_PORT}"
+                enabled_key="${prefix}_ENABLED"
+                if enabled_value="$(config_value "$enabled_key")"; then
+                    [ "$enabled_value" = "true" ] || continue
+                fi
+                case "${value,,}" in ""|blank|null) continue ;; esac
                 internal_key="${prefix}_PORT"
                 internal_port="$(config_value "$internal_key" || true)"
                 [ -n "$internal_port" ] || internal_port="$value"

@@ -61,7 +61,8 @@ network-online
     └── hermes-ephemeral.service -> hermes.service -> hermes-dashboard.service
 
 configured Nextcloud accounts
-└── nextcloud-initial-sync.target -> nextcloud-sync@N.service -> timer
+├── boot -> nextcloud-sync@N.service
+└── nextcloud-sync@N.timer -> the same nextcloud-sync@N.service
 
 parallel final jobs
 ├── openclaw-ephemeral-schedule.service

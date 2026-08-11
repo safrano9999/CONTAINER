@@ -87,6 +87,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
         run: fedora44-ai-safrano9999/build/prepare-build-context.sh --no-cache
 
+      - name: Stage verified KACHELMANN APK
+        id: kachelmann_apk
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: |
+          python3 .github/scripts/stage-kachelmann-apk.py \
+            --destination fedora44-ai-safrano9999/safrano9999/KACHELMANN
+
       - name: Resolve Safrano build configuration
         id: safrano_build
         shell: bash
@@ -128,6 +136,10 @@ jobs:
           no-cache: true
           push: true
           tags: ${{ steps.refs.outputs.tags }}
+          labels: |
+            io.safrano9999.kachelmann.apk.release=${{ steps.kachelmann_apk.outputs.release_tag }}
+            io.safrano9999.kachelmann.apk.filename=${{ steps.kachelmann_apk.outputs.apk_filename }}
+            io.safrano9999.kachelmann.apk.sha256=${{ steps.kachelmann_apk.outputs.apk_sha256 }}
           build-args: |
             AI_BASE_IMAGE=${{ steps.refs.outputs.base_ref }}
             ${{ steps.safrano_build.outputs.build_args }}
@@ -141,7 +153,10 @@ jobs:
           set -euo pipefail
           image="${{ steps.refs.outputs.image }}:${{ steps.refs.outputs.version }}"
           docker pull "$image"
-          docker run --rm --entrypoint bash "$image" -lc '
+          docker run --rm --entrypoint bash \
+            --env EXPECTED_APK_FILENAME="${{ steps.kachelmann_apk.outputs.apk_filename }}" \
+            --env EXPECTED_APK_SHA256="${{ steps.kachelmann_apk.outputs.apk_sha256 }}" \
+            "$image" -lc '
             set -euo pipefail
             grep -q "Fedora release 44" /etc/fedora-release
             test -x /usr/local/bin/openclaw-ephemeral.py
@@ -163,6 +178,13 @@ jobs:
             test "$(readlink /README/paper.pdf)" = \
               /opt/safrano9999/safrano9999-paper/paper.pdf
             test -s /README/paper.pdf
+            mapfile -t apks < <(find /opt/safrano9999/KACHELMANN -maxdepth 1 \
+              -type f -name "kachelmann-20*.apk" -printf "%f\n" | sort)
+            test "${#apks[@]}" -eq 1
+            test "${apks[0]}" = "$EXPECTED_APK_FILENAME"
+            apk="/opt/safrano9999/KACHELMANN/${apks[0]}"
+            test "$(sha256sum "$apk" | cut -d " " -f 1)" = "$EXPECTED_APK_SHA256"
+            python3 -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=set(z.namelist()); assert {\"AndroidManifest.xml\",\"classes.dex\"} <= n; assert z.testzip() is None" "$apk"
             systemctl is-enabled \
               persistainer.service fedora44-ai-init-hooks.service \
               tailscaled.service tailscale-up.service cloudflared.service \
@@ -183,6 +205,12 @@ jobs:
               --format '{{ index .Config.Labels "io.safrano9999.parent" }}' \
               "$image"
           )" = fedora44-ai-base
+          test "$(docker image inspect --format '{{ index .Config.Labels "io.safrano9999.kachelmann.apk.release" }}' "$image")" \
+            = "${{ steps.kachelmann_apk.outputs.release_tag }}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "io.safrano9999.kachelmann.apk.filename" }}' "$image")" \
+            = "${{ steps.kachelmann_apk.outputs.apk_filename }}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "io.safrano9999.kachelmann.apk.sha256" }}' "$image")" \
+            = "${{ steps.kachelmann_apk.outputs.apk_sha256 }}"
           test "$(docker image inspect --format '{{.Config.User}}' "$image")" = root
           test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" \
             = '["/sbin/init"]'

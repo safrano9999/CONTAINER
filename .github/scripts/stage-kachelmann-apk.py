@@ -141,8 +141,6 @@ def release_assets(release: dict[str, Any]) -> tuple[str, dict[str, Any], dict[s
     tag = release.get("tag_name")
     if not isinstance(tag, str) or RELEASE_TAG.fullmatch(tag) is None:
         raise StageError(f"Latest KACHELMANN release has an invalid tag: {tag!r}")
-    expected_apk = f"kachelmann-{tag}.apk"
-    expected_sidecar = f"{expected_apk}.sha256"
     assets = release.get("assets")
     if not isinstance(assets, list):
         raise StageError("Latest KACHELMANN release has no asset list")
@@ -161,8 +159,10 @@ def release_assets(release: dict[str, Any]) -> tuple[str, dict[str, Any], dict[s
         and VERSIONED_APK.fullmatch(asset["name"].removesuffix(".sha256")) is not None
         and asset["name"].endswith(".apk.sha256")
     ]
-    if len(versioned) != 1 or versioned[0].get("name") != expected_apk:
-        raise StageError("Latest release must contain exactly its one versioned APK")
+    if len(versioned) != 1:
+        raise StageError("Latest release must contain exactly one versioned APK")
+    apk_name = str(versioned[0]["name"])
+    expected_sidecar = f"{apk_name}.sha256"
     if len(sidecars) != 1 or sidecars[0].get("name") != expected_sidecar:
         raise StageError("Latest release must contain exactly its matching APK checksum")
     return tag, versioned[0], sidecars[0]

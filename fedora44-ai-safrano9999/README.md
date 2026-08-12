@@ -21,3 +21,10 @@ the Safrano additional triple, the current Base triple, and the repositories
 listed in `fedora44-ai-safrano9999-additional.repos`. `setup.sh` uses those
 local files directly and keeps generated instances below `CONTAINER/<name>/`;
 it performs no example download or merge.
+
+KACHELMANN Markdown, images, and uploaded documents live in the per-instance
+`${CONTAINER_NAME}-kachelmann` named volume. Fedora mounts it at
+`/var/lib/kachelmann:z` and uses `/var/lib/kachelmann/content` together with
+`KACHELMANN_CONTENT_GID=10001`. A separate `kachelmann-mcp` sidecar must be
+configured with that exact volume name; `z` is required because both
+containers share the content.

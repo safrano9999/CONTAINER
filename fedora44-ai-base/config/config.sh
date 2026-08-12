@@ -952,6 +952,51 @@ normalize_volume_item() {
     printf '%s:%s\n' "$normalized_source" "$rest"
 }
 
+expand_volume_value() {
+    local context_key="$1"
+    local value="$2"
+    local chain="${3:-}"
+    local token key replacement next_chain
+
+    # Container volume examples may reference another configuration value with
+    # the deliberately small ${KEY} syntax.  Do not use eval/envsubst here:
+    # both would also interpret shell syntax and ambient process variables.
+    while [[ "$value" =~ (\$\{[^\}]*\}) ]]; do
+        token="${BASH_REMATCH[1]}"
+        key="${token:2:${#token}-3}"
+        if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "Unsafe variable reference in $context_key: $token" >&2
+            return 1
+        fi
+        if [[ "|$chain|" == *"|$key|"* ]]; then
+            echo "Cyclic variable reference in $context_key: ${chain//|/ -> } -> $key" >&2
+            return 1
+        fi
+        if ! replacement="$(config_value "$key")"; then
+            echo "Missing variable referenced by $context_key: $key" >&2
+            return 1
+        fi
+        case "${replacement,,}" in
+            ""|blank|null)
+                echo "Empty variable referenced by $context_key: $key" >&2
+                return 1
+                ;;
+        esac
+        next_chain="${chain:+$chain|}$key"
+        replacement="$(expand_volume_value "$context_key" "$replacement" "$next_chain")" || return 1
+        value="${value/"$token"/"$replacement"}"
+    done
+
+    # This is a Quadlet/Compose volume value, not a shell expression.  Keep a
+    # conservative character set that covers names, POSIX paths, mappings and
+    # mount options while rejecting command syntax, whitespace and newlines.
+    if [[ "$value" == *'$'* ]] || [[ ! "$value" =~ ^[A-Za-z0-9._/@:+,=%-]*$ ]]; then
+        echo "Unsafe value in $context_key: $value" >&2
+        return 1
+    fi
+    printf '%s\n' "$value"
+}
+
 add_repo_bind_mount() {
     local rel="$1"
     local target_override="${2:-}"
@@ -2451,6 +2496,7 @@ generate_container_files() {
             fi
 
             if [[ "$key" == *_VOLUMES ]]; then
+                value="$(expand_volume_value "$key" "$value")" || return 1
                 IFS=',' read -ra items <<< "$value"
                 for item in "${items[@]}"; do
                     item="$(trim "$item")"

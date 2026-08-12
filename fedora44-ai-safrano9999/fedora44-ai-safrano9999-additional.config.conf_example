@@ -8,3 +8,11 @@ OPENCLAW_CRONTAB_REPOS=WELCOME,NEXTCLOUD,DAILYNEWS,ZEROINBOX,SPANKER,KACHELMANN
 
 #default-preset: WELCOME,NEXTCLOUD,DAILYNEWS,ZEROINBOX,SPANKER,KACHELMANN
 OPENCLAW_REPOS_START_INIT=WELCOME,NEXTCLOUD,DAILYNEWS,ZEROINBOX,SPANKER,KACHELMANN
+
+#default-preset: /var/lib/kachelmann/content
+#required: Shared KACHELMANN content directory inside Fedora and the MCP sidecar
+KACHELMANN_CONTENT_PATH=/var/lib/kachelmann/content
+
+#default-preset: 10001
+#required: Shared group used for KACHELMANN content directories and files
+KACHELMANN_CONTENT_GID=10001

@@ -20,10 +20,17 @@ example asset. `setup.sh` uses those local files directly. Generated instances
 live below `CONTAINER/<name>/`; examples are symlinked and shared setup files
 are hardlinked.
 
-With SQLite selected, setup creates a dedicated KACHELMANN SQLite volume. When
-`KACHELMANN_PERSISTENT=true`, mutable content below
-`KACHELMANN/OBSIDIAN/KACHELMANN` is projected from a second named volume. The
-application and plugin code remain immutable in the image.
+With SQLite selected, setup creates a dedicated KACHELMANN SQLite volume.
+Mutable Markdown, images, and document uploads use
+`${CONTAINER_NAME}-kachelmann`, mounted at `/var/lib/kachelmann:z`; the runtime
+path is always `/var/lib/kachelmann/content`. The lowercase `z` is intentional:
+the matching `kachelmann-mcp` sidecar must mount that exact named volume too.
+`KACHELMANN_CONTENT_GID=10001` gives both processes the shared 2770/0660 group
+contract. Fresh instances default to `${CONTAINER_NAME}-kachelmann`. The
+existing SSH-1 installation already owns the normalized legacy volume
+`fedora44-ai-ssh-1-kachelmann`; set that exact value during migration so its
+content is reused. A `fedora44-ai-safrano9999-ucore` instance uses
+`fedora44-ai-safrano9999-ucore-kachelmann`.
 
 Use `./setup.sh` for an instance, `./build/build-local.sh` for a local image, or the
 `fedora44-ai-kachelmann-image.yml` workflow for the private GHCR image.

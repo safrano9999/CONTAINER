@@ -9,11 +9,6 @@ OPENCLAW_CRONTAB_REPOS=WELCOME,NEXTCLOUD,KACHELMANN
 #default-preset: WELCOME,NEXTCLOUD,KACHELMANN
 OPENCLAW_REPOS_START_INIT=WELCOME,NEXTCLOUD,KACHELMANN
 
-#choices: false true
-#default-preset: true
-#named-volume: /named_volumes/KACHELMANN /named_volumes/KACHELMANN/content @KACHELMANN_DIR@/OBSIDIAN/KACHELMANN dir
-KACHELMANN_PERSISTENT=true
-
 #default-preset: 1
 CITADEL_CLOUDFLARE=1
 
@@ -172,8 +167,13 @@ KACHELMANN_MCP_ENABLED=false
 # Internal Streamable HTTP MCP port.
 KACHELMANN_MCP_PORT=11041
 
-#default-preset: ./OBSIDIAN/KACHELMANN
-KACHELMANN_CONTENT_PATH=./OBSIDIAN/KACHELMANN
+#default-preset: /var/lib/kachelmann/content
+#required: Shared KACHELMANN content directory inside Fedora and the MCP sidecar
+KACHELMANN_CONTENT_PATH=/var/lib/kachelmann/content
+
+#default-preset: 10001
+#required: Shared group used for KACHELMANN content directories and files
+KACHELMANN_CONTENT_GID=10001
 
 #default-preset: 0
 # 0 hides and blocks motivation; 1 enables on/off/motivate controls.
@@ -182,4 +182,3 @@ KACHELMANN_MOTIVATION=0
 #default-preset: 1
 # Initial STATUS.pdf setting. It remains controllable in the WebUI Config tab.
 KACHELMANN_STATUS_PDF=1
-

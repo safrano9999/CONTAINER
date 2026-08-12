@@ -1,9 +1,1 @@
 BIP39_PUBLISH_PORT=11030
-
-#default-preset: ${CONTAINER_NAME}-kachelmann
-#required: Named volume shared with the matching KACHELMANN MCP sidecar
-KACHELMANN_CONTENT_VOLUME=${CONTAINER_NAME}-kachelmann
-
-#default-preset: ${KACHELMANN_CONTENT_VOLUME}:/var/lib/kachelmann:z
-#required: Shared KACHELMANN content mount; keep the SELinux shared label
-KACHELMANN_CONTENT_VOLUMES=${KACHELMANN_CONTENT_VOLUME}:/var/lib/kachelmann:z

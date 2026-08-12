@@ -22,9 +22,11 @@ listed in `fedora44-ai-safrano9999-additional.repos`. `setup.sh` uses those
 local files directly and keeps generated instances below `CONTAINER/<name>/`;
 it performs no example download or merge.
 
-KACHELMANN Markdown, images, and uploaded documents live in the per-instance
-`${CONTAINER_NAME}-kachelmann` named volume. Fedora mounts it at
-`/var/lib/kachelmann:z` and uses `/var/lib/kachelmann/content` together with
-`KACHELMANN_CONTENT_GID=10001`. A separate `kachelmann-mcp` sidecar must be
-configured with that exact volume name; `z` is required because both
-containers share the content.
+KACHELMANN stores Markdown, uploaded documents, and image assets in its
+configured database: PostgreSQL uses `BYTEA`, MariaDB/MySQL uses `LONGBLOB`,
+and SQLite uses `BLOB`. No separate content volume is used. With SQLite,
+only the existing KACHELMANN SQLite database volume is persistent. A separate
+`kachelmann-mcp` sidecar remains ephemeral and, for a networked database
+backend, uses the same database service, credentials, and table prefix
+directly. SQLite remains local to the Fedora main container under the
+no-shared-volume contract.

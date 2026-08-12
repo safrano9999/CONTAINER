@@ -94,6 +94,8 @@ config_example_files() {
 declare -A REPEAT_GROUP_MODES=()
 declare -A REPEAT_GROUP_INDEXES=()
 declare -A TELEGRAM_CHAT_HANDLED=()
+declare -A DB_AUTO_MIGRATION_CONFLICTS=()
+DB_AUTO_SELECTED_VALUE=""
 
 for arg in "$@"; do
     case "$arg" in
@@ -426,6 +428,342 @@ write_config_value() {
 
     sed -i "/^${key}=/d" "$target" 2>/dev/null || true
     echo "$key=$value" >> "$target"
+}
+
+normalize_db_backend_value() {
+    local value
+
+    value="$(normalize_rule_value "$1")"
+    case "$value" in
+        postgres|postgresql|pgsql|psql) printf 'postgres\n' ;;
+        mysql) printf 'mysql\n' ;;
+        mariadb) printf 'mariadb\n' ;;
+        sqlite|sqlite3) printf 'sqlite\n' ;;
+        *) printf '%s\n' "$value" ;;
+    esac
+}
+
+db_auto_contract_declared() {
+    [ -n "$ENV_EXAMPLE" ] || return 1
+    read_kv_file "$ENV_EXAMPLE" DB_AUTO >/dev/null
+}
+
+db_auto_enabled_value() {
+    local value
+
+    value="$DB_AUTO_SELECTED_VALUE"
+    if [ -z "$value" ]; then
+        value="$(read_kv_file "$ENV_FILE" DB_AUTO 2>/dev/null || \
+            read_kv_file "$ENV_EXAMPLE" DB_AUTO 2>/dev/null || true)"
+    fi
+    [ "$value" = "1" ]
+}
+
+declared_db_service_groups() {
+    local line stripped entry key prefix suffix pending_default_preset=""
+    local -A seen=()
+    local -A fields=()
+    local -a order=()
+
+    [ -n "$ENV_EXAMPLE" ] && [ -f "$ENV_EXAMPLE" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        stripped="$(trim "$line")"
+        if [[ "$stripped" == \#default-preset:* ]]; then
+            pending_default_preset="$(trim "${stripped#\#default-preset:}")"
+            continue
+        fi
+        if [ -z "$stripped" ]; then
+            pending_default_preset=""
+            continue
+        fi
+        [[ "$stripped" == \#* ]] && continue
+        entry="$(trim "${line%%#*}")"
+        if [[ "$entry" != *=* ]]; then
+            pending_default_preset=""
+            continue
+        fi
+        key="$(trim "${entry%%=*}")"
+        if [[ ! "$key" =~ ^([A-Za-z_][A-Za-z0-9_]*)_DB_(BACKEND|HOST|URL|PORT|NAME|USER|PW|PASSWORD|PREFIX)$ ]]; then
+            pending_default_preset=""
+            continue
+        fi
+        prefix="${BASH_REMATCH[1]}"
+        suffix="${BASH_REMATCH[2]}"
+        if [[ -z "${seen[$prefix]+x}" ]]; then
+            seen[$prefix]=1
+            order+=("$prefix")
+        fi
+        fields["$prefix:$suffix"]=1
+        if [ "$suffix" = "PREFIX" ] && db_value_is_meaningful "$pending_default_preset"; then
+            fields["$prefix:EXPLICIT_PREFIX_PRESET"]=1
+        fi
+        pending_default_preset=""
+    done < "$ENV_EXAMPLE"
+
+    # An auto-managed service must expose every shared connection semantic.
+    # HOST may be named URL and PASSWORD may be named PW by the application.
+    for prefix in "${order[@]}"; do
+        [[ -n "${fields[$prefix:BACKEND]+x}" ]] || continue
+        [[ -n "${fields[$prefix:HOST]+x}" || -n "${fields[$prefix:URL]+x}" ]] || continue
+        [[ -n "${fields[$prefix:PORT]+x}" ]] || continue
+        [[ -n "${fields[$prefix:NAME]+x}" ]] || continue
+        [[ -n "${fields[$prefix:USER]+x}" ]] || continue
+        [[ -n "${fields[$prefix:PW]+x}" || -n "${fields[$prefix:PASSWORD]+x}" ]] || continue
+        [[ -n "${fields[$prefix:EXPLICIT_PREFIX_PRESET]+x}" ]] || continue
+        printf '%s\n' "$prefix"
+    done
+}
+
+declared_db_prefix_preset() {
+    local wanted="$1"
+    local line stripped entry key pending_default_preset=""
+
+    [ -n "$ENV_EXAMPLE" ] && [ -f "$ENV_EXAMPLE" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        stripped="$(trim "$line")"
+        if [[ "$stripped" == \#default-preset:* ]]; then
+            pending_default_preset="$(trim "${stripped#\#default-preset:}")"
+            continue
+        fi
+        if [ -z "$stripped" ]; then
+            pending_default_preset=""
+            continue
+        fi
+        [[ "$stripped" == \#* ]] && continue
+        entry="$(trim "${line%%#*}")"
+        if [[ "$entry" != *=* ]]; then
+            pending_default_preset=""
+            continue
+        fi
+        key="$(trim "${entry%%=*}")"
+        if [ "$key" = "${wanted}_DB_PREFIX" ] && db_value_is_meaningful "$pending_default_preset"; then
+            printf '%s\n' "$pending_default_preset"
+            return 0
+        fi
+        pending_default_preset=""
+    done < "$ENV_EXAMPLE"
+    return 1
+}
+
+declared_db_service_keys() {
+    local wanted="$1"
+    local line stripped entry key
+
+    [ -n "$ENV_EXAMPLE" ] && [ -f "$ENV_EXAMPLE" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        stripped="$(trim "$line")"
+        [[ -z "$stripped" || "$stripped" == \#* ]] && continue
+        entry="$(trim "${line%%#*}")"
+        [[ "$entry" == *=* ]] || continue
+        key="$(trim "${entry%%=*}")"
+        [[ "$key" =~ ^${wanted}_DB_(BACKEND|HOST|URL|PORT|NAME|USER|PW|PASSWORD|PREFIX)$ ]] || continue
+        printf '%s\n' "$key"
+    done < "$ENV_EXAMPLE"
+}
+
+db_auto_service_group_declared() {
+    local wanted="$1"
+    local group
+
+    while IFS= read -r group || [ -n "$group" ]; do
+        [ "$group" = "$wanted" ] && return 0
+    done < <(declared_db_service_groups)
+    return 1
+}
+
+db_value_is_meaningful() {
+    local value
+
+    value="$(trim "$1")"
+    case "${value,,}" in
+        ""|blank|null) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+ensure_db_service_presets() {
+    local group preset_key effective_key value
+
+    db_auto_contract_declared || return 0
+    touch "$ENV_FILE"
+    while IFS= read -r group || [ -n "$group" ]; do
+        [ -n "$group" ] || continue
+        preset_key="${group}_DB_PREFIX_PRESET"
+        grep -q "^${preset_key}=" "$ENV_FILE" 2>/dev/null && continue
+        effective_key="${group}_DB_PREFIX"
+        value="$(read_kv_file "$ENV_FILE" "$effective_key" 2>/dev/null || true)"
+        if ! db_value_is_meaningful "$value"; then
+            value="$(declared_db_prefix_preset "$group" 2>/dev/null || true)"
+        fi
+        write_config_value "$ENV_FILE" "$preset_key" "$value"
+    done < <(declared_db_service_groups)
+}
+
+db_group_values_for_common_key() {
+    local group="$1"
+    local common_key="$2"
+    local service_key value
+    local -a suffixes=()
+
+    case "$common_key" in
+        DB_BACKEND) suffixes=(BACKEND) ;;
+        DB_HOST) suffixes=(HOST URL) ;;
+        DB_PORT) suffixes=(PORT) ;;
+        DB_NAME) suffixes=(NAME) ;;
+        DB_USER) suffixes=(USER) ;;
+        DB_PASSWORD) suffixes=(PW PASSWORD) ;;
+        *) return 0 ;;
+    esac
+    for service_key in "${suffixes[@]}"; do
+        service_key="${group}_DB_${service_key}"
+        value="$(read_kv_file "$ENV_FILE" "$service_key" 2>/dev/null || true)"
+        db_value_is_meaningful "$value" || continue
+        if [ "$common_key" = "DB_BACKEND" ]; then
+            value="$(normalize_db_backend_value "$value")"
+        fi
+        printf '%s\n' "$value"
+    done
+}
+
+seed_common_db_values_from_existing_services() {
+    local intended_auto="$1"
+    local common_key group value
+    local -A values=()
+
+    [ -f "$ENV_FILE" ] || return 0
+    for common_key in DB_BACKEND DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD; do
+        value="$(read_kv_file "$ENV_FILE" "$common_key" 2>/dev/null || true)"
+        db_value_is_meaningful "$value" && continue
+        values=()
+        while IFS= read -r group || [ -n "$group" ]; do
+            [ -n "$group" ] || continue
+            while IFS= read -r value || [ -n "$value" ]; do
+                [ -n "$value" ] || continue
+                values["$value"]=1
+            done < <(db_group_values_for_common_key "$group" "$common_key")
+        done < <(declared_db_service_groups)
+        if [ "${#values[@]}" -eq 1 ]; then
+            for value in "${!values[@]}"; do
+                write_config_value "$ENV_FILE" "$common_key" "$value"
+            done
+        elif [ "${#values[@]}" -gt 1 ]; then
+            if [ "$intended_auto" = "1" ]; then
+                echo "DB_AUTO=1 cannot migrate $common_key: existing services differ; set $common_key explicitly or use DB_AUTO=0" >&2
+                return 1
+            fi
+            DB_AUTO_MIGRATION_CONFLICTS[$common_key]=1
+        fi
+    done
+}
+
+prepare_db_auto_migration() {
+    local intended_auto
+
+    db_auto_contract_declared || return 0
+    ensure_db_service_presets
+    # Existing installations without DB_AUTO must first get the chance to
+    # choose 0. Seed only values which are already identical; conflicts are
+    # evaluated after DB_AUTO has actually been selected.
+    seed_common_db_values_from_existing_services 0
+    intended_auto="$(read_kv_file "$ENV_FILE" DB_AUTO 2>/dev/null || true)"
+    case "$intended_auto" in
+        "") return 0 ;;
+        0) return 0 ;;
+        1) seed_common_db_values_from_existing_services "$intended_auto" ;;
+        *) echo "DB_AUTO must be 0 or 1" >&2; return 1 ;;
+    esac
+}
+
+reconcile_db_auto_config() {
+    local auto backend local_backend=false group service_key suffix value
+    local common_host common_port common_name common_user common_password prefix_preset
+    local common_key default
+    local groups=0
+    local auto_was_missing=false
+
+    db_auto_contract_declared || return 0
+    touch "$ENV_FILE"
+    auto="$(read_kv_file "$ENV_FILE" DB_AUTO 2>/dev/null || true)"
+    if [ -z "$auto" ]; then
+        auto_was_missing=true
+        auto="$(read_kv_file "$ENV_EXAMPLE" DB_AUTO 2>/dev/null || true)"
+    fi
+    case "$auto" in
+        0)
+            [ "$auto_was_missing" = "false" ] || write_config_value "$ENV_FILE" DB_AUTO "$auto"
+            for common_key in DB_BACKEND DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD; do
+                write_config_value "$ENV_FILE" "$common_key" "blank"
+            done
+            rewrite_config_with_comments "$ENV_EXAMPLE" "$ENV_FILE"
+            return 0
+            ;;
+        1) ;;
+        *) echo "DB_AUTO must be 0 or 1" >&2; return 1 ;;
+    esac
+
+    ensure_db_service_presets
+    seed_common_db_values_from_existing_services "$auto"
+    if [ "$auto_was_missing" = "true" ]; then
+        write_config_value "$ENV_FILE" DB_AUTO "$auto"
+    fi
+    for common_key in DB_BACKEND DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD; do
+        if ! grep -q "^${common_key}=" "$ENV_FILE" 2>/dev/null; then
+            default="$(read_kv_file "$ENV_EXAMPLE" "$common_key" 2>/dev/null || true)"
+            write_config_value "$ENV_FILE" "$common_key" "$default"
+        fi
+    done
+
+    backend="$(normalize_db_backend_value "$(read_kv_file "$ENV_FILE" DB_BACKEND 2>/dev/null || true)")"
+    db_value_is_meaningful "$backend" || {
+        echo "DB_AUTO=1 requires DB_BACKEND" >&2
+        return 1
+    }
+    write_config_value "$ENV_FILE" DB_BACKEND "$backend"
+    common_host="$(read_kv_file "$ENV_FILE" DB_HOST 2>/dev/null || true)"
+    common_port="$(read_kv_file "$ENV_FILE" DB_PORT 2>/dev/null || true)"
+    common_name="$(read_kv_file "$ENV_FILE" DB_NAME 2>/dev/null || true)"
+    common_user="$(read_kv_file "$ENV_FILE" DB_USER 2>/dev/null || true)"
+    common_password="$(read_kv_file "$ENV_FILE" DB_PASSWORD 2>/dev/null || true)"
+    case "$backend" in
+        sqlite|file|on_the_fly) local_backend=true ;;
+    esac
+    if [ "$local_backend" = "false" ]; then
+        for common_key in DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD; do
+            value="$(read_kv_file "$ENV_FILE" "$common_key" 2>/dev/null || true)"
+            db_value_is_meaningful "$value" || {
+                echo "DB_AUTO=1 with DB_BACKEND=$backend requires $common_key" >&2
+                return 1
+            }
+        done
+    fi
+
+    while IFS= read -r group || [ -n "$group" ]; do
+        [ -n "$group" ] || continue
+        groups=$((groups + 1))
+        prefix_preset="$(read_kv_file "$ENV_FILE" "${group}_DB_PREFIX_PRESET" 2>/dev/null || true)"
+        while IFS= read -r service_key || [ -n "$service_key" ]; do
+            [ -n "$service_key" ] || continue
+            suffix="${service_key#${group}_DB_}"
+            if [ "$suffix" = "BACKEND" ]; then
+                value="$backend"
+            elif [ "$local_backend" = "true" ]; then
+                value="blank"
+            else
+                case "$suffix" in
+                    HOST|URL) value="$common_host" ;;
+                    PORT) value="$common_port" ;;
+                    NAME) value="$common_name" ;;
+                    USER) value="$common_user" ;;
+                    PW|PASSWORD) value="$common_password" ;;
+                    PREFIX) value="$prefix_preset" ;;
+                    *) continue ;;
+                esac
+            fi
+            write_config_value "$ENV_FILE" "$service_key" "$value"
+        done < <(declared_db_service_keys "$group")
+    done < <(declared_db_service_groups)
+    rewrite_config_with_comments "$ENV_EXAMPLE" "$ENV_FILE"
+    echo "    DB_AUTO=1 reconciled $groups database service groups"
 }
 
 discover_telegram_chat_id() {
@@ -863,7 +1201,8 @@ configure_from_example() {
     local field_choice_count=0 field_choice_index=0 field_choice_total=0
     local field_choice_default="" field_choice_numbers=""
     local field_choice_freeform=false field_choice_selected_freeform=false
-    local rule_key db_bulk_eligible=false db_bulk_decided=false
+    local rule_key db_bulk_eligible=false db_bulk_decided=false db_auto_contract=false
+    local db_auto_pending_write=false
     local container_nr="" publish_port_count=0 publish_port_choice="" publish_port_autofill=false
 
     if [ "$target" = "$CONTAINER_FILE" ]; then
@@ -1050,7 +1389,11 @@ configure_from_example() {
         pending_reverse_varname=""
     done 6< "$example"
 
-    if [ "$target" = "$ENV_FILE" ] && [ "${#db_backend_keys[@]}" -gt 1 ]; then
+    if [ "$target" = "$ENV_FILE" ] && read_kv_file "$example" DB_AUTO >/dev/null 2>&1; then
+        db_auto_contract=true
+    fi
+
+    if [ "$target" = "$ENV_FILE" ] && [ "$db_auto_contract" = "false" ] && [ "${#db_backend_keys[@]}" -gt 1 ]; then
         db_bulk_eligible=true
         for key in "${db_config_keys[@]}"; do
             if grep -q "^${key}=" "$target" 2>/dev/null; then
@@ -1150,15 +1493,7 @@ configure_from_example() {
     }
 
     normalize_db_backend() {
-        local value
-        value="$(normalize_rule_value "$1")"
-        case "$value" in
-            postgres|postgresql|pgsql|psql) printf 'postgres\n' ;;
-            mysql) printf 'mysql\n' ;;
-            mariadb) printf 'mariadb\n' ;;
-            sqlite|sqlite3) printf 'sqlite\n' ;;
-            *) printf '%s\n' "$value" ;;
-        esac
+        normalize_db_backend_value "$1"
     }
 
     first_db_default() {
@@ -1546,6 +1881,30 @@ configure_from_example() {
             default="$(project_publish_port "$default" "$container_nr")"
         fi
 
+        if [ "$db_auto_contract" = "true" ]; then
+            if db_auto_enabled_value; then
+                if [[ "$key" =~ ^DB_(BACKEND|HOST|PORT|NAME|USER|PASSWORD)$ ]]; then
+                    value="$(read_kv_file "$target" "$key" 2>/dev/null || true)"
+                    if ! db_value_is_meaningful "$value"; then
+                        sed -i "/^${key}=/d" "$target" 2>/dev/null || true
+                        if [[ -n "${DB_AUTO_MIGRATION_CONFLICTS[$key]+x}" ]] && [ ! -t 0 ]; then
+                            echo "DB_AUTO=1 requires an explicit $key because existing services differ; rerun interactively, set $key, or choose DB_AUTO=0" >&2
+                            return 1
+                        fi
+                    fi
+                fi
+                if [[ "$key" =~ ^([A-Za-z_][A-Za-z0-9_]*)_DB_(BACKEND|HOST|URL|PORT|NAME|USER|PW|PASSWORD|PREFIX)$ ]] \
+                    && db_auto_service_group_declared "${BASH_REMATCH[1]}"; then
+                    echo "    $key= managed by DB_AUTO"
+                    continue
+                fi
+            elif [[ "$key" =~ ^DB_(BACKEND|HOST|PORT|NAME|USER|PASSWORD)$ ]]; then
+                write_config_value "$target" "$key" "blank"
+                echo "    $key= blank (DB_AUTO=0)"
+                continue
+            fi
+        fi
+
         if [ -n "$field_when" ]; then
             condition_key="${field_when%%=*}"
             condition_value="$(normalize_rule_value "${field_when#*=}")"
@@ -1814,6 +2173,14 @@ configure_from_example() {
         if [[ "$key" == *_DB_BACKEND ]] && maybe_apply_bulk_db_config "$val"; then
             continue
         fi
+        if [ "$db_auto_contract" = "true" ] && [ "$key" = "DB_AUTO" ]; then
+            DB_AUTO_SELECTED_VALUE="$val"
+            if [ "$val" = "1" ] && [ "${#DB_AUTO_MIGRATION_CONFLICTS[@]}" -gt 0 ]; then
+                db_auto_pending_write=true
+                echo "    DB_AUTO=1 selected; write deferred until migration values are resolved"
+                continue
+            fi
+        fi
         echo "$key=$val" >> "$target"
         if [ "$key" = "CONTAINER_NR" ]; then
             case "${val^^}" in
@@ -1827,6 +2194,9 @@ configure_from_example() {
         activate_blank_rules "$key" "$val"
     done 3< "$example"
 
+    if [ "$db_auto_pending_write" = "true" ]; then
+        write_config_value "$target" DB_AUTO 1
+    fi
     rewrite_config_with_comments "$example" "$target"
     for key in "${!externally_owned_keys[@]}"; do
         sed -i "/^${key}=/d" "$target"
@@ -2217,11 +2587,13 @@ echo ""
 echo "  Configuring $PROJECT_NAME"
 
 configure_container_name
+prepare_db_auto_migration
 if $RENDER_CONTAINER_ONLY; then
     [ "$NO_CONTAINER" != "true" ] || {
         echo "--render-container cannot be combined with --no-container" >&2
         exit 2
     }
+    reconcile_db_auto_config
     generate_container_files
     echo ""
     exit 0
@@ -2235,6 +2607,7 @@ if ! $FEDORA_CUMULATIVE_EXAMPLES; then
     for example in "$DIR"/*build.conf_example; do configure_from_example "$example" "$BUILD_FILE" "$(basename "$BUILD_FILE")"; done
 fi
 [ -z "$ENV_EXAMPLE" ] || configure_from_example "$ENV_EXAMPLE" "$ENV_FILE" "$(basename "$ENV_FILE")"
+reconcile_db_auto_config
 [ -z "$CONFIG_EXAMPLE" ] || configure_from_example "$CONFIG_EXAMPLE" "$CONFIG_FILE" "$(basename "$CONFIG_FILE")"
 if [ "$NO_CONTAINER" != "true" ]; then
     touch "$CONTAINER_FILE"

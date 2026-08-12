@@ -65,3 +65,4 @@ KACHELMANN_PUBLISH_PORT=11040
 #default-preset: 11041
 # Host mapping only; KACHELMANN_MCP_ENABLED controls whether HTTP MCP starts.
 KACHELMANN_MCP_PUBLISH_PORT=11041
+

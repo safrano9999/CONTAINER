@@ -19,14 +19,6 @@ on:
         required: true
         type: boolean
         default: false
-      cascade_target:
-        description: "Final Fedora image after Base succeeds"
-        required: true
-        type: choice
-        options:
-          - safrano9999
-          - kachelmann
-        default: safrano9999
       monitor_id:
         description: "Optional event-monitor correlation id"
         required: false
@@ -267,7 +259,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           IMAGE_TAG: ${{ steps.tags.outputs.version }}
           PUSH_LATEST: ${{ inputs.push_latest }}
-          CASCADE_TARGET: ${{ inputs.cascade_target }}
         shell: bash
         run: |
           set -euo pipefail
@@ -278,6 +269,5 @@ jobs:
             -f "core_pre_tag=$IMAGE_TAG" \
             -f "push_latest=$PUSH_LATEST" \
             -f "cascade=true" \
-            -f "cascade_target=$CASCADE_TARGET" \
             -f "monitor_id=${{ inputs.monitor_id }}" \
             -f "monitor_final=false"

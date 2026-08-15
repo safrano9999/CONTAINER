@@ -2107,6 +2107,45 @@ configure_from_example() {
                 echo "    $key required"
                 continue
             fi
+            if [ "$required" != "true" ] && openssl_generator_default "$default"; then
+                generator_label="$(openssl_generator_label "$default")"
+                if [ -t 0 ]; then
+                    echo "    $key:"
+                    echo "      (1) skip"
+                    echo "      (2) enter value"
+                    echo "      (3) generate $generator_label"
+                    choice=""
+                    read -r -p "    Choose [1/2/3] (default: 1): " choice || read_status=$?
+                    choice="${choice:-1}"
+                    case "$choice" in
+                        1)
+                            val=""
+                            ;;
+                        2)
+                            if [ "$secret" = "true" ]; then
+                                read -r -s -p "    $key: " val || read_status=$?
+                                echo "" >&2
+                            else
+                                read -r -p "    $key: " val || read_status=$?
+                            fi
+                            ;;
+                        3)
+                            val="$(run_openssl_generator "$default")" || {
+                                echo "    $key generator failed" >&2
+                                exit 1
+                            }
+                            echo "    $key= generated"
+                            ;;
+                        *)
+                            echo "    choose 1, 2 or 3"
+                            continue
+                            ;;
+                    esac
+                else
+                    val=""
+                fi
+                break
+            fi
             if provider_selector_key "$key"; then
                 prompt_suffix="$(provider_prompt "$example" "$key")"
             elif [ -n "$field_choices" ]; then
@@ -2206,7 +2245,11 @@ configure_from_example() {
         done
 
         if [ -z "$val" ]; then
-            if [ "$used_prefill" = "true" ] && [ -n "$default" ]; then
+            if [ "$required" != "true" ] && openssl_generator_default "$default"; then
+                echo "$key=" >> "$target"
+                echo "    $key= skipped"
+                continue
+            elif [ "$used_prefill" = "true" ] && [ -n "$default" ]; then
                 echo "$key=" >> "$target"
                 echo "    $key= set empty"
                 continue

@@ -15,6 +15,7 @@ config.conf_example
 container.example
 env.example
 requirements.txt
+srv
 setup.sh
 config.sh
 merge.sh

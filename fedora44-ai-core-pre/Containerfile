@@ -6,7 +6,6 @@ ARG HERMES_COMMIT
 ARG HERMES_VERSION
 ARG NODE_VERSION
 ARG VDITOR_VERSION
-ARG CERTS
 ARG FEDORA_REPOMD_KEY
 ARG UV_VERSION
 ARG UV_INSTALLER_SHA256
@@ -28,6 +27,8 @@ LABEL org.opencontainers.image.title="fedora44-ai-core-pre" \
       org.opencontainers.image.description="Heavy generic Fedora 44 AI toolchain foundation without Safrano project content or ephemeral runtime configuration." \
       org.opencontainers.image.source="https://github.com/safrano9999/CONTAINER" \
       io.safrano9999.openclaw.version="${OPENCLAW_VERSION}"
+
+ENV NODE_EXTRA_CA_CERTS=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 
 # Keep the package set and order aligned with the existing fedora44-ai image.
 RUN --mount=type=cache,target=/var/cache/dnf \
@@ -57,20 +58,6 @@ RUN --mount=type=cache,target=/root/.npm \
  && n "${NODE_VERSION}" \
  && hash -r \
  && node --version
-
-COPY ${CERTS}/ /run/fedora44-ai-certs/
-
-RUN \
-    set -eu; \
-    find /run/fedora44-ai-certs -type f \( -name '*.crt' -o -name '*.pem' \) -print \
-      | while IFS= read -r cert; do \
-          if openssl x509 -in "$cert" -noout >/dev/null 2>&1; then \
-            fingerprint="$(openssl x509 -in "$cert" -noout -fingerprint -sha256 \
-              | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"; \
-            install -m 0644 "$cert" "/etc/pki/ca-trust/source/anchors/fedora44-ai-${fingerprint}.crt"; \
-          fi; \
-        done; \
-    update-ca-trust
 
 COPY build/hermes-nous-api-key.patch /tmp/hermes-nous-api-key.patch
 RUN set -eu; \
@@ -113,8 +100,10 @@ COPY build/vendor/persistainer/image/runtime/ /
 
 RUN chmod 0755 /usr/local/bin/tailscale-state-up.sh \
       /usr/local/bin/persistainer \
+      /usr/local/libexec/import-ca-certificates \
       /usr/local/libexec/fedora44-wait-ready \
  && systemctl enable \
+      ca-certificates-import.service \
       persistainer.service \
       tailscaled.service \
       tailscale-up.service \

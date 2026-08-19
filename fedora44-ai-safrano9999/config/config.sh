@@ -1037,6 +1037,36 @@ add_repo_bind_mount() {
     add_unique "${source}:${target}:Z" volumes
 }
 
+add_readonly_shared_bind_mount() {
+    local configured="$1"
+    local target="$2"
+    local source
+
+    configured="$(trim "$configured")"
+    case "${configured,,}" in
+        ""|blank|null) return 0 ;;
+    esac
+    [[ "$configured" == /* && "$configured" != *:* \
+        && "$configured" != *[[:space:]]* \
+        && "$configured" != *$'\n'* && "$configured" != *$'\r'* ]] || {
+        echo "Shared bind source must be an absolute path: $configured" >&2
+        return 1
+    }
+    [[ "$target" == /* && "$target" != / && "$target" != *:* ]] || {
+        echo "Invalid shared bind target: $target" >&2
+        return 1
+    }
+    source="$(realpath -e -- "$configured")" || {
+        echo "Shared bind source does not exist: $configured" >&2
+        return 1
+    }
+    [ -d "$source" ] || {
+        echo "Shared bind source is not a directory: $configured" >&2
+        return 1
+    }
+    add_unique "${source}:${target}:ro,z" volumes
+}
+
 add_repo_file_bind_mount() {
     local rel="$1"
     local source target
@@ -2447,6 +2477,16 @@ generate_container_files() {
         [ -f "$source_file" ] || continue
         while IFS= read -r line || [ -n "$line" ]; do
             stripped="$(trim "$line")"
+            if [[ "$stripped" == \#mount-bind-ro-shared:* ]]; then
+                directive="$(trim "${stripped#\#mount-bind-ro-shared:}")"
+                target_key="${directive%%:*}"
+                target_path="${directive#*:}"
+                [[ "$directive" == *:* \
+                    && "$target_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+                value="$(config_value "$target_key" || true)"
+                add_readonly_shared_bind_mount "$value" "$target_path"
+                continue
+            fi
             if [[ "$stripped" == \#mount-bind:* ]]; then
                 directive="$(trim "${stripped#\#mount-bind:}")"
                 [ -n "$directive" ] || continue

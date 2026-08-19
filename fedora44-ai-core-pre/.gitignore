@@ -1,6 +1,5 @@
 /.resolved-build.env
 /build/vendor/
-/srv/
 /CONTAINER/
 /config.conf_example
 /container.example

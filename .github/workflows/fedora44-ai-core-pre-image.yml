@@ -118,7 +118,7 @@ jobs:
           . ./build.conf
           . ./.resolved-build.env
           set +a
-          for name in CERTS HERMES_TAG HERMES_COMMIT HERMES_VERSION \
+          for name in HERMES_TAG HERMES_COMMIT HERMES_VERSION \
             ELECTRUM_VERSION LND_VERSION GETH_VERSION GETH_COMMIT \
             WEBHOOK_VERSION VDITOR_VERSION OPENCLAW_VERSION \
             FEDORA_REPOMD_KEY NODE_VERSION UV_VERSION UV_INSTALLER_SHA256 \
@@ -134,7 +134,6 @@ jobs:
           {
             echo "openclaw_version=$OPENCLAW_VERSION"
             echo "build_args<<EOF"
-            echo "CERTS=$CERTS"
             echo "HERMES_TAG=$HERMES_TAG"
             echo "HERMES_COMMIT=$HERMES_COMMIT"
             echo "HERMES_VERSION=$HERMES_VERSION"

@@ -28,6 +28,9 @@ TS_EXTRA_ARGS=--ssh
 #default-preset: %config-conf/fedora44-ai-init.d
 FEDORA44_AI_INIT_HOOKS_PATH=%config-conf/fedora44-ai-init.d
 
+#mount-bind-ro-shared: CA_CERTIFICATES_PATH:/usr/local/share/ca-certificates-extra
+CA_CERTIFICATES_PATH=
+
 #choices: 0 1
 #default-preset: 0
 CLOUDFLARED_START=0

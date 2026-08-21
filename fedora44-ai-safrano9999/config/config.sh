@@ -946,7 +946,7 @@ normalize_volume_item() {
     source="${item%%:*}"
     rest="${item#*:}"
     normalized_source="$source"
-    if [[ "$source" == "." || "$source" == ./* || "$source" == ../* || ( "$source" != /* && "$source" == */* ) ]]; then
+    if [[ "$source" == "." || "$source" == ./* || "$source" == ../* || ( "$source" != /* && "$source" != %h && "$source" != %h/* && "$source" == */* ) ]]; then
         normalized_source="$(cd "$DIR" && realpath -m -- "$source")"
     fi
     printf '%s:%s\n' "$normalized_source" "$rest"
@@ -2454,7 +2454,7 @@ generate_container_files() {
     local -a named_volumes=()
     local -a persistent_envs=()
     local -a additional_lines=()
-    local item source container_nr_value command_mode
+    local item source container_nr_value command_mode compose_volume
     local tunnel_only=false
 
     container_nr_value="$(config_value CONTAINER_NR || true)"
@@ -2653,7 +2653,13 @@ generate_container_files() {
         if [ "${#volumes[@]}" -gt 0 ]; then
             printf '    # Bind mounts and named volumes from runtime config\n'
             printf '    volumes:\n'
-            for item in "${volumes[@]}"; do printf '      - %s\n' "$item"; done
+            for item in "${volumes[@]}"; do
+                compose_volume="$item"
+                if [[ "$compose_volume" == %h/* ]]; then
+                    compose_volume="${HOME}/${compose_volume#%h/}"
+                fi
+                printf '      - %s\n' "$compose_volume"
+            done
         fi
         if [ "${#caps[@]}" -gt 0 ]; then
             printf '    # Linux capabilities from *_CAPABILITIES in config.conf\n'

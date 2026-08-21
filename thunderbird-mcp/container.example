@@ -10,9 +10,9 @@ THUNDERBIRD_PUBLISH_PORT=11120
 #default-preset: 11121
 THUNDERBIRD_MCP_PUBLISH_PORT=11121
 
-#default-preset: ${CONTAINER_NAME}-config:/config:Z
+#default-preset: ${CONTAINER_NAME}:/config:Z
 #required: Thunderbird profile, accounts, mail, and settings
-THUNDERBIRD_VOLUMES=${CONTAINER_NAME}-config:/config:Z
+THUNDERBIRD_VOLUMES=${CONTAINER_NAME}:/config:Z
 
 #default-preset: %h/thunderbird-exchange:/exchange:Z
 THUNDERBIRD_EXCHANGE_VOLUMES=%h/thunderbird-exchange:/exchange:Z

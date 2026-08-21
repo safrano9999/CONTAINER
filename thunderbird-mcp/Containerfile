@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1.7
+
+ARG THUNDERBIRD_IMAGE=docker.io/jlesage/thunderbird@sha256:7afa598a6d0c5934391383e60aa8cf9fbd8082a7d2decbf35136b202126222e9
+
+FROM ${THUNDERBIRD_IMAGE}
+
+ARG THUNDERBIRD_MCP_VERSION=0.7.4
+ARG SUPERGATEWAY_VERSION=3.4.3
+
+LABEL org.opencontainers.image.title="Thunderbird MCP" \
+      org.opencontainers.image.description="Browser-based Thunderbird with the pinned Thunderbird MCP extension and HTTP bridge" \
+      org.opencontainers.image.source="https://github.com/TKasperczyk/thunderbird-mcp" \
+      org.opencontainers.image.version="${THUNDERBIRD_MCP_VERSION}" \
+      org.opencontainers.image.base.name="docker.io/jlesage/thunderbird:v26.08.1" \
+      org.opencontainers.image.base.digest="sha256:7afa598a6d0c5934391383e60aa8cf9fbd8082a7d2decbf35136b202126222e9"
+
+RUN add-pkg nodejs npm \
+    && npm install --global --omit=dev "supergateway@${SUPERGATEWAY_VERSION}" \
+    && npm cache clean --force \
+    && mkdir -p \
+        /exchange \
+        /opt/thunderbird-mcp \
+        /usr/lib/thunderbird/distribution/extensions
+
+COPY --chmod=0755 assets/mcp-bridge.cjs /opt/thunderbird-mcp/mcp-bridge.cjs
+COPY --chmod=0644 assets/thunderbird-mcp.xpi \
+    /usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi
+COPY --chmod=0644 rootfs/ /
+
+RUN chmod 0755 \
+        /etc/cont-init.d/55-thunderbird-mcp.sh \
+        /etc/services.d/thunderbird-mcp/run \
+        /etc/services.d/thunderbird-mcp/is_ready \
+    && printf '%s  %s\n' \
+        '6b7fa61c0b590dd559a6e2ebfc863c811d90b790e419e08eadf8d8b69d1cd32c' \
+        '/opt/thunderbird-mcp/mcp-bridge.cjs' \
+        | sha256sum -c - \
+    && printf '%s  %s\n' \
+        '8cbb6add24d24a7268d88224164ddd876979f51789c9df4756e3b20043486e6f' \
+        '/usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi' \
+        | sha256sum -c -
+
+EXPOSE 5800 8000
+

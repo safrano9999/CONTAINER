@@ -1,0 +1,12 @@
+{
+  "policies": {
+    "ExtensionSettings": {
+      "thunderbird-mcp@tkasperczyk.dev": {
+        "installation_mode": "force_installed",
+        "install_url": "file:///usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi",
+        "updates_disabled": true
+      }
+    }
+  }
+}
+

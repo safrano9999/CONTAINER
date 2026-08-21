@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -eu
+
+port="${THUNDERBIRD_MCP_PORT:-8000}"
+log_level=info
+if [ "${THUNDERBIRD_MCP_DEBUG:-0}" = 1 ]; then
+    log_level=debug
+    export THUNDERBIRD_MCP_DEBUG=1
+else
+    unset THUNDERBIRD_MCP_DEBUG
+fi
+
+export THUNDERBIRD_MCP_CONNECTION_FILE=/tmp/thunderbird-mcp/connection.json
+
+exec supergateway \
+    --stdio "node /opt/thunderbird-mcp/mcp-bridge.cjs" \
+    --outputTransport streamableHttp \
+    --stateful \
+    --port "$port" \
+    --streamableHttpPath /mcp \
+    --healthEndpoint /healthz \
+    --logLevel "$log_level"
+

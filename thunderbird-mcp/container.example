@@ -1,0 +1,21 @@
+#CONTAINER-NAME
+CONTAINER_NAME=thunderbird-mcp
+
+# Use the image's init system; do not replace it with a generic WebUI command.
+#container-command: image
+
+#default-preset: 11120
+#required: Thunderbird web UI published port
+THUNDERBIRD_PUBLISH_PORT=11120
+
+#default-preset: 11121
+#required: Thunderbird MCP published port
+THUNDERBIRD_MCP_PUBLISH_PORT=11121
+
+#default-preset: ${CONTAINER_NAME}-config:/config:Z
+#required: Thunderbird profile, accounts, mail, and settings
+THUNDERBIRD_VOLUMES=${CONTAINER_NAME}-config:/config:Z
+
+#default-preset: %h/thunderbird-exchange:/exchange:Z
+THUNDERBIRD_EXCHANGE_VOLUMES=%h/thunderbird-exchange:/exchange:Z
+

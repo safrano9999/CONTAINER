@@ -1,0 +1,9 @@
+.env
+config.conf
+container.conf
+thunderbird-mcp.env
+thunderbird-mcp_config.conf
+thunderbird-mcp_container.conf
+*.container
+docker-compose.yml
+thunderbird-mcp-compose.yml

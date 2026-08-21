@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -u
+
+nc -w5 -z 127.0.0.1 "${THUNDERBIRD_MCP_PORT:-8000}"
+

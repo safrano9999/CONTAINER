@@ -1,0 +1,7 @@
+.git
+.env
+*.conf
+*.container
+docker-compose.yml
+thunderbird-mcp-compose.yml
+

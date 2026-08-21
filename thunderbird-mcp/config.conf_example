@@ -1,0 +1,8 @@
+#default-preset: 5800
+#required: Thunderbird web UI internal port
+THUNDERBIRD_PORT=5800
+
+#default-preset: 8000
+#required: Thunderbird MCP internal port
+THUNDERBIRD_MCP_PORT=8000
+

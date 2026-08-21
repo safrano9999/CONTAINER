@@ -1,0 +1,140 @@
+# Source of truth: SCRIPTS/githubactions. Generated copies are overwritten.
+name: thunderbird-mcp image
+run-name: ${{ inputs.monitor_id != '' && format('{0} [monitor:{1}:{2}]', github.workflow, inputs.monitor_id, inputs.monitor_final) || github.workflow }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_latest:
+        description: "Also publish :latest"
+        required: true
+        type: boolean
+        default: true
+      monitor_id:
+        description: "Optional event-monitor correlation id"
+        required: false
+        default: ""
+        type: string
+      monitor_final:
+        description: "This run is the final monitored stage"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: thunderbird-mcp-image
+  cancel-in-progress: false
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Resolve image tags
+        id: image
+        shell: bash
+        env:
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        run: |
+          set -euo pipefail
+          image=ghcr.io/safrano9999/thunderbird-mcp
+          {
+            echo "image=$image"
+            echo "version=v0.7.4"
+            echo "tags<<EOF"
+            echo "$image:v0.7.4"
+            [ "$PUSH_LATEST" != true ] || echo "$image:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          cache-binary: false
+          keep-state: false
+          cleanup: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ./thunderbird-mcp
+          file: ./thunderbird-mcp/Containerfile
+          platforms: linux/amd64
+          pull: true
+          no-cache: true
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Test published image contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.image }}:${{ steps.image.outputs.version }}"
+          docker pull "$image"
+          docker run --rm --entrypoint /bin/sh "$image" -c '
+            set -eu
+            test -x /opt/thunderbird-mcp/mcp-bridge.cjs
+            test -x /etc/services.d/thunderbird-mcp/run
+            test -f /usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi
+            test -f /usr/lib/thunderbird/distribution/policies.json
+            test "$(node --version | cut -c1)" = v
+            command -v supergateway >/dev/null
+            printf "%s  %s\n" \
+              6b7fa61c0b590dd559a6e2ebfc863c811d90b790e419e08eadf8d8b69d1cd32c \
+              /opt/thunderbird-mcp/mcp-bridge.cjs | sha256sum -c -
+            printf "%s  %s\n" \
+              8cbb6add24d24a7268d88224164ddd876979f51789c9df4756e3b20043486e6f \
+              /usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi \
+              | sha256sum -c -
+          '
+
+      - name: Test running web and MCP services
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.image }}:${{ steps.image.outputs.version }}"
+          docker run --detach --name thunderbird-mcp-test \
+            --publish 127.0.0.1:11120:5800 \
+            --publish 127.0.0.1:11121:8000 \
+            "$image"
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11121/healthz | grep -qx ok \
+              && curl --fail --silent --output /dev/null http://127.0.0.1:11120/; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            docker logs thunderbird-mcp-test
+            exit 1
+          fi
+
+      - name: Clean up test container
+        if: always()
+        run: docker rm --force thunderbird-mcp-test 2>/dev/null || true
+

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SHARED_CONFIG="$SCRIPT_DIR/../../SCRIPTS/safrano9999/config/config.sh"
-REGISTRY_IMAGE="ghcr.io/safrano9999/thunderbird-mcp-alpine:v0.7.4"
+REGISTRY_IMAGE="ghcr.io/safrano9999/thunderbird-mcp-alpine@sha256:299b2f8cede36029b071fc388fbabbdfcd9e8aa6143caf444e63336805c6167e"
 NO_CONFIG=false
 NO_PULL=false
 

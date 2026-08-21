@@ -47,7 +47,7 @@ jobs:
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
           set -euo pipefail
-          image=ghcr.io/safrano9999/thunderbird-mcp
+          image=ghcr.io/safrano9999/thunderbird-mcp-alpine
           {
             echo "image=$image"
             echo "version=v0.7.4"
@@ -139,30 +139,6 @@ jobs:
           gh api --method PATCH "repos/$GITHUB_REPOSITORY" \
             --field visibility=private >/dev/null
           test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)" = private
-
-      - name: Remove an earlier public package
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          status="$({
-            curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              --request DELETE \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header 'Accept: application/vnd.github+json' \
-              "https://api.github.com/users/${GITHUB_REPOSITORY_OWNER}/packages/container/thunderbird-mcp"
-          })"
-          case "$status" in
-            204|404) ;;
-            *) echo "Package deletion returned HTTP $status" >&2; exit 1 ;;
-          esac
-          anonymous_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-            --header 'Accept: application/vnd.github+json' \
-            "https://api.github.com/users/${GITHUB_REPOSITORY_OWNER}/packages/container/thunderbird-mcp")"
-          test "$anonymous_status" = 404 || {
-            echo 'The previous public package is still anonymously visible.' >&2
-            exit 1
-          }
 
       - name: Log in to private GHCR
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0

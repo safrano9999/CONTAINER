@@ -142,7 +142,7 @@ jobs:
 
       - name: Remove an earlier public package
         env:
-          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           status="$({

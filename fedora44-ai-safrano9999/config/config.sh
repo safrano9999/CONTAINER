@@ -1257,6 +1257,8 @@ configure_from_example() {
     declare -A repeat_key_groups=()
     declare -A repeat_optional_complete=()
     declare -A repeat_freeform=()
+    declare -A repeat_unique=()
+    declare -A repeat_one_true=()
     declare -A db_defaults=()
     declare -A db_seen_keys=()
     local -a db_config_keys=()
@@ -1265,7 +1267,7 @@ configure_from_example() {
     local required_next=false
     local secret_next=false
     local directive condition condition_key condition_value target_key target_list secret
-    local repeat_group repeat_style repeat_fields base_key repeat_choice repeat_index repeat_suffix
+    local repeat_group repeat_style repeat_fields base_key repeat_choice repeat_index repeat_suffix prior_index prior_key prior_value duplicate
     local pending_value_dupe="" pending_reverse_varname="" value_dupe_target value_dupe_existing value_dupe_choice
     local pending_choices="" pending_when="" pending_when_not="" pending_default_rules="" pending_telegram_token=""
     local pending_podman_host_internal=false
@@ -1324,6 +1326,14 @@ configure_from_example() {
             for target_key in $directive; do
                 [[ "$target_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
                 repeat_freeform[$target_key]=1
+            done
+            continue
+        fi
+        if [[ "$stripped" == \#repeat-unique:* || "$stripped" == \#repeat-one-true:* ]]; then
+            directive="$(trim "${stripped#*:}")"
+            for target_key in $directive; do
+                [[ "$target_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+                [[ "$stripped" == \#repeat-unique:* ]] && repeat_unique[$target_key]=1 || repeat_one_true[$target_key]=1
             done
             continue
         fi
@@ -1765,62 +1775,53 @@ configure_from_example() {
         local chat_key="$2"
         local token_key="$3"
         local current="$4"
-        local action token discovered
+        local action token discovered key value number enter discover base="$chat_key"
+        local -a reusable=()
 
         case "${current,,}" in ""|blank|null) current="" ;; esac
-        if [ -n "$current" ]; then
+        [[ "$base" =~ ^(.+)_([0-9]+)$ ]] && base="${BASH_REMATCH[1]}"
+        [ -z "$current" ] || reusable+=("$current")
+        while IFS='=' read -r key value; do
+            [[ "$key" == "$base" || "$key" =~ ^${base}_[0-9]+$ ]] || continue
+            case "${value,,}" in ""|blank|null) continue ;; esac
+            [[ " ${reusable[*]} " == *" $value "* ]] || reusable+=("$value")
+        done < "$output"
+        token="$(config_value "$token_key" || true)"
+        case "${token,,}" in ""|blank|null) token="" ;; esac
+        if [ -z "$token" ]; then
             write_config_value "$output" "$chat_key" "$current"
-            echo "    $chat_key= exists"
+            echo "    $chat_key= inactive (no bot token)"
             return 0
         fi
         if [ ! -t 0 ]; then
-            write_config_value "$output" "$chat_key" "$current"
-            echo "    $chat_key= skipped"
-            return 0
+            [ -n "$current" ] || { echo "    $chat_key required" >&2; return 1; }
+            write_config_value "$output" "$chat_key" "$current"; return 0
         fi
 
         while :; do
             echo "    $chat_key:"
-            echo "      (1) enter"
-            echo "      (2) skip"
-            echo "      (3) discover via /start"
-            read -r -p "    Choose [1/2/3] (default: 2): " action || return 130
-            action="${action:-2}"
-            case "${action,,}" in
-                1|enter) action="enter" ;;
-                2|skip) action="skip" ;;
-                3|discover) action="discover" ;;
-                *) echo "    choose 1, 2 or 3"; continue ;;
-            esac
+            number=0
+            for value in "${reusable[@]}"; do number=$((number + 1)); echo "      ($number) reuse $value"; done
+            enter=$((number + 1)); discover=$((number + 2))
+            echo "      ($enter) enter"
+            echo "      ($discover) discover via /start"
+            read -r -p "    Choose [1-$discover] (default: 1): " action || return 130
+            action="${action:-1}"
 
-            case "$action" in
-                enter)
+            if [[ "$action" =~ ^[0-9]+$ ]] && [ "$action" -ge 1 ] && [ "$action" -le "${#reusable[@]}" ]; then
+                discovered="${reusable[$((action - 1))]}"
+            elif [ "$action" = "$enter" ]; then
                     read -r -p "    $chat_key: " discovered || return 130
                     discovered="$(trim "$discovered")"
                     [ -n "$discovered" ] || { echo "    chat ID must not be empty"; continue; }
-                    write_config_value "$output" "$chat_key" "$discovered"
-                    echo "    $chat_key= set"
-                    return 0
-                    ;;
-                skip)
-                    write_config_value "$output" "$chat_key" ""
-                    echo "    $chat_key= skipped"
-                    return 0
-                    ;;
-                discover)
-                    token="$(config_value "$token_key" || true)"
-                    case "${token,,}" in ""|blank|null) token="" ;; esac
-                    if [ -z "$token" ]; then
-                        echo "    $token_key is empty; enter its bot token first"
-                        continue
-                    fi
-                    if discovered="$(discover_telegram_chat_id "$token")"; then
-                        write_config_value "$output" "$chat_key" "$discovered"
-                        echo "    $chat_key= discovered"
-                        return 0
-                    fi
-                    ;;
-            esac
+            elif [ "$action" = "$discover" ]; then
+                discovered="$(discover_telegram_chat_id "$token")" || continue
+            else
+                echo "    choose 1-$discover"; continue
+            fi
+            write_config_value "$output" "$chat_key" "$discovered"
+            echo "    $chat_key= set"
+            return 0
         done
     }
 
@@ -1945,6 +1946,13 @@ configure_from_example() {
             fi
             default="${default//@PODMAN_HOST_INTERNAL_IP@/$podman_host_internal_ip}"
             field_choices="${field_choices//@PODMAN_HOST_INTERNAL_IP@/$podman_host_internal_ip}"
+        fi
+        if [ -n "$repeat_group" ] && [[ -n "${repeat_one_true[$base_key]+x}" ]]; then
+            for ((prior_index = 1; prior_index < repeat_index; prior_index++)); do
+                prior_key="$(repeat_group_key "$repeat_group" "$repeat_style" "$base_key" "$prior_index")"
+                prior_value="$(read_kv_file "$target" "$prior_key" || true)"
+                case "${prior_value,,}" in 1|true|yes|on) write_config_value "$target" "$key" 0; echo "    $key=0 ($prior_key is default)"; continue 2 ;; esac
+            done
         fi
         if [[ -n "${seen_keys[$key]+x}" ]]; then
             echo "    duplicate $key in $(basename "$example")" >&2
@@ -2261,6 +2269,29 @@ configure_from_example() {
                     && ! printf '%s\n' "${field_choice_values[@]}" | grep -Fxq "$val"; then
                     echo "    choose ${field_choice_numbers//\//, }"
                     val=""
+                    continue
+                fi
+            fi
+            if [ -n "$repeat_group" ] && [[ -n "${repeat_unique[$base_key]+x}" ]]; then
+                duplicate=""
+                for ((prior_index = 1; prior_index <= 50; prior_index++)); do
+                    [ "$prior_index" -eq "$repeat_index" ] && continue
+                    prior_key="$(repeat_group_key "$repeat_group" "$repeat_style" "$base_key" "$prior_index")"
+                    prior_value="$(read_kv_file "$target" "$prior_key" || true)"
+                    [ -z "$prior_value" ] || [ "$(normalize_rule_value "$prior_value")" != "$(normalize_rule_value "$val")" ] || { duplicate="$prior_value"; break; }
+                done
+                if [ -n "$duplicate" ]; then
+                    echo "    $base_key already exists: $duplicate"
+                    [ -t 0 ] || return 1
+                    while :; do
+                        read -r -p "    $repeat_group [skip/new] (default: skip): " repeat_choice || return 130
+                        case "${repeat_choice:-skip}" in
+                            skip|s|1) REPEAT_GROUP_MODES[$repeat_group]=skip; val=""; break ;;
+                            new|n|2) val=""; break ;;
+                            *) echo "    choose skip or new" ;;
+                        esac
+                    done
+                    [ "${REPEAT_GROUP_MODES[$repeat_group]}" = skip ] && break
                     continue
                 fi
             fi

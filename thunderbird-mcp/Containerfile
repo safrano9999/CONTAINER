@@ -25,7 +25,7 @@ RUN add-pkg nodejs npm \
 COPY --chmod=0755 assets/mcp-bridge.cjs /opt/thunderbird-mcp/mcp-bridge.cjs
 COPY --chmod=0644 assets/thunderbird-mcp.xpi \
     /usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi
-COPY --chmod=0644 rootfs/ /
+COPY rootfs/ /
 
 RUN chmod 0755 \
         /etc/cont-init.d/55-thunderbird-mcp.sh \
@@ -41,4 +41,3 @@ RUN chmod 0755 \
         | sha256sum -c -
 
 EXPOSE 5800 8000
-

@@ -16,3 +16,7 @@ THUNDERBIRD_VOLUMES=${CONTAINER_NAME}-config:/config:Z
 
 #default-preset: %h/thunderbird-exchange:/exchange:Z
 THUNDERBIRD_EXCHANGE_VOLUMES=%h/thunderbird-exchange:/exchange:Z
+
+#repeat-group: ADDITIONAL_LINE suffix02 ADDITIONAL_LINE
+#repeat-freeform: ADDITIONAL_LINE
+ADDITIONAL_LINE=

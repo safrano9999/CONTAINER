@@ -89,6 +89,7 @@ jobs:
             set -eu
             test -x /opt/thunderbird-mcp/mcp-bridge.cjs
             test -x /etc/services.d/thunderbird-mcp/run
+            test -f /etc/services.d/app/thunderbird-mcp.dep
             test -f /usr/lib/thunderbird/distribution/extensions/thunderbird-mcp@tkasperczyk.dev.xpi
             test -f /usr/lib/thunderbird/distribution/policies.json
             test "$(node --version | cut -c1)" = v

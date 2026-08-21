@@ -4,19 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REGISTRY_IMAGE="ghcr.io/safrano9999/thunderbird-mcp-alpine@sha256:299b2f8cede36029b071fc388fbabbdfcd9e8aa6143caf444e63336805c6167e"
 NO_CONFIG=false
-NO_PULL=false
 
 usage() {
     printf '%s\n' \
-        'Usage: ./setup.sh [--no-pull] [--no-config]' \
+        'Usage: ./setup.sh [--no-config]' \
         '' \
-        '  --no-pull    Configure without pulling the private GHCR image' \
         '  --no-config  Keep existing generated configuration files'
 }
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --no-pull) NO_PULL=true ;;
         --no-config) NO_CONFIG=true ;;
         --help|-h) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -42,10 +39,8 @@ if ! $NO_CONFIG; then
     ./config.sh
 fi
 
-if ! $NO_PULL; then
-    ensure_ghcr_login
-    podman pull "$REGISTRY_IMAGE"
-fi
+ensure_ghcr_login
+podman pull "$REGISTRY_IMAGE"
 
 CONFIG_CONTAINER_IMAGE="$REGISTRY_IMAGE" ./config.sh --render-container
 mkdir -p "$HOME/thunderbird-exchange"
